@@ -16,6 +16,16 @@ export interface MapFrame {
   readonly mpp: number;
   /** Map height in world meters (the y flip). */
   readonly mapHeight: number;
+  /** Radians the whole frame is turned on screen (canvas rotation is -rotation); labels undo it. Default 0. */
+  readonly rotation?: number;
+}
+
+/** Frame-space rectangle (pixels before any rotation) that counts as visible. */
+export interface Visible {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
 }
 
 export const frameX = (f: MapFrame, x: number): number => f.ox + x / f.mpp;
@@ -53,7 +63,7 @@ const MIN_DRAWN_WIDTH_PX = 2;
 
 export interface AirportLayer {
   /** Patch, runways, markings and labels for every airport. `zoom` indexes ZOOM_LEVELS. */
-  draw(ctx: CanvasRenderingContext2D, f: MapFrame, zoom: number, view: { width: number; height: number }): void;
+  draw(ctx: CanvasRenderingContext2D, f: MapFrame, zoom: number, view: Visible): void;
   /** Bakes every patch at every zoom that uses one. */
   warm(): void;
 }
@@ -159,7 +169,7 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
         const y0 = frameY(f, a.maxY);
         const w = (a.maxX - a.minX) / f.mpp;
         const h = (a.maxY - a.minY) / f.mpp;
-        if (x0 > view.width || y0 > view.height || x0 + w < 0 || y0 + h < 0) continue;
+        if (x0 > view.right || y0 > view.bottom || x0 + w < view.left || y0 + h < view.top) continue;
         ctx.imageSmoothingEnabled = false;
         if (zoom >= 2) ctx.drawImage(patch(a, f.mpp), Math.round(x0), Math.round(y0));
         for (const rw of a.runways) drawRunway(ctx, f, rw, zoom);
@@ -168,7 +178,12 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
         if (rw) {
           const mx = frameX(f, (rw.a.x + rw.b.x) / 2);
           const my = frameY(f, (rw.a.y + rw.b.y) / 2);
-          drawText(ctx, `${a.ident} ${rw.names.join('/')}`, mx + 10, my - 10);
+          // Keep the label upright however the map is turned.
+          ctx.save();
+          ctx.translate(mx, my);
+          ctx.rotate(f.rotation ?? 0);
+          drawText(ctx, `${a.ident} ${rw.names.join('/')}`, 10, -10);
+          ctx.restore();
         }
       }
     },

@@ -10,7 +10,7 @@ import {
   worldWidth,
   type WorldGrid,
 } from '../sim/world/grid';
-import { createAirportLayer, type MapFrame } from './airportLayer';
+import { createAirportLayer, type MapFrame, type Visible } from './airportLayer';
 import { clampZoom, metersPerPixel, screenToWorld, worldToScreen, type Camera, type Point } from './camera';
 import { edgeArrow } from './edgeArrow';
 import { createPlaneSprites } from './sprite';
@@ -89,11 +89,19 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   const airportLayer = createAirportLayer(grid.airports);
   const sprites = createPlaneSprites();
 
-  function drawTerrain(ctx: CanvasRenderingContext2D, view: Size, camera: Camera): MapFrame {
+  /** Frame-space area that can show after rotating about the view center: its bounding circle's square. */
+  function visibleArea(view: Size): Visible {
+    const r = Math.hypot(view.width, view.height) / 2;
+    return { left: view.width / 2 - r, top: view.height / 2 - r, right: view.width / 2 + r, bottom: view.height / 2 + r };
+  }
+
+  /** Draws the map as if north were up (`flat` has rotation 0); the caller has rotated the canvas. */
+  function drawTerrain(ctx: CanvasRenderingContext2D, view: Size, flat: Camera, area: Visible): MapFrame {
+    const camera = flat;
     const mpp = metersPerPixel(camera.zoom);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = `rgb(${SEA_COLOR.join(',')})`;
-    ctx.fillRect(0, 0, view.width, view.height);
+    ctx.fillRect(area.left, area.top, area.right - area.left, area.bottom - area.top);
 
     // Round the map origin once; chunks sit at whole-pixel offsets from it.
     const nw = worldToScreen(camera, view, 0, ny * chunkWorld);
@@ -105,7 +113,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       for (let cx = 0; cx < nx; cx++) {
         const dx = ox + cx * chunkPx;
         const dy = oy + (ny - 1 - cy) * chunkPx;
-        if (dx >= view.width || dy >= view.height || dx + chunkPx <= 0 || dy + chunkPx <= 0) continue;
+        if (dx >= area.right || dy >= area.bottom || dx + chunkPx <= area.left || dy + chunkPx <= area.top) continue;
         ctx.drawImage(chunkCanvas(cx, cy, tier), dx, dy, chunkPx, chunkPx);
       }
     }
@@ -115,16 +123,22 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   function drawOverlays(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, cursor: Point | null): void {
     const mpp = metersPerPixel(camera.zoom);
 
-    // North marker, top right.
-    const nxp = view.width - 18;
+    // North marker, top right: the arrow points to north, wherever the map is turned.
+    const rot = camera.rotation ?? 0;
+    const mx = view.width - 30;
+    const my = 44;
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.rotate(-rot);
     ctx.fillStyle = '#fff';
     ctx.beginPath();
-    ctx.moveTo(nxp, 8);
-    ctx.lineTo(nxp - 6, 22);
-    ctx.lineTo(nxp + 6, 22);
+    ctx.moveTo(0, -14);
+    ctx.lineTo(-6, 0);
+    ctx.lineTo(6, 0);
     ctx.closePath();
     ctx.fill();
-    drawText(ctx, 'N', nxp, 36, 'center');
+    ctx.restore();
+    drawText(ctx, 'N', mx - Math.sin(rot) * 26, my - Math.cos(rot) * 26 + 4, 'center');
 
     drawScaleBar(ctx, mpp, 8, view.height - 28);
 
@@ -238,11 +252,20 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
 
   return {
     draw(ctx, view, camera, cursor, side, following) {
-      const frame = drawTerrain(ctx, view, camera);
-      airportLayer.draw(ctx, frame, clampZoom(camera.zoom), view);
+      // Terrain and airports are drawn north-up, then turned about the view center so the
+      // camera's heading points up.
+      const rotation = camera.rotation ?? 0;
+      const area = visibleArea(view);
+      ctx.save();
+      ctx.translate(view.width / 2, view.height / 2);
+      ctx.rotate(-rotation);
+      ctx.translate(-view.width / 2, -view.height / 2);
+      const frame = drawTerrain(ctx, view, { x: camera.x, y: camera.y, zoom: camera.zoom }, area);
+      airportLayer.draw(ctx, { ...frame, rotation }, clampZoom(camera.zoom), area);
+      ctx.restore();
       const plane = drawSlice(ctx, view, camera, side);
       if (side.crashed) sprites.drawWreck(ctx, plane.x, plane.y);
-      else sprites.drawTop(ctx, side.craft.heading, plane.x, plane.y);
+      else sprites.drawTop(ctx, side.craft.heading - (camera.rotation ?? 0), plane.x, plane.y);
       drawOverlays(ctx, view, camera, cursor);
       if (!following) {
         drawText(ctx, 'FREE LOOK - C to follow', view.width / 2, 16, 'center');

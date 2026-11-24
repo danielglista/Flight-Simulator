@@ -11,15 +11,18 @@ export interface FollowCamera {
   readonly free: Camera;
 }
 
-type Position = Pick<Craft, 'x' | 'y'>;
+type Position = Pick<Craft, 'x' | 'y'> & { readonly heading?: number };
 
 export function initialFollow(zoom: number): FollowCamera {
   return { following: true, free: { x: 0, y: 0, zoom } };
 }
 
-/** The camera to draw and to convert pointer positions with. No lag: the craft is exactly at the center. */
+/**
+ * The camera to draw and to convert pointer positions with. No lag: the craft is exactly at the
+ * center, and its heading points up. Free look keeps the rotation it had when it started.
+ */
 export function cameraFor(f: FollowCamera, craft: Position): Camera {
-  return f.following ? { x: craft.x, y: craft.y, zoom: f.free.zoom } : f.free;
+  return f.following ? { x: craft.x, y: craft.y, zoom: f.free.zoom, rotation: craft.heading ?? 0 } : f.free;
 }
 
 /** Starts or continues free look from what is on screen, so nothing jumps. */
