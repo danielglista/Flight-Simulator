@@ -60,12 +60,17 @@ body {
 }
 
 #panel-top canvas {
-  cursor: grab;
+  cursor: crosshair;
   touch-action: none;
 }
 
 #panel-top canvas.dragging {
   cursor: grabbing;
+}
+
+#panel-side canvas {
+  cursor: ew-resize;
+  touch-action: none;
 }
 
 canvas {

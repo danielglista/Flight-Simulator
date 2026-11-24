@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SEA_COLOR, TERRAIN_COLORS } from '../src/config/palette';
+import { SEA_COLOR, TERRAIN_COLORS, WATER_SHALLOW, waterColor } from '../src/config/palette';
 import { SCALES } from '../src/config/scales';
 import { createGrid } from '../src/sim/world/grid';
 import { Terrain } from '../src/sim/world/terrain';
@@ -30,19 +30,34 @@ describe('hillshade', () => {
 });
 
 describe('colorChunk', () => {
-  it('leaves water unshaded', () => {
+  it('colors water by depth and leaves it unshaded', () => {
     const g = createGrid(8, 8, 10);
-    for (let i = 0; i < 64; i++) g.elevation[i] = i * 30;
+    g.terrain.fill(Terrain.grass);
+    for (let i = 0; i < 64; i++) g.elevation[i] = 100 + i * 30;
+    g.elevation[0] = -5; // sea, 5 m deep
+    g.elevation[1] = 100;
+    g.water[1] = 30; // lake, 30 m deep
     const px = colorChunk(g, SCALES, 0, 0, 8);
-    expect(Array.from(px.slice(0, 3))).toEqual(Array.from(SEA_COLOR));
+    const at = (col: number) => Array.from(px.slice(((7 * 8) + col) * 4, ((7 * 8) + col) * 4 + 3));
+    // Bytes are rounded by the clamped array, so allow one step of difference.
+    const near = (got: number[], want: readonly number[]) =>
+      got.forEach((v, k) => expect(Math.abs(v - (want[k] as number))).toBeLessThanOrEqual(1));
+    near(at(0), waterColor(5));
+    near(at(1), waterColor(30));
+  });
+  it('is lighter where shallow than where deep', () => {
+    expect(waterColor(2)[0]).toBeGreaterThan(waterColor(80)[0]);
+    expect(waterColor(0)).toEqual(Array.from(WATER_SHALLOW));
   });
   it('writes the north row first', () => {
     const g = createGrid(4, 4, 10);
+    g.elevation.fill(-300); // sea floor, so every cell is sea except the desert one
+    g.elevation[3 * 4 + 1] = 0;
     g.terrain[3 * 4 + 1] = Terrain.desert; // north row
     const px = colorChunk(g, SCALES, 0, 0, 4);
     const d = TERRAIN_COLORS[Terrain.desert] as readonly number[];
     expect(px[4]).toBe(d[0]); // image row 0, x 1
-    expect(px[(3 * 4 + 1) * 4]).toBe(SEA_COLOR[0]); // south row is sea
+    expect(px[(3 * 4 + 1) * 4]).toBe(SEA_COLOR[0]); // south row is deep sea
   });
   it('matches a whole-map render at chunk borders', () => {
     const g = buildTestMap();

@@ -3,7 +3,8 @@
  * A const object rather than an enum, so the values stay plain numbers.
  */
 export const Terrain = {
-  water: 0,
+  /** What the ground is made of under open water (and the default). Water itself is not a terrain code. */
+  seabed: 0,
   grass: 1,
   forest: 2,
   farmland: 3,
@@ -18,7 +19,7 @@ export const Terrain = {
 export type TerrainCode = (typeof Terrain)[keyof typeof Terrain];
 
 export const TERRAIN_NAMES: Readonly<Record<number, string>> = {
-  [Terrain.water]: 'water',
+  [Terrain.seabed]: 'seabed',
   [Terrain.grass]: 'grass',
   [Terrain.forest]: 'forest',
   [Terrain.farmland]: 'farmland',

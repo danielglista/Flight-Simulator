@@ -1,6 +1,6 @@
-import { SEA_COLOR, TERRAIN_COLORS, type Rgb } from '../config/palette';
+import { SEA_COLOR, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
-import { CHUNK_CELLS, elevationAtCell, type WorldGrid } from '../sim/world/grid';
+import { CHUNK_CELLS, elevationAtCell, waterLevelAtCell, type WorldGrid } from '../sim/world/grid';
 import { Terrain } from '../sim/world/terrain';
 
 /**
@@ -31,6 +31,11 @@ function normalize(x: number, y: number, z: number): [number, number, number] {
   return [x / len, y / len, z / len];
 }
 
+/** Elevation for shading and contours: the sea floor counts as sea level, so coasts are not cliffs. */
+function landElevation(grid: WorldGrid, col: number, row: number): number {
+  return Math.max(0, elevationAtCell(grid, col, row));
+}
+
 /**
  * Hillshade step in -2..2 for a cell, from the WHOLE grid (not the chunk), so
  * chunk borders have no seams. 0 is flat; positive is lit.
@@ -38,9 +43,9 @@ function normalize(x: number, y: number, z: number): [number, number, number] {
 export function shadeStep(grid: WorldGrid, scale: ScaleConfig, col: number, row: number): number {
   const run = (2 * grid.cellSize * scale.altitude) / SHADE_EXAGGERATION;
   const sx =
-    (elevationAtCell(grid, col + 1, row) - elevationAtCell(grid, col - 1, row)) / run;
+    (landElevation(grid, col + 1, row) - landElevation(grid, col - 1, row)) / run;
   const sy =
-    (elevationAtCell(grid, col, row + 1) - elevationAtCell(grid, col, row - 1)) / run;
+    (landElevation(grid, col, row + 1) - landElevation(grid, col, row - 1)) / run;
   const [nx, ny, nz] = normalize(-sx, -sy, 1);
   const lit = nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2];
   const step = Math.round(((lit - FLAT_LIGHT) / FLAT_LIGHT) * SHADE_GAIN);
@@ -64,14 +69,14 @@ function tinted(color: Rgb, elevationM: number): Rgb {
 
 /** True where the contour level changes between this cell and its east or north neighbor. */
 export function onContour(grid: WorldGrid, col: number, row: number): boolean {
-  const here = Math.floor(elevationAtCell(grid, col, row) / CONTOUR_M);
+  const here = Math.floor(landElevation(grid, col, row) / CONTOUR_M);
   return (
-    here !== Math.floor(elevationAtCell(grid, col + 1, row) / CONTOUR_M) ||
-    here !== Math.floor(elevationAtCell(grid, col, row + 1) / CONTOUR_M)
+    here !== Math.floor(landElevation(grid, col + 1, row) / CONTOUR_M) ||
+    here !== Math.floor(landElevation(grid, col, row + 1) / CONTOUR_M)
   );
 }
 
-const NO_CONTOUR = new Set<number>([Terrain.water, Terrain.road, Terrain.urban, Terrain.airport]);
+const NO_CONTOUR = new Set<number>([Terrain.seabed, Terrain.road, Terrain.urban, Terrain.airport]);
 
 /**
  * RGBA bytes for one chunk, one pixel per cell. Image row 0 is the NORTH row
@@ -92,10 +97,13 @@ export function colorChunk(
       const col = chunkCol * size + x;
       let color: Rgb = SEA_COLOR;
       if (col < grid.cols && row < grid.rows) {
-        const code = grid.terrain[row * grid.cols + col] ?? Terrain.water;
-        color = TERRAIN_COLORS[code] ?? SEA_COLOR;
-        if (code !== Terrain.water) {
-          color = tinted(color, elevationAtCell(grid, col, row));
+        const code = grid.terrain[row * grid.cols + col] ?? Terrain.seabed;
+        const level = waterLevelAtCell(grid, col, row);
+        if (!Number.isNaN(level)) {
+          // Wet: colored by depth, so shelves and river beds show. No hillshade or contours.
+          color = waterColor(level - elevationAtCell(grid, col, row));
+        } else {
+          color = tinted(TERRAIN_COLORS[code] ?? SEA_COLOR, elevationAtCell(grid, col, row));
           color = shaded(color, shadeStep(grid, scale, col, row));
           if (!NO_CONTOUR.has(code) && onContour(grid, col, row)) {
             color = [color[0] * CONTOUR_DARKEN, color[1] * CONTOUR_DARKEN, color[2] * CONTOUR_DARKEN];

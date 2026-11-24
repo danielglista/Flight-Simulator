@@ -149,22 +149,24 @@ ASSIST --Esc--> MANUAL
 
 ## 7. World and map data
 
-The world is a **2D grid of cells**. Each cell stores elevation and terrain type.
+The world is a **2D grid of cells**. Each cell stores the solid ground's elevation, what the ground is made of, and the depth of any inland water over it.
 
 ### 7.1 Base grid
 
 | Property | Starting value |
 |---|---|
 | Cell size | 10 x 10 world meters (400 x 400 real meters at 1:40) |
-| Elevation | 16-bit integer, real meters above sea level |
-| Terrain | 8-bit code: water, grass, forest, farmland, desert, mountain, snow, urban, road, airport |
+| Elevation | 16-bit integer, real meters above sea level, of the SOLID ground (the bed). Negative below sea level |
+| Terrain | 8-bit code for what the ground is made of: seabed, grass, forest, farmland, desert, mountain, snow, urban, road, airport. Water is not a terrain code |
+| Water depth | 8-bit, real meters of lake or river water over the ground; 0 is none |
 | Chunk | 256 x 256 cells; load only those nearby |
 
-- The two layers are separate typed arrays, about 3 bytes per cell before compression. A DCA-ORD region of 25 x 15 km in world size is 3.75 million cells, or about 11 MB uncompressed.
+- The three layers are separate typed arrays, about 4 bytes per cell before compression. A DCA-ORD region of 25 x 15 km in world size is 3.75 million cells, or about 15 MB uncompressed.
 - Files are compact binary chunks, compressed for download, not a JSON or text array.
 - Elevation is interpolated between cells so the ground is smooth. Terrain type uses the nearest cell.
+- **Water:** open sea is implied: any cell whose ground is below sea level is wet, with its surface at 0, so sea floor and shelves are ordinary negative elevations. Lakes and rivers store a depth, and the surface is elevation + depth, flat per cell. Real bathymetry (NOAA) fits this directly. Three accessors: `groundAt` (the bed), `waterLevelAt` (surface, or NaN if dry) and `heightAt` (whatever is on top, never below the bed).
 - The top view turns terrain codes into 16-bit tiles, choosing edge tiles from neighboring cells. One map cell need not equal one screen pixel.
-- The two layers can be exported to and imported from images, so the map can be painted by hand.
+- The layers can be exported to and imported from images, so the map can be painted by hand.
 
 ### 7.2 Airports: fine grid plus objects
 A 10 m cell is too coarse here. A 45 m wide runway is about 22 m at 1:2 scale, or two cells, and an angled runway would look like stairs. Each airport therefore has an **overlay** that replaces the base grid inside its boundary:
@@ -417,7 +419,7 @@ H1 is independent and can be pulled forward at any time after A4.
 | Altitude vs. vertical speed scale | Vertical speed unscaled | D2 |
 | Speed brake | Left out | C6 |
 | Canvas performance | Assume sufficient | Measure in B2 and D3 |
-| Internal resolution | Top view 640 x 360; others 320 x 200, scaled 2x | H1 |
+| Internal resolution | Top and side views 640 x 360; instruments 320 x 200 | H1 |
 
 ### Later
 - **API key:** development setup for now; choose a public approach before sharing the game.
@@ -427,4 +429,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 is built (see [A1_PLAN.md](A1_PLAN.md) §11). Next: A2, a small hand-made grid drawn in the top view.
+A1, A2 and A3 are built (see [A3_PLAN.md](A3_PLAN.md) §13). Next: A4, one airport overlay with an angled runway.

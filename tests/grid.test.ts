@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../src/config/scales';
-import { createGrid, heightAt, surfaceAt } from '../src/sim/world/grid';
+import { createGrid, groundAt, heightAt, surfaceAt, waterLevelAt } from '../src/sim/world/grid';
 import { Terrain } from '../src/sim/world/terrain';
 
 function small() {
@@ -21,7 +21,7 @@ describe('surfaceAt', () => {
   it('treats outside the map, the far edge and bad input as water', () => {
     const g = small();
     for (const [x, y] of [[-1, 5], [5, -1], [40, 5], [5, 40], [NaN, 5], [5, Infinity]] as const) {
-      expect(surfaceAt(g, x, y)).toBe(Terrain.water);
+      expect(surfaceAt(g, x, y)).toBe(Terrain.seabed);
     }
   });
 });
@@ -53,5 +53,35 @@ describe('heightAt', () => {
     const a = heightAt(g, SCALES, 2559.99, 1000);
     const b = heightAt(g, SCALES, 2560.01, 1000);
     expect(Math.abs(a - b)).toBeLessThan(0.001);
+  });
+  it('keeps ground and water apart: water is flat at elevation + depth', () => {
+    const g = small();
+    g.elevation[0] = 100; // bed, real m
+    g.water[0] = 50; // 50 m of water: surface at 150 m real = 15 m world
+    expect(groundAt(g, SCALES, 5, 5)).toBe(10);
+    expect(waterLevelAt(g, SCALES, 5, 5)).toBe(15);
+    expect(heightAt(g, SCALES, 5, 5)).toBe(15);
+    expect(waterLevelAt(g, SCALES, 9.9, 5)).toBe(15); // flat across the cell
+    expect(Number.isNaN(waterLevelAt(g, SCALES, 15, 5))).toBe(true); // next cell is dry
+    expect(heightAt(g, SCALES, 15, 5)).toBe(30); // dry: ground
+  });
+  it('treats ground below sea level as open sea at 0', () => {
+    const g = small();
+    g.elevation[0] = -200; // 20 m world below sea level
+    expect(groundAt(g, SCALES, 5, 5)).toBe(-20);
+    expect(waterLevelAt(g, SCALES, 5, 5)).toBe(0);
+    expect(heightAt(g, SCALES, 5, 5)).toBe(0);
+  });
+  it('is dry at and above sea level, and open sea outside the map', () => {
+    const g = small();
+    g.elevation[0] = 0;
+    expect(Number.isNaN(waterLevelAt(g, SCALES, 5, 5))).toBe(true);
+    expect(waterLevelAt(g, SCALES, -5, 5)).toBe(0);
+  });
+  it('never puts the top surface below the bed', () => {
+    const g = small();
+    g.elevation[0] = 0;
+    g.water[0] = 5; // surface 5 m real, but the next cell is 300 m: blended ground is higher near the edge
+    expect(heightAt(g, SCALES, 9.9, 5)).toBeGreaterThanOrEqual(groundAt(g, SCALES, 9.9, 5));
   });
 });

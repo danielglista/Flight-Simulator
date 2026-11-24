@@ -10,7 +10,7 @@ export const CANVAS_PANELS: Readonly<
   Record<CanvasPanelId, { readonly label: string; readonly internal: Size }>
 > = {
   top: { label: 'TOP VIEW', internal: { width: 640, height: 360 } },
-  side: { label: 'SIDE VIEW', internal: { width: 320, height: 200 } },
+  side: { label: 'SIDE VIEW', internal: { width: 640, height: 360 } },
   instruments: { label: 'INSTRUMENTS', internal: { width: 320, height: 160 } },
 };
 

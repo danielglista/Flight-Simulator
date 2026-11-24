@@ -1,5 +1,6 @@
 import type { Size } from '../config/display';
-import { panBy, zoomAt, type Bounds, type Camera, type Point } from '../views/camera';
+import { panBy, screenToWorld, zoomAt, type Bounds, type Camera, type Point } from '../views/camera';
+import { CLICK_THRESHOLD, createWheelAccumulator, toInternal } from './pointer';
 
 export interface MapPointerOptions {
   readonly canvas: HTMLCanvasElement;
@@ -9,84 +10,87 @@ export interface MapPointerOptions {
   setCamera(camera: Camera): void;
   /** Cursor in internal pixels, or null when it has left the canvas. */
   setCursor(cursor: Point | null): void;
+  /** A click (press and release without moving), as a world point. */
+  onClick(world: Point): void;
 }
 
-/** One zoom level per this many pixels of wheel travel. */
-const WHEEL_STEP = 100;
-
-function wheelPixels(e: WheelEvent): number {
-  if (e.deltaMode === 1) return e.deltaY * 33; // lines
-  if (e.deltaMode === 2) return e.deltaY * 400; // pages
-  return e.deltaY;
-}
-
-/** Drag to pan, wheel to zoom at the cursor. Returns a function that removes the listeners. */
+/** Drag to pan, click to place the probe, wheel to zoom at the cursor. Returns a function that removes the listeners. */
 export function attachMapPointer(o: MapPointerOptions): () => void {
   const { canvas } = o;
-  let dragging = false;
+  let pressed = false;
+  let panning = false;
+  let start: Point = { x: 0, y: 0 };
   let last: Point = { x: 0, y: 0 };
-  let wheelAcc = 0;
+  const accumulate = createWheelAccumulator();
 
-  /** CSS pixels to internal pixels, right at any DPR or scale. */
-  const internal = (e: MouseEvent): Point => {
-    const r = canvas.getBoundingClientRect();
-    return {
-      x: ((e.clientX - r.left) * canvas.width) / r.width,
-      y: ((e.clientY - r.top) * canvas.height) / r.height,
-    };
-  };
-
-  const endDrag = (): void => {
-    dragging = false;
+  const end = (): void => {
+    pressed = false;
+    panning = false;
     canvas.classList.remove('dragging');
   };
 
   const onDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
-    dragging = true;
-    last = internal(e);
+    pressed = true;
+    panning = false;
+    start = last = toInternal(canvas, e);
     canvas.setPointerCapture(e.pointerId);
-    canvas.classList.add('dragging');
   };
   const onMove = (e: PointerEvent): void => {
-    const p = internal(e);
-    if (dragging) {
-      o.setCamera(panBy(o.getCamera(), p.x - last.x, p.y - last.y, o.bounds));
-      last = p;
+    const p = toInternal(canvas, e);
+    if (pressed) {
+      if (!panning && Math.hypot(p.x - start.x, p.y - start.y) >= CLICK_THRESHOLD) {
+        panning = true;
+        canvas.classList.add('dragging');
+        last = start; // no jump: the map follows from where the press began
+      }
+      if (panning) {
+        o.setCamera(panBy(o.getCamera(), p.x - last.x, p.y - last.y, o.bounds));
+        last = p;
+      }
     }
     o.setCursor(p);
   };
   const onUp = (e: PointerEvent): void => {
+    const wasClick = pressed && !panning;
     if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-    endDrag();
+    end();
+    if (wasClick) {
+      const p = toInternal(canvas, e);
+      o.onClick(screenToWorld(o.getCamera(), o.getView(), p.x, p.y));
+    }
+  };
+  // Cancel and lost capture are never clicks.
+  const onCancel = (e: PointerEvent): void => {
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    end();
   };
   const onLeave = (): void => {
-    if (!dragging) o.setCursor(null);
+    if (!pressed) o.setCursor(null);
   };
   const onWheel = (e: WheelEvent): void => {
     if (e.ctrlKey) return; // leave browser zoom alone
     e.preventDefault();
-    wheelAcc += wheelPixels(e);
-    const steps = Math.trunc(wheelAcc / WHEEL_STEP);
+    const steps = accumulate(e);
     if (steps === 0) return;
-    wheelAcc -= steps * WHEEL_STEP;
-    o.setCamera(zoomAt(o.getCamera(), o.getView(), internal(e), -steps, o.bounds));
-    o.setCursor(internal(e));
+    const p = toInternal(canvas, e);
+    o.setCamera(zoomAt(o.getCamera(), o.getView(), p, -steps, o.bounds));
+    o.setCursor(p);
   };
 
   canvas.addEventListener('pointerdown', onDown);
   canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp);
-  canvas.addEventListener('pointercancel', onUp);
-  canvas.addEventListener('lostpointercapture', endDrag);
+  canvas.addEventListener('pointercancel', onCancel);
+  canvas.addEventListener('lostpointercapture', end);
   canvas.addEventListener('pointerleave', onLeave);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   return () => {
     canvas.removeEventListener('pointerdown', onDown);
     canvas.removeEventListener('pointermove', onMove);
     canvas.removeEventListener('pointerup', onUp);
-    canvas.removeEventListener('pointercancel', onUp);
-    canvas.removeEventListener('lostpointercapture', endDrag);
+    canvas.removeEventListener('pointercancel', onCancel);
+    canvas.removeEventListener('lostpointercapture', end);
     canvas.removeEventListener('pointerleave', onLeave);
     canvas.removeEventListener('wheel', onWheel);
   };

@@ -25,7 +25,18 @@ const LAND_CENTER = 256;
 const LAND_RADIUS_COLS = 225;
 const LAND_RADIUS_ROWS = 215;
 const SEA_BORDER_CELLS = 4;
-const SNOW_LINE_M = 1400;
+/** Real meters. Exported so the side view can fill the snow cap down to it. */
+export const SNOW_LINE_M = 1400;
+/** Cells around a river point that must not be lower than the river. */
+const RIVER_BANK_CELLS = 4;
+/** Water depths, real meters. */
+const RIVER_DEPTH_M = 5;
+const LAKE_MAX_DEPTH_M = 30;
+const LAKE_EDGE_DEPTH_M = 4;
+/** Sea floor deepens this much per cell from the coast, down to a cap. */
+const SHELF_START_M = 3;
+const SHELF_SLOPE_M = 7;
+const SHELF_MAX_M = 300;
 const MOUNTAIN_LINE_M = 600;
 
 function distance(c: number, r: number, c0: number, r0: number): number {
@@ -63,13 +74,13 @@ function noise(c: number, r: number): number {
 
 /**
  * Builds the invented island. Same output every time.
- * Order: coast, base land, hills and ridge, lake and river, terrain by height,
+ * Order: coast, base land, hills and ridge, lake and river, sea floor, terrain by height,
  * level area, farmland, desert, town, road.
  */
 export function buildTestMap(): WorldGrid {
   const n = TEST_MAP_CELLS;
   const grid = createGrid(n, n, TEST_MAP_CELL_SIZE);
-  const { elevation, terrain } = grid;
+  const { elevation, terrain, water } = grid;
   const at = (c: number, r: number): number => r * n + c;
   const inMap = (c: number, r: number): boolean => c >= 0 && r >= 0 && c < n && r < n;
 
@@ -122,12 +133,19 @@ export function buildTestMap(): WorldGrid {
   // 3. Lake, then river carved after it so water sits below its banks.
   const lake = TEST_MAP_LANDMARKS.lakeCenter;
   const LAKE_LEVEL_M = 25;
+  const isLake = new Uint8Array(n * n);
   for (let r = lake.row - 20; r <= lake.row + 20; r++) {
     for (let c = lake.col - 20; c <= lake.col + 20; c++) {
-      if (inMap(c, r) && distance(c, r, lake.col, lake.row) <= TEST_MAP_LANDMARKS.lakeRadius) {
-        elevation[at(c, r)] = LAKE_LEVEL_M;
-        terrain[at(c, r)] = Terrain.water;
+      const d = distance(c, r, lake.col, lake.row);
+      if (inMap(c, r) && d <= TEST_MAP_LANDMARKS.lakeRadius) {
+        // Deepest in the middle; the water surface is flat at the lake level.
+        const depth = Math.round(
+          LAKE_EDGE_DEPTH_M + (LAKE_MAX_DEPTH_M - LAKE_EDGE_DEPTH_M) * (1 - d / TEST_MAP_LANDMARKS.lakeRadius),
+        );
+        elevation[at(c, r)] = LAKE_LEVEL_M - depth;
+        water[at(c, r)] = depth;
         carved[at(c, r)] = 1;
+        isLake[at(c, r)] = 1;
         isLand[at(c, r)] = 0;
       }
     }
@@ -149,7 +167,19 @@ export function buildTestMap(): WorldGrid {
     for (let k = 0; k <= steps; k++) {
       const cx = Math.round(ax + ((bx - ax) * k) / steps);
       const cy = Math.round(ay + ((by - ay) * k) / steps);
-      running = Math.min(running, Math.max(1, (elevation[at(cx, cy)] ?? 0) - 2));
+      // The river must lie below the land around it: take the lowest nearby land
+      // (not yet carved) as its level, so it never sits on a ridge above its banks.
+      let lowest = Infinity;
+      for (let dy = -RIVER_BANK_CELLS; dy <= RIVER_BANK_CELLS; dy++) {
+        for (let dx = -RIVER_BANK_CELLS; dx <= RIVER_BANK_CELLS; dx++) {
+          const c = cx + dx;
+          const r = cy + dy;
+          if (!inMap(c, r) || carved[at(c, r)] || !isLand[at(c, r)]) continue;
+          if (dx * dx + dy * dy > RIVER_BANK_CELLS * RIVER_BANK_CELLS) continue;
+          lowest = Math.min(lowest, elevation[at(c, r)] ?? 0);
+        }
+      }
+      if (lowest !== Infinity) running = Math.min(running, Math.max(1, lowest - 2));
       // 4 cells wide: a disc of radius 2 so it survives zooming out.
       for (let dy = -2; dy <= 2; dy++) {
         for (let dx = -2; dx <= 2; dx++) {
@@ -157,9 +187,10 @@ export function buildTestMap(): WorldGrid {
           const r = cy + dy;
           if (!inMap(c, r) || dx * dx + dy * dy > 5) continue;
           if (r < SEA_BORDER_CELLS || c < SEA_BORDER_CELLS) continue;
-          // Open sea (elevation 0, not land) stays at 0; land and lake cells take the river level.
-          if (isLand[at(c, r)] || (elevation[at(c, r)] ?? 0) > 0) elevation[at(c, r)] = running;
-          terrain[at(c, r)] = Terrain.water;
+          // Only land is carved: the lake keeps its own bed and the sea stays sea.
+          if (!isLand[at(c, r)] || isLake[at(c, r)]) continue;
+          elevation[at(c, r)] = running - RIVER_DEPTH_M;
+          water[at(c, r)] = RIVER_DEPTH_M;
           carved[at(c, r)] = 1;
         }
       }
@@ -179,16 +210,42 @@ export function buildTestMap(): WorldGrid {
     }
   }
 
-  // 5. Terrain by height and noise (river and lake cells stay water).
+  // 5. Sea floor: it deepens with distance from the coast (a chamfer distance transform).
+  const dist = new Float32Array(n * n);
+  for (let i = 0; i < dist.length; i++) dist[i] = isLand[i] || carved[i] ? 0 : 1e9;
+  const relax = (c: number, r: number, dc: number, dr: number, w: number): void => {
+    if (!inMap(c + dc, r + dr)) return;
+    const v = (dist[at(c + dc, r + dr)] as number) + w;
+    if (v < (dist[at(c, r)] as number)) dist[at(c, r)] = v;
+  };
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      relax(c, r, -1, 0, 1);
+      relax(c, r, 0, -1, 1);
+      relax(c, r, -1, -1, 1.4142);
+      relax(c, r, 1, -1, 1.4142);
+    }
+  }
+  for (let r = n - 1; r >= 0; r--) {
+    for (let c = n - 1; c >= 0; c--) {
+      relax(c, r, 1, 0, 1);
+      relax(c, r, 0, 1, 1);
+      relax(c, r, 1, 1, 1.4142);
+      relax(c, r, -1, 1, 1.4142);
+    }
+  }
+  for (let i = 0; i < dist.length; i++) {
+    if (isLand[i] || carved[i]) continue;
+    elevation[i] = -Math.round(Math.min(SHELF_MAX_M, SHELF_START_M + SHELF_SLOPE_M * (dist[i] as number)));
+  }
+
+  // 6. Terrain by bed height and noise. The sea keeps the seabed code; lake and
+  // river beds are ordinary ground with water over them.
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
       const i = at(c, r);
-      if (!isLand[i]) {
-        terrain[i] = Terrain.water;
-        continue;
-      }
-      if (carved[i]) {
-        terrain[i] = Terrain.water;
+      if (!isLand[i] && !carved[i]) {
+        terrain[i] = Terrain.seabed;
         continue;
       }
       const e = elevation[i] ?? 0;
@@ -198,6 +255,9 @@ export function buildTestMap(): WorldGrid {
       else terrain[i] = Terrain.grass;
     }
   }
+
+  /** Wet: inland water over the ground, or ground below sea level. */
+  const isWet = (i: number): boolean => (water[i] ?? 0) > 0 || (elevation[i] ?? 0) < 0;
 
   const paint = (
     colMin: number,
@@ -210,8 +270,8 @@ export function buildTestMap(): WorldGrid {
     for (let r = rowMin; r <= rowMax; r++) {
       for (let c = colMin; c <= colMax; c++) {
         if (!inMap(c, r)) continue;
-        const cur = terrain[at(c, r)] ?? Terrain.water;
-        if (only ? only.includes(cur) : cur !== Terrain.water) terrain[at(c, r)] = code;
+        const cur = terrain[at(c, r)] ?? Terrain.seabed;
+        if (only ? only.includes(cur) && !isWet(at(c, r)) : !isWet(at(c, r))) terrain[at(c, r)] = code;
       }
     }
   };
@@ -220,7 +280,7 @@ export function buildTestMap(): WorldGrid {
   // Flat grass for the runway area (exact rectangle).
   paint(lv.colMin, lv.colMax, lv.rowMin, lv.rowMax, Terrain.grass);
 
-  // 6. Farmland patchwork, desert, town.
+  // 7. Farmland patchwork, desert, town.
   paint(175, 260, 140, 200, Terrain.farmland, open);
   paint(270, 340, 125, 190, Terrain.farmland, open);
   paint(100, 170, 160, 215, Terrain.farmland, open);
@@ -228,12 +288,12 @@ export function buildTestMap(): WorldGrid {
   const tw = TEST_MAP_LANDMARKS.town;
   for (let r = tw.rowMin; r <= tw.rowMax; r++) {
     for (let c = tw.colMin; c <= tw.colMax; c++) {
-      if (terrain[at(c, r)] === Terrain.water) continue;
+      if (isWet(at(c, r))) continue;
       terrain[at(c, r)] = c % 8 === 0 || r % 8 === 0 ? Terrain.road : Terrain.urban;
     }
   }
 
-  // 7. Road, 2 cells wide: east from the town, and a spur down to the level area.
+  // 8. Road, 2 cells wide: east from the town, and a spur down to the level area.
   paint(tw.colMax, 340, 132, 133, Terrain.road);
   paint(255, 256, lv.rowMax + 1, 133, Terrain.road);
 
