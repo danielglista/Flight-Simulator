@@ -16,6 +16,9 @@ describe('sim boundaries', () => {
         expect(m[1], `${path} imports ${m[1]}`).not.toMatch(/(^|\/)(views|app|input)(\/|$)/);
       }
       expect(src, path).not.toMatch(/\b(document|window)\b/);
+      expect(src, path).not.toMatch(
+        /\b(performance|requestAnimationFrame|setTimeout|setInterval|Date)\b|Math\.random/,
+      );
     }
   });
 });

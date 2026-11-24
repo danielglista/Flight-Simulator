@@ -165,6 +165,7 @@ Keyboard first; gamepad later. Keys are provisional.
 | Quick replies | 1-4 |
 | Focus terminal / return to flying | Tab / Esc |
 | Map zoom | Mouse wheel |
+| Pause / resume | P |
 
 ### 5.4 Co-pilot assist while typing
 Typing sends flight keys to the terminal, so the co-pilot takes over **to an extent**. It is a steady pair of hands, not a rescue.

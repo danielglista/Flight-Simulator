@@ -431,4 +431,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4 are built (see [A4_PLAN.md](A4_PLAN.md) §13). Next: B1, fixed-step loop and keyboard input.
+A1 to A4 and B1 are built (see [B1_PLAN.md](B1_PLAN.md) §14). Next: B2, plane sprite in both views with a follow camera.

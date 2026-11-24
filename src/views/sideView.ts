@@ -27,8 +27,20 @@ import {
 } from './sideCamera';
 import type { Point } from './camera';
 
-const rgb = (c: Rgb, k = 1): string =>
-  `rgb(${Math.round(c[0] * k)},${Math.round(c[1] * k)},${Math.round(c[2] * k)})`;
+// Colors repeat from column to column, so cache the strings by their packed value.
+const rgbCache = new Map<number, string>();
+const rgb = (c: Rgb, k = 1): string => {
+  const r = Math.round(c[0] * k);
+  const g = Math.round(c[1] * k);
+  const b = Math.round(c[2] * k);
+  const key = (r << 16) | (g << 8) | b;
+  let s = rgbCache.get(key);
+  if (s === undefined) {
+    s = `rgb(${r},${g},${b})`;
+    rgbCache.set(key, s);
+  }
+  return s;
+};
 
 
 export interface SideView {

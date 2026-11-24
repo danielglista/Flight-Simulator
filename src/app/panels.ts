@@ -34,6 +34,8 @@ export interface PanelHandle {
   readonly size: Size;
   /** Schedules one redraw on the next animation frame; repeated calls share it. */
   requestDraw(): void;
+  /** Draws now and cancels a pending request. */
+  render(): void;
 }
 
 function setupPanel(id: CanvasPanelId, draw?: DrawFn): PanelHandle {
@@ -48,7 +50,13 @@ function setupPanel(id: CanvasPanelId, draw?: DrawFn): PanelHandle {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas is not supported');
 
+  let queued = false;
+  let rafId = 0;
   const render = (): void => {
+    if (queued) {
+      cancelAnimationFrame(rafId);
+      queued = false;
+    }
     const { scale, cssWidth, cssHeight } = fitScale(
       { width: panel.clientWidth, height: panel.clientHeight },
       internal,
@@ -71,11 +79,10 @@ function setupPanel(id: CanvasPanelId, draw?: DrawFn): PanelHandle {
     else drawPlaceholder(ctx, label, size);
   };
 
-  let queued = false;
   const requestDraw = (): void => {
     if (queued) return;
     queued = true;
-    requestAnimationFrame(() => {
+    rafId = requestAnimationFrame(() => {
       queued = false;
       render();
     });
@@ -83,7 +90,7 @@ function setupPanel(id: CanvasPanelId, draw?: DrawFn): PanelHandle {
 
   new ResizeObserver(render).observe(panel);
   render();
-  return { canvas, size, requestDraw };
+  return { canvas, size, requestDraw, render };
 }
 
 /** Panels without a draw function keep the A1 placeholder. */
