@@ -26,14 +26,25 @@ function drawPlaceholder(ctx: CanvasRenderingContext2D, label: string, size: Siz
   ctx.fillText(`${label} ${w}x${h}`, w / 2, h / 2);
 }
 
-function setupPanel(id: CanvasPanelId): void {
+export type DrawFn = (ctx: CanvasRenderingContext2D, size: Size) => void;
+
+export interface PanelHandle {
+  readonly canvas: HTMLCanvasElement;
+  /** Current internal size; it follows the panel size. */
+  readonly size: Size;
+  /** Schedules one redraw on the next animation frame; repeated calls share it. */
+  requestDraw(): void;
+}
+
+function setupPanel(id: CanvasPanelId, draw?: DrawFn): PanelHandle {
   const panel = document.getElementById(`panel-${id}`);
   const canvas = panel?.querySelector('canvas');
   if (!panel || !canvas) throw new Error(`Missing panel or canvas for "${id}"`);
 
   const { label, internal } = CANVAS_PANELS[id];
-  canvas.width = internal.width;
-  canvas.height = internal.height;
+  const size: { width: number; height: number } = { ...internal };
+  canvas.width = size.width;
+  canvas.height = size.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('2D canvas is not supported');
 
@@ -43,17 +54,45 @@ function setupPanel(id: CanvasPanelId): void {
       internal,
       window.devicePixelRatio,
     );
-    canvas.style.width = `${cssWidth}px`;
-    canvas.style.height = `${cssHeight}px`;
+    void cssWidth;
+    void cssHeight;
+    // Keep the whole-number scale, but grow the internal canvas to cover the
+    // panel (the last pixel row or column may be cropped), so there are no margins.
+    const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
+    size.width = Math.max(1, Math.ceil((panel.clientWidth * dpr) / scale));
+    size.height = Math.max(1, Math.ceil((panel.clientHeight * dpr) / scale));
+    if (canvas.width !== size.width) canvas.width = size.width;
+    if (canvas.height !== size.height) canvas.height = size.height;
+    canvas.style.width = `${(size.width * scale) / dpr}px`;
+    canvas.style.height = `${(size.height * scale) / dpr}px`;
     canvas.dataset['scale'] = String(scale);
     ctx.imageSmoothingEnabled = false;
-    drawPlaceholder(ctx, label, internal);
+    if (draw) draw(ctx, size);
+    else drawPlaceholder(ctx, label, size);
+  };
+
+  let queued = false;
+  const requestDraw = (): void => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => {
+      queued = false;
+      render();
+    });
   };
 
   new ResizeObserver(render).observe(panel);
   render();
+  return { canvas, size, requestDraw };
 }
 
-export function initPanels(): void {
-  for (const id of Object.keys(CANVAS_PANELS) as CanvasPanelId[]) setupPanel(id);
+/** Panels without a draw function keep the A1 placeholder. */
+export function initPanels(
+  draws: Partial<Record<CanvasPanelId, DrawFn>> = {},
+): Record<CanvasPanelId, PanelHandle> {
+  const ids = Object.keys(CANVAS_PANELS) as CanvasPanelId[];
+  return Object.fromEntries(ids.map((id) => [id, setupPanel(id, draws[id])])) as Record<
+    CanvasPanelId,
+    PanelHandle
+  >;
 }

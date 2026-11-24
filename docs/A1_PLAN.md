@@ -137,3 +137,5 @@ No answers were given, so the recommended option was taken for each. Say so if y
 **Not checked:** visual crispness was judged from one screenshot only; a pixel-level check at DPR 1 and 1.5 is worth a glance on your own screen.
 
 **Next:** A2, a small hand-made grid drawn in the top view.
+
+**Correction (A2):** the 2 px grid gap left the views one pixel short at DPR 1 (1280 x 720 gave 1x, 1920 x 1080 gave 2x). A2 removed the gap and draws panel borders as overlays, so 2x and 3x now hold.

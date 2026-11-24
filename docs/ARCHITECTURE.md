@@ -417,7 +417,7 @@ H1 is independent and can be pulled forward at any time after A4.
 | Altitude vs. vertical speed scale | Vertical speed unscaled | D2 |
 | Speed brake | Left out | C6 |
 | Canvas performance | Assume sufficient | Measure in B2 and D3 |
-| Internal resolution | About 320 x 200 per view, scaled 2x | A2, then H1 |
+| Internal resolution | Top view 640 x 360; others 320 x 200, scaled 2x | H1 |
 
 ### Later
 - **API key:** development setup for now; choose a public approach before sharing the game.
