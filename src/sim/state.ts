@@ -1,4 +1,4 @@
-import { START_HEADING, START_SPEED, START_X, START_Y, START_Z } from '../config/motion';
+import { DEFAULT_TUNING, START_HEADING, START_SPEED, START_X, START_Y, START_Z, type Tuning } from '../config/motion';
 
 export type Axis = -1 | 0 | 1;
 
@@ -35,6 +35,8 @@ export interface SimState {
   readonly craft: Craft;
   readonly controls: Controls;
   readonly crash: Crash | null;
+  /** Live-tunable motion values. Changed only by the `tune` command. */
+  readonly tuning: Tuning;
 }
 
 export function initialState(): SimState {
@@ -43,5 +45,6 @@ export function initialState(): SimState {
     craft: { x: START_X, y: START_Y, z: START_Z, heading: START_HEADING, speed: START_SPEED, pathAngle: 0 },
     controls: { turn: 0, throttle: 0, pitch: 0 },
     crash: null,
+    tuning: DEFAULT_TUNING,
   };
 }

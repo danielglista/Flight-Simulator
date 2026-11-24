@@ -168,6 +168,7 @@ Keyboard first; gamepad later. Keys are provisional.
 | Pause / resume | P |
 | Top-view follow again after free look | C |
 | Restart after a crash (provisional, from B3) | Enter |
+| Show / hide debug panel (developer, from B4) | Backquote (`) |
 
 ### 5.4 Co-pilot assist while typing
 Typing sends flight keys to the terminal, so the co-pilot takes over **to an extent**. It is a steady pair of hands, not a rescue.

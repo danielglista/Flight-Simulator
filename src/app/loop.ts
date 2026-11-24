@@ -14,6 +14,8 @@ export interface LoopOptions {
   sampleKeys(): Command[];
   clearKeys(): void;
   startPaused?: boolean;
+  /** Real seconds since the previous running frame. Not called for the first frame or the first after a resume. */
+  onFrame?(elapsedS: number): void;
 }
 
 export interface Loop {
@@ -21,7 +23,7 @@ export interface Loop {
   frame(nowMs: number): void;
   /** Starts the browser animation-frame loop. */
   start(): void;
-  /** Commands from pointers or tools. Applied at once when paused, otherwise at the next step. */
+  /** Commands from pointers or tools. Applied at once when paused, otherwise at the next step. `tune` is always applied at once. */
   send(command: Command): void;
   pause(): void;
   resume(): void;
@@ -52,6 +54,7 @@ export function createLoop(o: LoopOptions): Loop {
       }
       const elapsed = Math.max(0, (nowMs - last) / 1000);
       last = nowMs;
+      o.onFrame?.(elapsed);
       const { steps, alpha: a } = stepper.advance(elapsed);
       alpha = a;
       // Sampled only on frames that step, so a press and its release cannot be queued together.
@@ -75,7 +78,12 @@ export function createLoop(o: LoopOptions): Loop {
       requestAnimationFrame(tick);
     },
     send(command) {
-      if (paused) {
+      if (command.kind === 'tune') {
+        // Tuning acts only inside `advance`, so applying it now equals applying it at the start of the next step.
+        // It is never queued: a pause drops the queue, and the slider would show a value the sim never got.
+        state = applyCommands(state, [command], o.world);
+        if (paused) o.requestDraw();
+      } else if (paused) {
         state = applyCommands(state, [command], o.world);
         prev = state;
         alpha = 0;

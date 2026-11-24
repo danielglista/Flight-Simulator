@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionFor } from '../src/input/keyboard';
+import { actionFor, isTextEntry } from '../src/input/keyboard';
 
 describe('actionFor', () => {
   it('runs Enter once per press', () => {
@@ -15,5 +15,26 @@ describe('actionFor', () => {
     expect(actionFor({ code: 'KeyC' })).toBe('KeyC');
     expect(actionFor({ code: 'KeyP', ctrlKey: true })).toBeNull();
     expect(actionFor({ code: 'KeyW' })).toBeNull();
+  });
+  it('runs Backquote once per press, but not in a text field', () => {
+    expect(actionFor({ code: 'Backquote' })).toBe('Backquote');
+    expect(actionFor({ code: 'Backquote', repeat: true })).toBeNull();
+    expect(actionFor({ code: 'Backquote', editable: true })).toBeNull();
+    expect(actionFor({ code: 'constructor' })).toBeNull();
+  });
+});
+
+describe('isTextEntry', () => {
+  it('is false for range, button and checkbox inputs', () => {
+    for (const type of ['range', 'button', 'checkbox']) expect(isTextEntry({ tagName: 'INPUT', type })).toBe(false);
+    expect(isTextEntry({ tagName: 'BUTTON' })).toBe(false);
+    expect(isTextEntry({ tagName: 'DIV' })).toBe(false);
+  });
+  it('is true for text-like inputs, a missing type, textarea, select and contenteditable', () => {
+    for (const type of ['text', 'search', 'number', 'password']) expect(isTextEntry({ tagName: 'INPUT', type })).toBe(true);
+    expect(isTextEntry({ tagName: 'INPUT' })).toBe(true);
+    expect(isTextEntry({ tagName: 'TEXTAREA' })).toBe(true);
+    expect(isTextEntry({ tagName: 'SELECT' })).toBe(true);
+    expect(isTextEntry({ tagName: 'DIV', isContentEditable: true })).toBe(true);
   });
 });

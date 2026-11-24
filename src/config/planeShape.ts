@@ -42,10 +42,10 @@ export const TOP_SPRITE_SIZE = 25;
 export const SIDE_SPRITE_SIZE = 45;
 /** Number of rotated top-view frames: one per 5 degrees. */
 export const TOP_FRAMES = 72;
-/** Side view pitch frames: -15 to +15 degrees in 2.5 degree steps (13 frames). */
+/** Side view pitch frames: -30 to +30 degrees in 2.5 degree steps (25 frames). Covers the largest tunable path limit. */
 export const PITCH_STEP_DEG = 2.5;
-export const PITCH_MAX_DEG = 15;
-export const PITCH_FRAMES = 13;
+export const PITCH_MAX_DEG = 30;
+export const PITCH_FRAMES = (2 * PITCH_MAX_DEG) / PITCH_STEP_DEG + 1;
 
 /** Wreck marker, same in every direction: x right, y up, within 8 px of the center. */
 export const WRECK_SIZE = 25;

@@ -16,6 +16,7 @@
       </section>
       <section class="panel" id="panel-instruments" aria-label="Instruments">
         <canvas role="img" aria-label="Cockpit instruments"></canvas>
+        <p id="readout-sr" class="sr-only"></p>
       </section>
       <section class="panel terminal" id="panel-terminal" aria-label="Comms terminal">
         <header class="terminal-header">COMMS TERMINAL</header>
@@ -27,6 +28,7 @@
           <span class="prompt" aria-hidden="true">&gt;</span>
           <input type="text" disabled placeholder="input disabled" aria-label="Terminal input (not yet active)" />
         </label>
+        <div id="debug-panel" class="debug" aria-label="Debug panel (Backquote to hide)" hidden></div>
       </section>
     </main>
     <div class="banners">

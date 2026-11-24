@@ -1,6 +1,6 @@
 # Flight Simulator
 
-A 2D browser flight simulator: top view + side view of one plane, real geography, ATC radio as gameplay. TypeScript (strict), Vite, Canvas 2D, Vitest. No UI framework, few dependencies. Currently in milestone phase B ("Move a plane"); see `docs/ARCHITECTURE.md` §14.
+A 2D browser flight simulator: top view + side view of one plane, real geography, ATC radio as gameplay. TypeScript (strict), Vite, Canvas 2D, Vitest. No UI framework, few dependencies. Phase B ("Move a plane") is built; next is phase C (flight model); see `docs/ARCHITECTURE.md` §14.
 
 ## Commands (run from repo root; Windows/PowerShell)
 
@@ -44,5 +44,5 @@ Start the `dev` server and look at it in the browser pane; type checks and tests
 | Tech choices, layout, sim loop, units, milestones, open decisions | `docs/ARCHITECTURE.md` |
 | What the game does right now and which file owns each behavior | `docs/CURRENT.md` (read this first) |
 | The step being built, and how the last one was verified | the latest `docs/<ID>_PLAN.md` |
-| Tuning (speeds, turn rates, climb angle) | `src/config/motion.ts` |
+| Tuning (speeds, turn rates, climb angle): defaults and slider ranges; live values are `SimState.tuning`, changed by the `tune` command, shown in the debug panel (Backquote) | `src/config/motion.ts` |
 | Map, airports, terrain | `src/sim/world/` |

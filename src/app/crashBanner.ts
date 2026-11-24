@@ -1,14 +1,16 @@
 import type { ScaleConfig } from '../config/scales';
 import type { Craft, Crash } from '../sim/state';
+import { displayedAltitudeFt } from '../sim/units';
 import { groundAt, waterLevelAt, type WorldGrid } from '../sim/world/grid';
+import { formatAltitude } from '../views/format';
 import { surfaceName } from '../views/surfaceName';
 
-/** `CRASHED: mountain, 1,120 m - Enter to restart`. The height is real meters. */
+/** `CRASHED: mountain, 3,670 ft - Enter to restart`. The height is displayed feet, as ALT shows it. */
 export function crashMessage(grid: WorldGrid, scale: ScaleConfig, craft: Craft): string {
   const wet = waterLevelAt(grid, scale, craft.x, craft.y) > groundAt(grid, scale, craft.x, craft.y);
   const what = wet ? 'water' : surfaceName(grid, craft.x, craft.y);
-  const real = Math.round(craft.z * scale.altitude).toLocaleString('en-US');
-  return `CRASHED: ${what}, ${real} m - Enter to restart`;
+  const alt = formatAltitude(displayedAltitudeFt(craft.z, scale));
+  return `CRASHED: ${what}, ${alt} ft - Enter to restart`;
 }
 
 export interface CrashBanner {

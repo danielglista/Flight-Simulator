@@ -182,3 +182,69 @@ canvas {
   padding: 2px 8px;
   cursor: pointer;
 }
+
+/* Visually hidden, still read by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Over the comms terminal, no layout space. Backquote toggles it. */
+.debug {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow-y: auto;
+  padding: 6px 10px;
+  background: rgba(11, 14, 20, 0.97);
+  font-size: 12px;
+}
+
+.debug[hidden] {
+  display: none;
+}
+
+.debug-group {
+  margin-bottom: 8px;
+}
+
+.debug h3 {
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.debug-slider {
+  display: grid;
+  grid-template-columns: 11em 1fr 10em 5em;
+  gap: 8px;
+  align-items: center;
+}
+
+.debug-default {
+  color: var(--dim);
+}
+
+.debug-text {
+  margin: 0;
+  font: inherit;
+  white-space: pre;
+}
+
+.debug button {
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 2px 8px;
+  margin-top: 4px;
+  cursor: pointer;
+}

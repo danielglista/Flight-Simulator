@@ -5,11 +5,33 @@ export interface Keyboard {
   detach(): void;
 }
 
+/** Input types that take typed text. Range, button, checkbox and the like do not. */
+const NON_TEXT_INPUT_TYPES = new Set([
+  'range', 'button', 'checkbox', 'radio', 'submit', 'reset', 'color', 'file', 'image',
+]);
+
+export interface TextEntryTarget {
+  readonly tagName: string;
+  readonly type?: string | null;
+  readonly isContentEditable?: boolean;
+}
+
+/** True for controls where typing should go to the control, not the flight keys. Pure. */
+export function isTextEntry(t: TextEntryTarget): boolean {
+  if (t.isContentEditable) return true;
+  const tag = t.tagName.toUpperCase();
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (tag === 'INPUT') return !NON_TEXT_INPUT_TYPES.has((t.type ?? '').toLowerCase());
+  return false;
+}
+
 const isEditable = (t: EventTarget | null): boolean => {
   if (!(t instanceof HTMLElement)) return false;
-  return (
-    t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT'
-  );
+  return isTextEntry({
+    tagName: t.tagName,
+    type: t instanceof HTMLInputElement ? t.type : null,
+    isContentEditable: t.isContentEditable,
+  });
 };
 
 const isButton = (t: EventTarget | null): boolean => t instanceof HTMLElement && t.tagName === 'BUTTON';
@@ -18,9 +40,12 @@ export interface KeyActions {
   readonly KeyP: () => void;
   readonly KeyC: () => void;
   readonly Enter: () => void;
+  readonly Backquote: () => void;
 }
 
 export type ActionCode = keyof KeyActions;
+
+const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true };
 
 export interface ActionEvent {
   readonly code: string;
@@ -35,11 +60,11 @@ export interface ActionEvent {
 
 /** Which one-shot action this key press runs, or null. Pure, so it can be tested. */
 export function actionFor(e: ActionEvent): ActionCode | null {
-  if (e.code !== 'KeyP' && e.code !== 'KeyC' && e.code !== 'Enter') return null;
+  if (!Object.hasOwn(ACTION_CODES, e.code)) return null;
   if (e.editable || e.ctrlKey || e.altKey || e.metaKey) return null;
   if (e.code === 'Enter' && e.button) return null;
   if (e.repeat) return null;
-  return e.code;
+  return e.code as ActionCode;
 }
 
 /** Window key listeners. P, C and Enter run their action once per press. */
@@ -47,7 +72,7 @@ export function attachKeyboard(actions: KeyActions): Keyboard {
   const keys = createKeyState();
   const down = (e: KeyboardEvent): void => {
     const editable = isEditable(e.target);
-    if (e.code === 'KeyP' || e.code === 'KeyC' || e.code === 'Enter') {
+    if (Object.hasOwn(ACTION_CODES, e.code)) {
       // These keys never steer, whether or not the press ran an action.
       if (!editable && !e.ctrlKey && !e.altKey && !e.metaKey) {
         const code = actionFor({

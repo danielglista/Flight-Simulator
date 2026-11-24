@@ -36,3 +36,9 @@ export function waterColor(depthRealM: number): Rgb {
 /** Side-view sky bands, top to bottom, and the map marker. Placeholders until H1. */
 export const SKY_BANDS: readonly string[] = ['#16345f', '#1f4a80', '#2f6aa3', '#5a93c4'];
 export const MARKER_COLOR = '#ffd34d';
+
+/** Instrument readouts, B4. D1 replaces them. */
+export const READOUT_BG = '#0d1a2b';
+export const READOUT_LABEL = '#6b778d';
+export const READOUT_VALUE = '#e8f0ff';
+export const READOUT_UNIT = '#8fa0bd';

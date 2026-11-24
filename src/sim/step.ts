@@ -1,14 +1,4 @@
-import {
-  CEILING_Z,
-  PATH_MAX_DEG,
-  PATH_RATE_DEG_S,
-  PLACE_CLEARANCE,
-  SPEED_MAX,
-  SPEED_MIN,
-  SPEED_RATE,
-  STEP_S,
-  TURN_RATE_DEG_S,
-} from '../config/motion';
+import { CEILING_Z, PLACE_CLEARANCE, SPEED_MIN, STEP_S, TUNING_RANGES } from '../config/motion';
 import { wrapHeading } from './angles';
 import type { Command } from './commands';
 import { sweepContact } from './contact';
@@ -31,7 +21,7 @@ function toAxis(v: number): Axis | null {
 
 /** Applies commands at the current tick. Time and tick do not change. */
 export function applyCommands(state: SimState, commands: readonly Command[], world: SimWorld): SimState {
-  let { craft, controls, crash } = state;
+  let { craft, controls, crash, tuning } = state;
   for (const c of commands) {
     switch (c.kind) {
       case 'turn':
@@ -51,6 +41,14 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
       case 'rotate':
         if (!crash && Number.isFinite(c.by)) craft = { ...craft, heading: wrapHeading(craft.heading + c.by) };
         break;
+      case 'tune': {
+        const range = Object.hasOwn(TUNING_RANGES, c.key) ? TUNING_RANGES[c.key] : undefined;
+        if (range && Number.isFinite(c.value)) {
+          const value = clamp(c.value, range.min, range.max);
+          if (tuning[c.key] !== value) tuning = { ...tuning, [c.key]: value };
+        }
+        break;
+      }
       case 'restart':
         if (crash) {
           craft = initialState().craft;
@@ -59,8 +57,10 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
         break;
     }
   }
-  if (craft === state.craft && controls === state.controls && crash === state.crash) return state;
-  return { ...state, craft, controls, crash };
+  if (craft === state.craft && controls === state.controls && crash === state.crash && tuning === state.tuning) {
+    return state;
+  }
+  return { ...state, craft, controls, crash, tuning };
 }
 
 /**
@@ -69,12 +69,12 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
  */
 export function advance(state: SimState, world: SimWorld): SimState {
   if (state.crash) return { ...state, tick: state.tick + 1 };
-  const { craft, controls } = state;
-  const speed = clamp(craft.speed + controls.throttle * SPEED_RATE * STEP_S, SPEED_MIN, SPEED_MAX);
-  const heading = wrapHeading(craft.heading + controls.turn * TURN_RATE_DEG_S * DEG * STEP_S);
+  const { craft, controls, tuning } = state;
+  const speed = clamp(craft.speed + controls.throttle * tuning.speedRate * STEP_S, SPEED_MIN, tuning.speedMax);
+  const heading = wrapHeading(craft.heading + controls.turn * tuning.turnRateDegS * DEG * STEP_S);
 
-  const target = controls.pitch * PATH_MAX_DEG * DEG;
-  const maxMove = PATH_RATE_DEG_S * DEG * STEP_S;
+  const target = controls.pitch * tuning.pathMaxDeg * DEG;
+  const maxMove = tuning.pathRateDegS * DEG * STEP_S;
   const diff = target - craft.pathAngle;
   let pathAngle = Math.abs(diff) <= maxMove ? target : craft.pathAngle + Math.sign(diff) * maxMove;
 

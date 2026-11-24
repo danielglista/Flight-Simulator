@@ -130,12 +130,15 @@ describe('frameIndex', () => {
 describe('side pitch frames', () => {
   const S = SIDE_SPRITE_SIZE;
   const frame = (deg: number) => rasterize(PLANE_SIDE, pitchFrameAngle(pitchFrameIndex(deg * DEG)), S);
-  it('has 13 frames from -15 to +15 degrees, with the middle frame level', () => {
-    expect(pitchFrameIndex(0)).toBe(6);
-    expect(pitchFrameIndex(15 * DEG)).toBe(12);
-    expect(pitchFrameIndex(-15 * DEG)).toBe(0);
-    expect(pitchFrameIndex(40 * DEG)).toBe(12);
-    expect(pitchFrameAngle(6)).toBeCloseTo(0, 12);
+  it('has 25 frames from -30 to +30 degrees, with the middle frame level', () => {
+    expect(PITCH_FRAMES).toBe(25);
+    expect(pitchFrameIndex(0)).toBe(12);
+    expect(pitchFrameIndex(15 * DEG)).toBe(18);
+    expect(pitchFrameIndex(30 * DEG)).toBe(24);
+    expect(pitchFrameIndex(-30 * DEG)).toBe(0);
+    expect(pitchFrameIndex(60 * DEG)).toBe(24);
+    expect(pitchFrameAngle(12)).toBeCloseTo(0, 12);
+    expect(pitchFrameAngle(24)).toBeCloseTo(-30 * DEG, 12);
   });
   it('puts the nose above the tail at +15 and below at -15', () => {
     const up = centroid(frame(15), S, FIN);

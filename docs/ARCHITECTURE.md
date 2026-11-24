@@ -301,7 +301,7 @@ Start with development. A public release chooses one of the other two later. An 
 ## 12. Saving and debugging
 
 - Settings and best grades go in `localStorage`, versioned. No accounts in the MVP.
-- **Debug panel:** live scale and tuning sliders, force vectors, stability state, ATC state, conflict predictions, frame timing, weather override, jump-to-phase, replay export.
+- **Debug panel:** live tuning sliders (B4; scale sliders arrive with E1/E4 because scales are baked into airport layouts, map shading and the snow line), force vectors, stability state, ATC state, conflict predictions, frame timing, weather override, jump-to-phase, replay export.
 
 The debug panel starts in step B4 and grows as systems are added.
 
@@ -420,8 +420,8 @@ H1 is independent and can be pulled forward at any time after A4.
 | Base cell size | 10 m | E2 |
 | Altitude vs. vertical speed scale | Vertical speed unscaled | D2 |
 | Speed brake | Left out | C6 |
-| Canvas performance | Assume sufficient | B2 measured only synthetically (see B2_PLAN.md §14); real-frame check still owed, then D3 |
-| Internal resolution | Top and side views 640 x 360; instruments 320 x 200 | H1 |
+| Canvas performance | Assume sufficient | B2 measured only synthetically (see B2_PLAN.md §14); B4's debug panel now shows real frame timing; the check in a full-size visible window is still owed, then D3 |
+| Internal resolution | Top and side views 640 x 360; instruments 320 x 160 (as `config/display.ts`) | H1 |
 
 ### Later
 - **API key:** development setup for now; choose a public approach before sharing the game.
@@ -431,4 +431,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4 and B1 to B3 are built (see [B3_PLAN.md](B3_PLAN.md) §14). Next: B4, basic readouts and debug panel.
+A1 to A4 and B1 to B4 are built (see [B4_PLAN.md](B4_PLAN.md) §13). Next: C1, thrust, drag and weight.

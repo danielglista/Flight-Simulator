@@ -16,3 +16,10 @@ export const CANVAS_PANELS: Readonly<
 
 /** Smallest supported window; below this the page scrolls instead of shrinking. */
 export const MIN_WINDOW: Size = { width: 1280, height: 720 };
+
+/** Debug panel text refresh while running, Hz. */
+export const DEBUG_REFRESH_HZ = 4;
+/** Real frames kept for the debug panel's timing figures. */
+export const FRAME_SAMPLES = 300;
+/** Readout text for screen readers is rewritten at most this often, Hz. */
+export const READOUT_SR_HZ = 4;
