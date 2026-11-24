@@ -17,17 +17,12 @@ import { createPlaneSprites } from './sprite';
 import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
-import { LAYER_OFFSETS, sliceWindow } from './sideCamera';
 import { colorChunk, reduce2x } from './terrainColors';
 
 
-/** What the side view currently shows, so the top view can mark the same stretch. */
+/** What the top view needs to know about the craft. */
 export interface SideLink {
   readonly craft: Craft;
-  readonly size: Size;
-  readonly zoom: number;
-  /** Distance ahead of the plane under the side-view cursor, or null. */
-  readonly hoverDistance: number | null;
   /** The craft has hit the ground: draw the wreck instead of the plane. */
   readonly crashed: boolean;
 }
@@ -159,74 +154,10 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     drawText(ctx, text, 5, view.height - 4);
   }
 
-  /**
-   * The slice corridor and line, covering exactly what the side view shows. All of it
-   * starts from the plane's own pixel (rule 2 in B2_PLAN section 5), so it never
-   * disagrees with the sprite by a pixel.
-   */
-  function drawSlice(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, side: SideLink): Point {
-    const { craft } = side;
-    const w = sliceWindow(craft, side.size, side.zoom);
-    const dx = Math.sin(craft.heading);
-    const dy = Math.cos(craft.heading);
+  /** The plane's pixel, floored to a whole pixel so the sprite does not shimmer. */
+  function planePixel(view: Size, camera: Camera, craft: Craft): Point {
     const home = worldToScreen(camera, view, craft.x, craft.y);
-    const p0 = { x: Math.floor(home.x) + 0.5, y: Math.floor(home.y) + 0.5 };
-    const shifted = (wx: number, wy: number): Point => {
-      const q = worldToScreen(camera, view, wx, wy);
-      return { x: q.x - home.x + p0.x, y: q.y - home.y + p0.y };
-    };
-    const at = (d: number): Point => shifted(craft.x + dx * d, craft.y + dy * d);
-    const back = at(w.startDistance);
-    const end = at(w.startDistance + w.length);
-    // Corridor drawn in the side view as hazy layers, to the left of the heading.
-    const reach = Math.max(...LAYER_OFFSETS);
-    const lx = -dy;
-    const ly = dx;
-    const corner = (d: number, o: number): Point =>
-      shifted(craft.x + dx * d + lx * o, craft.y + dy * d + ly * o);
-    const d0 = w.startDistance;
-    const d1 = w.startDistance + w.length;
-    const quad = [corner(d0, 0), corner(d1, 0), corner(d1, reach), corner(d0, reach)];
-    ctx.fillStyle = 'rgba(255,211,77,0.10)';
-    ctx.beginPath();
-    quad.forEach((q, i) => (i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y)));
-    ctx.closePath();
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255,211,77,0.25)';
-    for (const o of LAYER_OFFSETS) {
-      const a = corner(d0, o);
-      const b = corner(d1, o);
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(255,211,77,0.45)';
-    ctx.beginPath();
-    ctx.moveTo(back.x, back.y);
-    ctx.lineTo(p0.x, p0.y);
-    ctx.stroke();
-    ctx.strokeStyle = MARKER_COLOR;
-    ctx.beginPath();
-    ctx.moveTo(p0.x, p0.y);
-    ctx.lineTo(end.x, end.y);
-    ctx.stroke();
-    // End tick, perpendicular to the line.
-    ctx.beginPath();
-    ctx.moveTo(end.x - dy * 5, end.y - dx * 5);
-    ctx.lineTo(end.x + dy * 5, end.y + dx * 5);
-    ctx.stroke();
-    if (side.hoverDistance !== null) {
-      const h = at(side.hoverDistance);
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      ctx.arc(h.x, h.y, 3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = '#000';
-      ctx.stroke();
-    }
-    return home;
+    return { x: Math.floor(home.x) + 0.5, y: Math.floor(home.y) + 0.5 };
   }
 
   /** Yellow arrow at the panel edge pointing at a plane that is off screen. */
@@ -263,7 +194,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       const frame = drawTerrain(ctx, view, { x: camera.x, y: camera.y, zoom: camera.zoom }, area);
       airportLayer.draw(ctx, { ...frame, rotation }, clampZoom(camera.zoom), area);
       ctx.restore();
-      const plane = drawSlice(ctx, view, camera, side);
+      const plane = planePixel(view, camera, side.craft);
       if (side.crashed) sprites.drawWreck(ctx, plane.x, plane.y);
       else sprites.drawTop(ctx, side.craft.heading - (camera.rotation ?? 0), plane.x, plane.y);
       drawOverlays(ctx, view, camera, cursor);

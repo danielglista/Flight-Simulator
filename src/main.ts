@@ -146,9 +146,6 @@ const panels = initPanels({
       cursor,
       {
         craft,
-        size: sideSize,
-        zoom: sideZoom,
-        hoverDistance: sideCursor ? sideView.distanceAt(sideSize, sideZoom, sideCursor.x) : null,
         crashed: loop.state.crash !== null,
       },
       follow.following,
