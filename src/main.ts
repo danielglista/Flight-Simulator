@@ -4,6 +4,8 @@ import { SCALES } from './config/scales';
 import { attachMapPointer } from './input/mapPointer';
 import { attachSidePointer } from './input/sidePointer';
 import { worldHeight, worldWidth } from './sim/world/grid';
+import { withAirports } from './sim/world/placeAirports';
+import { buildTestAirport } from './sim/world/testAirport';
 import { buildTestMap } from './sim/world/testMap';
 import { DEFAULT_ZOOM, type Camera, type Point } from './views/camera';
 import { moveProbe, START_PROBE, turnBy, type Probe } from './views/probe';
@@ -11,7 +13,7 @@ import { clampSideZoom, DEFAULT_SIDE_ZOOM } from './views/sideCamera';
 import { createSideView } from './views/sideView';
 import { createTopView } from './views/topView';
 
-const grid = buildTestMap();
+const grid = withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
 const bounds = { width: worldWidth(grid), height: worldHeight(grid) };
 const topView = createTopView(grid, SCALES);
 const sideView = createSideView(grid, SCALES);

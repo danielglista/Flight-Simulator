@@ -1,4 +1,5 @@
 import type { ScaleConfig } from '../../config/scales';
+import { airportContains, blendWeight, fineSurfaceAt, onRunway, type Airport, type Runway } from './airport';
 import { Terrain } from './terrain';
 
 /** Cells per chunk side. Chunks are a drawing and loading unit only. */
@@ -23,6 +24,8 @@ export interface WorldGrid {
    * any cell whose ground is below sea level is wet, with its surface at 0.
    */
   readonly water: Uint8Array;
+  /** Airports laid over the base grid (fine surface, exact runways, flat ground). Usually few. */
+  readonly airports: readonly Airport[];
 }
 
 export function createGrid(cols: number, rows: number, cellSize: number): WorldGrid {
@@ -33,7 +36,26 @@ export function createGrid(cols: number, rows: number, cellSize: number): WorldG
     elevation: new Int16Array(cols * rows),
     terrain: new Uint8Array(cols * rows),
     water: new Uint8Array(cols * rows),
+    airports: [],
   };
+}
+
+/** The airport whose boundary contains (x, y), or null. Cheap when there are none. */
+export function airportAt(grid: WorldGrid, x: number, y: number): Airport | null {
+  for (const a of grid.airports) if (airportContains(a, x, y)) return a;
+  return null;
+}
+
+/** The airport and runway under (x, y), or null. */
+export function runwayAt(
+  grid: WorldGrid,
+  x: number,
+  y: number,
+): { readonly airport: Airport; readonly runway: Runway } | null {
+  const airport = airportAt(grid, x, y);
+  if (!airport) return null;
+  for (const runway of airport.runways) if (onRunway(runway, x, y)) return { airport, runway };
+  return null;
 }
 
 export function cellIndex(grid: WorldGrid, col: number, row: number): number {
@@ -48,23 +70,31 @@ export function worldHeight(grid: WorldGrid): number {
   return grid.rows * grid.cellSize;
 }
 
-/** Elevation (real m) of a cell, with indices clamped to the map. */
+/** Elevation (real m) of a BASE cell, with indices clamped to the map. Ignores airports. */
 export function elevationAtCell(grid: WorldGrid, col: number, row: number): number {
   const c = Math.min(grid.cols - 1, Math.max(0, col));
   const r = Math.min(grid.rows - 1, Math.max(0, row));
   return grid.elevation[r * grid.cols + c] ?? 0;
 }
 
-/** Terrain code of the cell containing (x, y), world meters. Outside the map: seabed. */
+/**
+ * Terrain code at (x, y), world meters. Inside an airport: the runway if on
+ * one, else its fine grid; otherwise the base cell. Outside the map: seabed.
+ */
 export function surfaceAt(grid: WorldGrid, x: number, y: number): number {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return Terrain.seabed;
   const col = Math.floor(x / grid.cellSize);
   const row = Math.floor(y / grid.cellSize);
   if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) return Terrain.seabed;
+  const airport = airportAt(grid, x, y);
+  if (airport) {
+    for (const rw of airport.runways) if (onRunway(rw, x, y)) return Terrain.runway;
+    return fineSurfaceAt(airport, x, y);
+  }
   return grid.terrain[row * grid.cols + col] ?? Terrain.seabed;
 }
 
-/** Water surface of a cell in REAL meters above sea level, or NaN where it is dry. Indices are clamped. */
+/** Water surface of a BASE cell in REAL meters above sea level, or NaN where it is dry. Indices are clamped. Ignores airports. */
 export function waterLevelAtCell(grid: WorldGrid, col: number, row: number): number {
   const c = Math.min(grid.cols - 1, Math.max(0, col));
   const r = Math.min(grid.rows - 1, Math.max(0, row));
@@ -91,7 +121,12 @@ export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: numb
   const south = elevationAtCell(grid, c0, r0) * (1 - tx) + elevationAtCell(grid, c0 + 1, r0) * tx;
   const north =
     elevationAtCell(grid, c0, r0 + 1) * (1 - tx) + elevationAtCell(grid, c0 + 1, r0 + 1) * tx;
-  return (south * (1 - ty) + north * ty) / scale.altitude;
+  const base = (south * (1 - ty) + north * ty) / scale.altitude;
+  const airport = airportAt(grid, x, y);
+  if (!airport) return base;
+  // Flat at the field elevation inside the blend band, the base ground at the boundary.
+  const field = airport.fieldElevationM / scale.altitude;
+  return base + (field - base) * blendWeight(airport, x, y);
 }
 
 /**
@@ -102,6 +137,7 @@ export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: numb
 export function waterLevelAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: number): number {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return NaN;
   if (x < 0 || y < 0 || x > worldWidth(grid) || y > worldHeight(grid)) return 0;
+  if (airportAt(grid, x, y)) return NaN; // validated dry
   const level = waterLevelAtCell(grid, Math.floor(x / grid.cellSize), Math.floor(y / grid.cellSize));
   return level / scale.altitude;
 }

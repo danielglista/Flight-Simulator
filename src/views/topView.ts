@@ -5,14 +5,14 @@ import {
   CHUNK_CELLS,
   groundAt,
   heightAt,
-  surfaceAt,
   waterLevelAt,
   worldHeight,
   worldWidth,
   type WorldGrid,
 } from '../sim/world/grid';
-import { TERRAIN_NAMES } from '../sim/world/terrain';
-import { metersPerPixel, screenToWorld, worldToScreen, type Camera, type Point } from './camera';
+import { createAirportLayer, type MapFrame } from './airportLayer';
+import { clampZoom, metersPerPixel, screenToWorld, worldToScreen, type Camera, type Point } from './camera';
+import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
 import type { Probe } from './probe';
 import { LAYER_OFFSETS, sliceWindow } from './sideCamera';
@@ -78,7 +78,9 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     return canvas;
   }
 
-  function drawTerrain(ctx: CanvasRenderingContext2D, view: Size, camera: Camera): void {
+  const airportLayer = createAirportLayer(grid.airports);
+
+  function drawTerrain(ctx: CanvasRenderingContext2D, view: Size, camera: Camera): MapFrame {
     const mpp = metersPerPixel(camera.zoom);
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = `rgb(${SEA_COLOR.join(',')})`;
@@ -98,6 +100,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
         ctx.drawImage(chunkCanvas(cx, cy, tier), dx, dy, chunkPx, chunkPx);
       }
     }
+    return { ox, oy, mpp, mapHeight: ny * chunkWorld };
   }
 
   function drawOverlays(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, cursor: Point | null): void {
@@ -122,7 +125,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     const inMap = p.x >= 0 && p.y >= 0 && p.x < worldWidth(grid) && p.y < worldHeight(grid);
     const bed = groundAt(grid, scale, p.x, p.y);
     const level = waterLevelAt(grid, scale, p.x, p.y);
-    const name = TERRAIN_NAMES[surfaceAt(grid, p.x, p.y)] ?? '?';
+    const name = surfaceName(grid, p.x, p.y);
     const what =
       level > bed ? `water ${Math.round((level - bed) * scale.altitude)} m deep over ${name}` : name;
     const text = inMap
@@ -212,7 +215,8 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
 
   return {
     draw(ctx, view, camera, cursor, side) {
-      drawTerrain(ctx, view, camera);
+      const frame = drawTerrain(ctx, view, camera);
+      airportLayer.draw(ctx, frame, clampZoom(camera.zoom), view);
       drawSlice(ctx, view, camera, side);
       drawOverlays(ctx, view, camera, cursor);
     },

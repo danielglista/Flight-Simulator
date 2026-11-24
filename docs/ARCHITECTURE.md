@@ -182,6 +182,8 @@ The grid handles appearance and ground surface. The objects handle logic such as
 
 Height blends at the boundary so the overlay meets the surrounding terrain. Lookup order: runway object -> airport fine grid -> base grid.
 
+**As built in A4:** the fine grid holds surface codes only; there is no per-cell elevation layer yet. Each airport has a single field elevation (flat), blended to the base ground over a band inside its axis-aligned boundary. A per-cell layer can be added behind `groundAt` when an airport needs one. Airports are authored in local real meters and converted with the `airport` scale.
+
 ### 7.3 Other features
 Rivers, coasts, cities and wide roads are painted into the grid. City names, waypoints, landmarks and thin roads are separate point or line objects, because they need labels or are thinner than a cell. Landmark buildings have a height so they appear in the side view.
 
@@ -429,4 +431,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1, A2 and A3 are built (see [A3_PLAN.md](A3_PLAN.md) §13). Next: A4, one airport overlay with an angled runway.
+A1 to A4 are built (see [A4_PLAN.md](A4_PLAN.md) §13). Next: B1, fixed-step loop and keyboard input.

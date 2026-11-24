@@ -27,10 +27,10 @@ describe('test map', () => {
       }
     }
   });
-  it('uses every terrain code except airport', () => {
+  it('uses every terrain code except the airport ones', () => {
     const seen = new Set(map.terrain);
     for (const [name, code] of Object.entries(Terrain)) {
-      expect(seen.has(code), name).toBe(name !== 'airport');
+      expect(seen.has(code), name).toBe(!['airport', 'runway', 'taxiway'].includes(name));
     }
   });
   it('has a peak of about 1,800 m real', () => {

@@ -14,6 +14,8 @@ export const TERRAIN_COLORS: Readonly<Record<number, Rgb>> = {
   [Terrain.urban]: [152, 152, 162],
   [Terrain.road]: [58, 58, 64],
   [Terrain.airport]: [100, 100, 112],
+  [Terrain.runway]: [44, 44, 50],
+  [Terrain.taxiway]: [78, 78, 86],
 };
 
 /** Water color runs from shallow to deep with depth (real meters). */

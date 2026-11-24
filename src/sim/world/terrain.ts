@@ -13,7 +13,10 @@ export const Terrain = {
   snow: 6,
   urban: 7,
   road: 8,
+  /** Apron: the paved parking area of an airport. */
   airport: 9,
+  runway: 10,
+  taxiway: 11,
 } as const;
 
 export type TerrainCode = (typeof Terrain)[keyof typeof Terrain];
@@ -28,5 +31,7 @@ export const TERRAIN_NAMES: Readonly<Record<number, string>> = {
   [Terrain.snow]: 'snow',
   [Terrain.urban]: 'urban',
   [Terrain.road]: 'road',
-  [Terrain.airport]: 'airport',
+  [Terrain.airport]: 'apron',
+  [Terrain.runway]: 'runway',
+  [Terrain.taxiway]: 'taxiway',
 };

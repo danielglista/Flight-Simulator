@@ -2,9 +2,11 @@ import type { Size } from '../config/display';
 import { MARKER_COLOR, SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import { sliceAlong } from '../sim/world/slice';
-import { TERRAIN_NAMES, Terrain } from '../sim/world/terrain';
+import { Terrain } from '../sim/world/terrain';
 import { SNOW_LINE_M } from '../sim/world/testMap'; // temporary, until the map carries its own snow line
-import type { WorldGrid } from '../sim/world/grid';
+import { runwaySpan } from '../sim/world/airport';
+import { heightAt, type WorldGrid } from '../sim/world/grid';
+import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
 import { formatHeading, type Probe } from './probe';
 import {
@@ -121,6 +123,11 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       }
       ctx.fillStyle = rgb(mix(bodyColor(bed), HAZE_COLOR, haze));
       ctx.fillRect(x, bodyTop, 1, Math.max(0, view.height - bodyTop));
+      if (code === Terrain.runway && haze === 0) {
+        // Runways are thin: a white line on top so they stand out from other pavement.
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(x, yBed, 1, 1);
+      }
     }
     return slice;
   }
@@ -131,6 +138,38 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       drawProfile(ctx, view, zoom, shiftLeft(w, offset), LAYER_HAZE[i] as number),
     );
     return drawProfile(ctx, view, zoom, w, 0);
+  }
+
+  /** Posts at both ends of each runway the slice crosses, and its name. Independent of the sampling. */
+  function drawRunwaySpans(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number): void {
+    const w = sliceWindow(probe, view, zoom);
+    const mpp = sideMetersPerPixel(zoom);
+    const dx = Math.sin(w.heading);
+    const dy = Math.cos(w.heading);
+    for (const airport of grid.airports) {
+      for (const rw of airport.runways) {
+        const span = runwaySpan(rw, w.origin, w.heading);
+        if (!span) continue;
+        const x0 = span.enter / mpp;
+        const x1 = span.exit / mpp;
+        if (x1 < 0 || x0 > view.width - 1) continue;
+        let top = view.height;
+        for (const [t, col] of [
+          [span.enter, x0],
+          [span.exit, x1],
+        ] as const) {
+          if (col < 0 || col > view.width - 1) continue;
+          const ground = heightAt(grid, scale, w.origin.x + dx * t, w.origin.y + dy * t);
+          const y = Math.round(heightToY(view, zoom, ground));
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(Math.round(col), y - 14, 1, 14);
+          top = Math.min(top, y - 14);
+        }
+        if (top === view.height) top = Math.round(heightToY(view, zoom, heightAt(grid, scale, w.origin.x + dx * span.enter, w.origin.y + dy * span.enter))) - 14;
+        const mid = Math.min(view.width - 30, Math.max(30, (Math.max(0, x0) + Math.min(view.width - 1, x1)) / 2));
+        drawText(ctx, rw.names.join('/'), mid, Math.max(12, top - 4), 'center');
+      }
+    }
   }
 
   function drawScale(ctx: CanvasRenderingContext2D, view: Size, zoom: number): void {
@@ -186,6 +225,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     ctx: CanvasRenderingContext2D,
     view: Size,
     slice: ReturnType<typeof sliceAlong>,
+    w: SliceWindow,
     zoom: number,
     cursor: Point | null,
   ): void {
@@ -194,7 +234,8 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     const h = slice.heightWorldM[col] as number;
     const bed = slice.groundWorldM[col] as number;
     const wetLevel = slice.waterWorldM[col] as number;
-    const name = TERRAIN_NAMES[slice.surface[col] as number] ?? '?';
+    const dist = col * sideMetersPerPixel(zoom);
+    const name = surfaceName(grid, w.origin.x + Math.sin(w.heading) * dist, w.origin.y + Math.cos(w.heading) * dist);
     const sign = d >= 0 ? '+' : '-';
     const what =
       wetLevel > bed
@@ -214,10 +255,11 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     draw(ctx, view, probe, zoom, cursor) {
       drawSky(ctx, view);
       const slice = drawGround(ctx, view, probe, zoom);
+      drawRunwaySpans(ctx, view, probe, zoom);
       drawScale(ctx, view, zoom);
       drawMarker(ctx, view, probe, zoom, slice.heightWorldM[probeColumn(view)] as number);
       drawLabels(ctx, view, probe, zoom);
-      drawReadout(ctx, view, slice, zoom, cursor);
+      drawReadout(ctx, view, slice, sliceWindow(probe, view, zoom), zoom, cursor);
     },
     distanceAt: (view, zoom, x) => xToDistance(view, zoom, Math.floor(x)),
   };

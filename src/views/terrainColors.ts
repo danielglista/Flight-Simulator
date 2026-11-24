@@ -58,7 +58,7 @@ function shaded(color: Rgb, step: number): Rgb {
 }
 
 /** Lighter, warmer color for higher elevation bands. */
-function tinted(color: Rgb, elevationM: number): Rgb {
+export function tinted(color: Rgb, elevationM: number): Rgb {
   const t = Math.min(TINT_MAX, Math.floor(elevationM / TINT_BAND_M) * TINT_PER_BAND);
   return [
     color[0] + (TINT_COLOR[0] - color[0]) * t,
@@ -76,7 +76,14 @@ export function onContour(grid: WorldGrid, col: number, row: number): boolean {
   );
 }
 
-const NO_CONTOUR = new Set<number>([Terrain.seabed, Terrain.road, Terrain.urban, Terrain.airport]);
+const NO_CONTOUR = new Set<number>([
+  Terrain.seabed,
+  Terrain.road,
+  Terrain.urban,
+  Terrain.airport,
+  Terrain.runway,
+  Terrain.taxiway,
+]);
 
 /**
  * RGBA bytes for one chunk, one pixel per cell. Image row 0 is the NORTH row
