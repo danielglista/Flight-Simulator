@@ -1,9 +1,11 @@
-import { SPEED_CAP, SPEED_FLOOR } from '../config/flight';
+import { CEILING_NOSE_RATE_DEG, CEILING_SOFT_M, GRAVITY, PATH_LIMIT_DEG, SPEED_CAP, SPEED_FLOOR } from '../config/flight';
 import { CEILING_Z, PLACE_CLEARANCE, STEP_S, TUNING_RANGES } from '../config/motion';
 import { wrapHeading } from './angles';
 import type { Command } from './commands';
 import { sweepContact } from './contact';
-import { forcesOn, densityRatio, sagLimit } from './flight/forces';
+import { liftAngle } from './flight/aero';
+import { stepBank, stepPitch, turnHelp } from './flight/attitude';
+import { densityRatio, forcesOn } from './flight/forces';
 import { initialState, type Axis, type SimState } from './state';
 
 /** The world as the simulation sees it: the map size and the top surface. */
@@ -68,26 +70,51 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
 }
 
 /**
- * Exactly one 1/60 s step: lever and engine, heading, flight path angle, speed, then position.
- * Once crashed, only the tick moves.
+ * Exactly one 1/60 s step: lever and engine, nose pitch, forces (new pitch, old path), path angle, ceiling,
+ * heading, speed (using the new path), then position. Once crashed, only the tick moves.
  */
 export function advance(state: SimState, world: SimWorld): SimState {
   if (state.crash) return { ...state, tick: state.tick + 1 };
   const { craft, controls, tuning } = state;
   const lever = clamp(craft.lever + controls.throttle * (tuning.leverRatePctS / 100) * STEP_S, 0, 1);
   const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-STEP_S / tuning.spoolTauS));
-  const heading = wrapHeading(craft.heading + controls.turn * tuning.turnRateDegS * DEG * STEP_S);
+  const sigma0 = densityRatio(craft.z, world.altitudeScale);
+  const bank = stepBank(craft.bank, controls.turn, craft.speed, sigma0, tuning, STEP_S);
+  // Turn help is fed in as the bank changes, so there is one pitch value and rolling out gives it back.
+  const help = turnHelp(bank, craft.speed, sigma0, tuning) - turnHelp(craft.bank, craft.speed, sigma0, tuning);
 
-  const pathMax = tuning.pathMaxDeg * DEG;
-  const sigma = densityRatio(craft.z, world.altitudeScale);
-  let target = Math.min(controls.pitch * pathMax, sagLimit(craft.speed, sigma, pathMax));
-  if (craft.z >= CEILING_Z) target = Math.min(target, 0);
-  const maxMove = tuning.pathRateDegS * DEG * STEP_S;
-  const diff = target - craft.pathAngle;
-  let pathAngle = Math.abs(diff) <= maxMove ? target : craft.pathAngle + Math.sign(diff) * maxMove;
+  const before = forcesOn(craft, tuning, world.altitudeScale);
+  const attitude = stepPitch(
+    {
+      pitch: craft.pitch + help,
+      pitchRate: craft.pitchRate,
+      key: controls.pitch,
+      speed: craft.speed,
+      sigma: before.sigma,
+      alpha: before.alpha,
+      separation: before.separation,
+      loadFactor: before.loadFactor,
+    },
+    tuning,
+    STEP_S,
+  );
+  let pitch = attitude.pitch;
+  const pitchRate = attitude.pitchRate;
 
-  const f = forcesOn({ ...craft, pathAngle, lever, spool }, tuning, world.altitudeScale);
-  const speed = clamp(craft.speed + f.dVdt * STEP_S, SPEED_FLOOR, SPEED_CAP);
+  const f = forcesOn({ ...craft, pitch, bank, lever, spool }, tuning, world.altitudeScale);
+  const pathLimit = PATH_LIMIT_DEG * DEG;
+  let pathAngle = clamp(craft.pathAngle + f.dPathDt * STEP_S, -pathLimit, pathLimit);
+
+  // Soft ceiling: near the top the path is turned level, so energy is redirected, never added or removed.
+  const ceilingPath = (CEILING_Z - craft.z) / CEILING_SOFT_M;
+  if (pathAngle > ceilingPath) {
+    pathAngle = Math.max(ceilingPath, 0);
+    const target = pathAngle + liftAngle(1 / Math.cos(bank), craft.speed, f.sigma, tuning);
+    pitch = Math.min(pitch, Math.max(target, craft.pitch - CEILING_NOSE_RATE_DEG * DEG * STEP_S));
+  }
+
+  const heading = wrapHeading(craft.heading + f.dHeadingDt * STEP_S);
+  const speed = clamp(craft.speed + (f.along - GRAVITY * Math.sin(pathAngle)) * STEP_S, SPEED_FLOOR, SPEED_CAP);
   const avg = (craft.speed + speed) / 2;
 
   const ground = avg * Math.cos(pathAngle) * STEP_S;
@@ -105,9 +132,9 @@ export function advance(state: SimState, world: SimWorld): SimState {
     return {
       ...state,
       tick,
-      craft: { ...hit, heading, speed: 0, pathAngle, lever: 0, spool: 0 },
+      craft: { ...hit, heading, speed: 0, pathAngle, pitch, pitchRate: 0, bank, lever: 0, spool: 0 },
       crash: { tick, speed, pathAngle },
     };
   }
-  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle, lever, spool } };
+  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle, pitch, pitchRate, bank, lever, spool } };
 }

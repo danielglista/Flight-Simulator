@@ -19,6 +19,7 @@ import { DEFAULT_ZOOM, type Point } from './views/camera';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from './views/followCamera';
 import { clampSideZoom, DEFAULT_SIDE_ZOOM } from './views/sideCamera';
 import { createSideView } from './views/sideView';
+import { stallState } from './sim/flight/aero';
 import { drawReadouts, readoutSentence, readoutText, sameReadout, type ReadoutText } from './views/instruments';
 import { createTopView } from './views/topView';
 
@@ -74,7 +75,7 @@ const srEl = document.getElementById('readout-sr');
 
 /** Redraws the instruments panel only when a displayed string changed, since render() reads page layout. */
 function syncInstruments(): void {
-  const t = readoutText(currentCraft(), SCALES);
+  const t = currentReadout();
   if (shownReadout && sameReadout(shownReadout, t)) return;
   panels.instruments.render();
 }
@@ -122,13 +123,18 @@ const loop = createLoop({
 });
 // Camera and plane both come from one snapshot, so they cannot disagree.
 const currentCraft = () => loop.snapshot();
+const currentReadout = (): ReadoutText => {
+  const craft = currentCraft();
+  const crashed = loop.state.crash !== null;
+  return readoutText(craft, SCALES, crashed ? 'none' : stallState(craft, loop.state.tuning));
+};
 
 topView.warm();
 sideView.warm();
 
 const panels = initPanels({
   instruments: (ctx, size) => {
-    shownReadout = readoutText(currentCraft(), SCALES);
+    shownReadout = currentReadout();
     drawReadouts(ctx, size, shownReadout);
   },
   top: (ctx, size) => {

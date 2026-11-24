@@ -33,6 +33,19 @@ export function formatVerticalSpeed(fpm: number): string {
   return (r < 0 ? '-' : '+') + withCommas(r);
 }
 
+/** Whole degrees, signed except zero: `+5`, `0`, `-12`. */
+export function formatPitch(deg: number): string {
+  const r = roundTo(deg, 1);
+  return r === 0 ? '0' : (r < 0 ? '-' : '+') + Math.abs(r);
+}
+
+/** Bank in whole degrees: `L 30`, `0`, `R 30`. */
+export function formatBank(deg: number): string {
+  const r = roundTo(Math.abs(deg), 1);
+  if (r === 0) return '0';
+  return `${deg < 0 ? 'L' : 'R'} ${r}`;
+}
+
 /** A 0..1 fraction as a whole percent. */
 export function formatPercent(f: number): string {
   return String(roundTo(f * 100, 1));

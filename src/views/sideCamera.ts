@@ -27,6 +27,20 @@ export function exaggeration(zoom: number): number {
   return sideMetersPerPixel(zoom) / verticalMetersPerPixel(zoom);
 }
 
+/** Length of the path line in the side view, pixels. */
+export const PATH_LINE_PX = 40;
+
+/**
+ * Screen offset (x right, y down) from the plane to the end of its path line. The line points where the
+ * plane will go on screen, so the view's vertical exaggeration steepens it.
+ */
+export function pathLineOffset(pathAngle: number, exaggeration: number, length: number): { readonly dx: number; readonly dy: number } {
+  const dx = Math.cos(pathAngle);
+  const dy = -Math.sin(pathAngle) * exaggeration;
+  const n = Math.hypot(dx, dy);
+  return { dx: (dx / n) * length, dy: (dy / n) * length };
+}
+
 export function planeColumn(view: Size): number {
   return Math.round(view.width * PLANE_X_FRACTION);
 }

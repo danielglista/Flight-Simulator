@@ -1,7 +1,9 @@
 import { DEFAULT_TUNING, TUNING_RANGES, type Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
-import { GRAVITY } from '../config/flight';
+import { GRAVITY, RHO0, WING_AREA } from '../config/flight';
 import { FRAME_SAMPLES } from '../config/display';
+import { aeroAt, stallState } from '../sim/flight/aero';
+import { indicatedSpeed } from '../sim/units';
 import { forcesOn } from '../sim/flight/forces';
 import type { Loop } from './loop';
 import type { FrameStats, Summary } from './frameStats';
@@ -37,6 +39,13 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   if (text !== undefined) e.textContent = text;
   return e;
 };
+
+/** Indicated stall speed in level flight at this bank: the 1 g speed at peak Cl, over the square root of cos(bank). */
+function levelStall(t: Tuning, bank: number): number {
+  let clMax = 0;
+  for (let a = 0; a <= t.stallDeg; a += 0.25) clMax = Math.max(clMax, aeroAt((a * Math.PI) / 180, (t.stallDeg * Math.PI) / 180, t).cl);
+  return Math.sqrt((2 * t.massT * 1000 * GRAVITY) / (RHO0 * WING_AREA * clMax * Math.max(Math.cos(bank), 0.2)));
+}
 
 const ms = (v: number): string => v.toFixed(1).padStart(5);
 const row = (label: string, s: Summary, f: (n: number) => string): string =>
@@ -114,8 +123,11 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
       `tick      ${s.tick}`,
       `x, y, z   ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)} m (world)`,
       `AGL       ${above.toFixed(1)} m world, ${(above * scales.altitude).toFixed(0)} m real`,
-      `path      ${(c.pathAngle * DEG).toFixed(1)} deg`,
-      `speed     ${c.speed.toFixed(1)} m/s`,
+      `pitch     ${(c.pitch * DEG).toFixed(1)} deg, path ${(c.pathAngle * DEG).toFixed(1)} deg, AoA ${(f.alpha * DEG).toFixed(1)} deg`,
+      `bank      ${(c.bank * DEG).toFixed(1)} deg, turn ${(f.dHeadingDt * DEG).toFixed(1)} deg/s, level stall ${levelStall(s.tuning, c.bank).toFixed(1)} m/s indicated`,
+      `stall     ${s.crash ? "none" : stallState(c, s.tuning)}, separation ${f.separation.toFixed(2)}`,
+      `lift      ${kn(f.lift)} kN, load factor ${f.loadFactor.toFixed(2)} g`,
+      `speed     ${c.speed.toFixed(1)} m/s true, ${indicatedSpeed(c, scales).toFixed(1)} m/s indicated`,
       `lever     ${(c.lever * 100).toFixed(0)}%, engine ${(c.spool * 100).toFixed(0)}%`,
       `thrust    ${kn(f.thrust)} kN, drag ${kn(f.drag)} kN, weight ${kn(f.weight)} kN`,
       `dV/dt     ${f.dVdt.toFixed(2)} m/s per s, density ${f.sigma.toFixed(3)}`,

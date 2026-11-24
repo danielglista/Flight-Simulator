@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { GRAVITY, RHO0, WING_AREA } from '../src/config/flight';
-import { DEFAULT_TUNING } from '../src/config/motion';
-import { densityRatio, drag, forcesOn, sagLimit, thrust } from '../src/sim/flight/forces';
+import { GRAVITY } from '../src/config/flight';
+import { DEFAULT_TUNING, START_LEVER, START_PITCH } from '../src/config/motion';
+import { densityRatio, forcesOn, thrust } from '../src/sim/flight/forces';
+import { CEILING_Z } from '../src/config/motion';
+import { stallState } from '../src/sim/flight/aero';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
@@ -36,22 +38,6 @@ describe('density', () => {
   });
 });
 
-describe('drag', () => {
-  it('equals q S (cd0 + k Cl^2) at a hand-worked point', () => {
-    const q = 0.5 * RHO0 * 90 * 90;
-    const cl = (24000 * GRAVITY) / (q * WING_AREA);
-    expect(drag(90, 0, 1, DEFAULT_TUNING)).toBeCloseTo(q * WING_AREA * (0.07 + 0.045 * cl * cl), 6);
-  });
-  it('is lowest near 66 m/s in level flight at sea level', () => {
-    const d = (v: number) => drag(v, 0, 1, DEFAULT_TUNING);
-    expect(d(66)).toBeLessThan(d(61));
-    expect(d(66)).toBeLessThan(d(75));
-  });
-  it('is finite at zero speed', () => {
-    expect(Number.isFinite(drag(0, 0, 1, DEFAULT_TUNING))).toBe(true);
-  });
-});
-
 describe('thrust', () => {
   it('is 0 at idle, full at sea level, and falls with height', () => {
     expect(thrust(0, DEFAULT_TUNING, 1)).toBe(0);
@@ -61,22 +47,51 @@ describe('thrust', () => {
 });
 
 describe('energy', () => {
-  it('V^2/2 + G z is constant with no engine and no drag, in climb, dive and reversal', () => {
+  it('V^2/2 + G z is constant with no engine and no drag below separation, in climb, dive and reversal', () => {
     const tuning = { ...DEFAULT_TUNING, thrustMaxKn: 0, cd0Counts: 0, inducedCounts: 0 };
     let s: SimState = { ...at({ speed: 120, spool: 0, lever: 0 }), tuning };
     const e0 = energy(s);
     for (const p of [1, -1, 0, 1, -1] as const) {
-      s = run(hold(s, p), 300);
+      for (let i = 0; i < 60; i++) {
+        s = advance(hold(s, p), DEEP);
+        expect(Math.abs(forcesOn(s.craft, tuning, 10).separation)).toBe(0);
+      }
       expect(Math.abs(energy(s) - e0)).toBeLessThan(1e-9);
     }
   });
 });
 
+/** Level-flight trim at 90 m/s and the start height, found by bisection on the forces, not read from config. */
+function solveTrim(): { pitch: number; lever: number } {
+  const probe = (pitch: number, spool: number) => forcesOn({ ...initialState().craft, pitch, spool }, DEFAULT_TUNING, 10);
+  let lever = 0.3;
+  let pitch = 0.1;
+  for (let k = 0; k < 40; k++) {
+    let lo = 0;
+    let hi = 0.3;
+    for (let i = 0; i < 60; i++) {
+      const mid = (lo + hi) / 2;
+      if (probe(mid, lever).dPathDt < 0) lo = mid;
+      else hi = mid;
+    }
+    pitch = (lo + hi) / 2;
+    const f = probe(pitch, 0);
+    // along = 0  =>  T cos(a) = D
+    lever = f.drag / Math.cos(f.alpha) / (DEFAULT_TUNING.thrustMaxKn * 1000 * Math.pow(f.sigma, 0.7));
+  }
+  return { pitch, lever };
+}
+
 describe('trim and trade', () => {
+  it('start values are the recomputed trim', () => {
+    const t = solveTrim();
+    expect(Math.abs(t.pitch - START_PITCH)).toBeLessThan(1e-3);
+    expect(Math.abs(t.lever - START_LEVER)).toBeLessThan(1e-3);
+  });
   it('start, hands off, flat world: holds 90 m/s and 100 m for 60 s', () => {
     const s = run(initialState(), 3600, DEEP);
-    expect(Math.abs(s.craft.speed - 90)).toBeLessThan(0.2);
-    expect(s.craft.z).toBe(100);
+    expect(Math.abs(s.craft.speed - 90)).toBeLessThan(0.5);
+    expect(Math.abs(s.craft.z - 100)).toBeLessThan(2);
   });
   it('holding S loses speed and gains height; W the reverse', () => {
     const up = run(hold(initialState(), 1), 240).craft;
@@ -91,12 +106,12 @@ describe('trim and trade', () => {
     expect(energy(run(at({ lever: 1, spool: 1 }), 600))).toBeGreaterThan(e0);
     expect(energy(run(at({ lever: 0, spool: 0 }), 600))).toBeLessThan(e0);
   });
-  it('steeper angle gives lower climb speed', () => {
-    const climb = (deg: number): number => {
-      const s = at({ lever: 1, spool: 1 });
-      return run(applyCommands({ ...s, tuning: { ...s.tuning, pathMaxDeg: deg } }, [{ kind: 'pitch', value: 1 }], DEEP), 600).craft.speed;
+  it('a higher held attitude gives a lower climb speed', () => {
+    const climb = (pitchDeg: number): number => {
+      const s = at({ lever: 1, spool: 1, pitch: pitchDeg * DEG });
+      return run(s, 600).craft.speed;
     };
-    expect(climb(15)).toBeLessThan(climb(5));
+    expect(climb(12)).toBeLessThan(climb(7));
   });
 });
 
@@ -122,16 +137,8 @@ describe('engine', () => {
   });
 });
 
-describe('sag limit', () => {
-  const max = 15 * DEG;
-  it('does nothing at or above 60 m/s equivalent and is continuous', () => {
-    expect(sagLimit(60, 1, max)).toBe(max);
-    expect(sagLimit(200, 0.5, max)).toBe(max);
-    expect(Math.abs(sagLimit(59.99, 1, max) - sagLimit(60, 1, max))).toBeLessThan(0.01);
-    expect(sagLimit(45, 1, max)).toBeCloseTo(-15 * DEG, 12);
-    expect(sagLimit(10, 1, max)).toBeCloseTo(-15 * DEG, 12);
-  });
-  it('idle hands-off settles between 45 and 70 m/s, descending, without oscillating', () => {
+describe('idle', () => {
+  it('idle hands-off settles between 45 and 70 m/s, descending, short of the stall, without oscillating', () => {
     const s = run(at({ lever: 0, spool: 0 }), 60 * 240);
     expect(s.craft.speed).toBeGreaterThan(45);
     expect(s.craft.speed).toBeLessThan(70);
@@ -149,13 +156,19 @@ describe('sag limit', () => {
 });
 
 describe('ceiling', () => {
-  it('held S at 600 m keeps the angle at 0 and speed as in level flight', () => {
-    const base = at({ z: 600, speed: 120, lever: 0.5, spool: 0.5 });
-    const level = run(base, 300);
-    const climb = run(hold(base, 1), 300);
-    expect(climb.craft.pathAngle).toBe(0);
-    expect(climb.craft.z).toBe(600);
-    expect(climb.craft.speed).toBeCloseTo(level.craft.speed, 9);
+  it('held S at full throttle from 500 m: never above 600, path settles at 0, nose never jumps, not stalled later', () => {
+    let s = hold(at({ z: 500, speed: 150, lever: 1, spool: 1 }), 1);
+    let maxJump = 0;
+    for (let i = 0; i < 60 * 40; i++) {
+      const n = advance(s, DEEP);
+      maxJump = Math.max(maxJump, Math.abs(n.craft.pitch - s.craft.pitch));
+      expect(n.craft.z).toBeLessThanOrEqual(CEILING_Z);
+      s = n;
+    }
+    expect(s.craft.z).toBeGreaterThan(CEILING_Z - 1);
+    expect(Math.abs(s.craft.pathAngle)).toBeLessThan(0.5 * DEG);
+    expect(maxJump).toBeLessThan(3 * DEG);
+    expect(stallState(s.craft, s.tuning)).toBe('none');
   });
 });
 
@@ -167,16 +180,17 @@ describe('crash and restart', () => {
     expect(s.craft.spool).toBe(0);
     expect(s.crash.speed).toBeGreaterThan(50);
     s = applyCommands(s, [{ kind: 'restart' }], FLAT);
-    expect(s.craft.lever).toBe(0.321);
-    expect(s.craft.spool).toBe(0.321);
+    expect(s.craft.lever).toBe(START_LEVER);
+    expect(s.craft.spool).toBe(START_LEVER);
   });
 });
 
 describe('forcesOn', () => {
-  it('matches the step: dV/dt is (T - D)/m - G sin(path)', () => {
+  it('dV/dt is (T cos(a) - D)/m - G sin(path); load factor is lift over weight', () => {
     const c = at({ pathAngle: 5 * DEG }).craft;
     const f = forcesOn(c, DEFAULT_TUNING, 10);
-    expect(f.dVdt).toBeCloseTo((f.thrust - f.drag) / 24000 - GRAVITY * Math.sin(5 * DEG), 12);
+    expect(f.dVdt).toBeCloseTo((f.thrust * Math.cos(f.alpha) - f.drag) / 24000 - GRAVITY * Math.sin(5 * DEG), 12);
+    expect(f.loadFactor).toBeCloseTo(f.lift / (24000 * GRAVITY), 12);
     expect(f.weight).toBeCloseTo(24000 * GRAVITY * Math.sin(5 * DEG), 6);
   });
 });

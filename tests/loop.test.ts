@@ -58,16 +58,18 @@ describe('loop', () => {
       expect(Math.abs(loop.snapshot().y - 100)).toBeLessThan(5);
     }
   });
-  it('a tap shorter than one step still turns', () => {
+  it('a tap shorter than one step still rolls, and the bank turns the heading within a second', () => {
     const { loop, keys } = make();
     loop.frame(0);
     const h = loop.state.craft.heading;
     keys.keyDown({ code: 'KeyD' });
     keys.keyUp({ code: 'KeyD' });
     loop.frame(DT + 0.1);
+    expect(loop.state.craft.bank).toBeGreaterThan(0);
+    frames(loop, DT + 0.1, 40);
     expect(loop.state.craft.heading).toBeGreaterThan(h);
   });
-  it('a key held through a pause stops turning the dot', () => {
+  it('a key held through a pause stops rolling: the bank only levels or holds', () => {
     const { loop, keys } = make();
     let t = frames(loop, 0, 2);
     keys.keyDown({ code: 'KeyD' });
@@ -78,9 +80,9 @@ describe('loop', () => {
     loop.frame(50000);
     t = frames(loop, 50000, 3);
     expect(loop.state.controls.turn).toBe(0);
-    const h = loop.state.craft.heading;
+    const b = loop.state.craft.bank;
     frames(loop, t, 10);
-    expect(loop.state.craft.heading).toBeCloseTo(h, 9);
+    expect(loop.state.craft.bank).toBeLessThanOrEqual(b);
   });
 });
 
@@ -99,7 +101,7 @@ describe('crash and restart in the loop', () => {
     });
     return { loop, keys };
   }
-  it('a key held through a restart keeps turning', () => {
+  it('a key held through a restart keeps rolling', () => {
     const { loop, keys } = crashing();
     loop.frame(0);
     keys.keyDown({ code: 'KeyD' });
@@ -109,9 +111,9 @@ describe('crash and restart in the loop', () => {
     loop.send({ kind: 'restart' });
     t = frames(loop, t, 2);
     expect(loop.state.crash).toBeNull();
-    const h = loop.state.craft.heading;
+    const b = loop.state.craft.bank;
     frames(loop, t, 30);
-    expect(loop.state.craft.heading).toBeGreaterThan(h);
+    expect(loop.state.craft.bank).toBeGreaterThan(b);
   });
   it('restart while paused applies at once and never streaks', () => {
     const { loop } = crashing();

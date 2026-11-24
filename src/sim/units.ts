@@ -1,4 +1,5 @@
 import type { ScaleConfig } from '../config/scales';
+import { densityRatio } from './flight/forces';
 import type { Craft } from './state';
 
 const KNOTS_PER_MS = 3600 / 1852;
@@ -19,4 +20,9 @@ export function displayedAltitudeFt(worldZ: number, scale: ScaleConfig): number 
  */
 export function verticalSpeedFpm(craft: Pick<Craft, 'speed' | 'pathAngle'>): number {
   return craft.speed * Math.sin(craft.pathAngle) * 60 * FEET_PER_M;
+}
+
+/** Indicated airspeed, m/s: true speed scaled by the square root of air density. Stall speed is constant in these terms. */
+export function indicatedSpeed(craft: Pick<Craft, 'speed' | 'z'>, scale: ScaleConfig): number {
+  return craft.speed * Math.sqrt(densityRatio(craft.z, scale.altitude));
 }

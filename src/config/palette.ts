@@ -42,3 +42,8 @@ export const READOUT_BG = '#0d1a2b';
 export const READOUT_LABEL = '#6b778d';
 export const READOUT_VALUE = '#e8f0ff';
 export const READOUT_UNIT = '#8fa0bd';
+/** Stall warning text, and the stalled state (filled box). D3 replaces them with lights. */
+export const WARN_COLOR = '#ffb020';
+export const STALL_COLOR = '#ff4a3d';
+/** The short line from the plane along its path in the side view. */
+export const PATH_LINE_COLOR = 'rgba(255,255,255,0.45)';

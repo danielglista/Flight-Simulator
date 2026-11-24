@@ -16,6 +16,9 @@ export function interpolate(prev: Craft, next: Craft, alpha: number): Craft {
     heading: a === 1 ? next.heading : a === 0 ? prev.heading : heading,
     speed: prev.speed + (next.speed - prev.speed) * a,
     pathAngle: prev.pathAngle + (next.pathAngle - prev.pathAngle) * a,
+    pitch: prev.pitch + (next.pitch - prev.pitch) * a,
+    pitchRate: prev.pitchRate + (next.pitchRate - prev.pitchRate) * a,
+    bank: prev.bank + (next.bank - prev.bank) * a,
     lever: prev.lever + (next.lever - prev.lever) * a,
     spool: prev.spool + (next.spool - prev.spool) * a,
   };

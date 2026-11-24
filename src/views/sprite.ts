@@ -89,9 +89,9 @@ export function frameAngle(index: number): number {
   return (index * Math.PI * 2) / TOP_FRAMES;
 }
 
-/** Nearest of the PITCH_FRAMES side frames for a path angle in radians; 0 is the middle frame. */
-export function pitchFrameIndex(pathAngle: number): number {
-  const deg = Math.min(PITCH_MAX_DEG, Math.max(-PITCH_MAX_DEG, (pathAngle * 180) / Math.PI));
+/** Nearest of the PITCH_FRAMES side frames for a nose pitch in radians; 0 is the middle frame. */
+export function pitchFrameIndex(pitch: number): number {
+  const deg = Math.min(PITCH_MAX_DEG, Math.max(-PITCH_MAX_DEG, (pitch * 180) / Math.PI));
   return Math.round(deg / PITCH_STEP_DEG) + (PITCH_FRAMES - 1) / 2;
 }
 
@@ -113,8 +113,8 @@ function toCanvas(data: Uint8ClampedArray, size: number): HTMLCanvasElement {
 export interface PlaneSprites {
   /** Draws the top sprite with its center pixel at floor(x), floor(y) (internal pixels). */
   drawTop(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number): void;
-  /** Draws the side sprite, nose right, tilted to `pathAngle` (radians, positive = nose up), center at floor(x), floor(y). */
-  drawSide(ctx: CanvasRenderingContext2D, pathAngle: number, x: number, y: number): void;
+  /** Draws the side sprite, nose right, tilted to `pitch` (radians, positive = nose up), center at floor(x), floor(y). */
+  drawSide(ctx: CanvasRenderingContext2D, pitch: number, x: number, y: number): void;
   /** Draws the wreck marker with its center pixel at floor(x), floor(y). Same in both views. */
   drawWreck(ctx: CanvasRenderingContext2D, x: number, y: number): void;
   /** Builds every frame now, so none is built mid-flight. */
@@ -150,9 +150,9 @@ export function createPlaneSprites(): PlaneSprites {
       const h = (TOP_SPRITE_SIZE - 1) / 2;
       ctx.drawImage(topFrame(frameIndex(heading)), Math.floor(x) - h, Math.floor(y) - h);
     },
-    drawSide(ctx, pathAngle, x, y) {
+    drawSide(ctx, pitch, x, y) {
       const h = (SIDE_SPRITE_SIZE - 1) / 2;
-      ctx.drawImage(sideFrame(pitchFrameIndex(pathAngle)), Math.floor(x) - h, Math.floor(y) - h);
+      ctx.drawImage(sideFrame(pitchFrameIndex(pitch)), Math.floor(x) - h, Math.floor(y) - h);
     },
     drawWreck(ctx, x, y) {
       const h = (WRECK_SIZE - 1) / 2;

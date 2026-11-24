@@ -7,6 +7,7 @@ import {
   verticalMetersPerPixel,
   distanceToX,
   exaggeration,
+  pathLineOffset,
   heightToY,
   planeColumn,
   seaRow,
@@ -142,5 +143,17 @@ describe('vertical follow', () => {
     const a = heightToY(view, zoom, 123, baseHeight(view, zoom, z0));
     const b = heightToY(view, zoom, 123, baseHeight(view, zoom, z1));
     expect(b - a).toBeCloseTo(3, 9);
+  });
+});
+
+describe('pathLineOffset', () => {
+  it('is level at 0, up for a positive path, and steeper with exaggeration', () => {
+    const level = pathLineOffset(0, 4, 40);
+    expect(level.dx).toBeCloseTo(40, 9);
+    expect(level.dy).toBeCloseTo(0, 9);
+    const up = pathLineOffset(0.1, 1, 40);
+    expect(up.dy).toBeLessThan(0);
+    expect(Math.hypot(up.dx, up.dy)).toBeCloseTo(40, 9);
+    expect(Math.abs(pathLineOffset(0.1, 4, 40).dy)).toBeGreaterThan(Math.abs(up.dy));
   });
 });

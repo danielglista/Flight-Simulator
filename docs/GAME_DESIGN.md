@@ -146,7 +146,9 @@ Real turns and acceleration feel slow in a condensed world, so these are explici
 |---|---|
 | Turn rate multiplier | 2x |
 | Ground acceleration multiplier | 1.5x |
-| Pitch and roll damping | High; aircraft tends to settle when keys are released |
+| Pitch and roll damping | Pitch holds its attitude when keys are released; a bank under 10 deg settles to level, a steeper bank holds (it must not rescue itself) |
+| Load limit on the pitch keys | Nose-up fades out near 4 g and in a stall, nose-down near -1 g; no structural failure |
+| Turn help | Automatic nose-up in banks up to 30 deg, so shallow turns hold height |
 | Touchdown limits | Forgiving |
 
 ### 5.3 Controls

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CEILING_Z } from '../src/config/motion';
 import { SCALES } from '../src/config/scales';
 import { initialState } from '../src/sim/state';
-import { displayedAltitudeFt, metersPerSecondToKnots, verticalSpeedFpm } from '../src/sim/units';
+import { displayedAltitudeFt, indicatedSpeed, metersPerSecondToKnots, verticalSpeedFpm } from '../src/sim/units';
 import { formatAltitude, formatSpeed, formatVerticalSpeed } from '../src/views/format';
 import { readoutText } from '../src/views/instruments';
 
@@ -38,11 +38,25 @@ describe('formats', () => {
 
 describe('readoutText', () => {
   it('start state', () => {
-    expect(readoutText(initialState().craft, SCALES)).toEqual({ spd: '175', alt: '3,280', hdg: '045', vs: '0', thr: '32', eng: '32' });
+    expect(readoutText(initialState().craft, SCALES)).toEqual({
+      spd: '167', alt: '3,280', hdg: '045', vs: '0', pit: '+5', bnk: '0', thr: '32', eng: '32', warn: '', stalled: false,
+    });
   });
   it('a change too small to show gives the same text', () => {
     const c = initialState().craft;
     expect(readoutText({ ...c, z: c.z + 0.01 }, SCALES)).toEqual(readoutText(c, SCALES));
+  });
+  it('SPD is indicated: equal to true speed at sea level, lower aloft', () => {
+    const c = { ...initialState().craft, z: 0 };
+    expect(indicatedSpeed(c, SCALES)).toBe(c.speed);
+    expect(indicatedSpeed({ ...c, z: 100 }, SCALES)).toBeCloseTo(90 * Math.sqrt(0.907), 1);
+  });
+  it('warning text for each state, and the PIT format', () => {
+    const c = initialState().craft;
+    expect(readoutText(c, SCALES, 'warning')).toMatchObject({ warn: 'STALL', stalled: false });
+    expect(readoutText(c, SCALES, 'stalled')).toMatchObject({ warn: 'STALL', stalled: true });
+    expect(readoutText({ ...c, pitch: -12 * DEG }, SCALES).pit).toBe('-12');
+    expect(readoutText({ ...c, pitch: 0 }, SCALES).pit).toBe('0');
   });
   it('a crashed craft reads zero speed and V/S', () => {
     const c = { ...initialState().craft, speed: 0, pathAngle: -0.2 };

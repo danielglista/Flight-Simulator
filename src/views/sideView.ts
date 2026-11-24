@@ -1,5 +1,5 @@
 import type { Size } from '../config/display';
-import { SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
+import { PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import { sliceAlong } from '../sim/world/slice';
 import { Terrain } from '../sim/world/terrain';
@@ -20,6 +20,8 @@ import {
   sideMetersPerPixel,
   LAYER_HAZE,
   LAYER_OFFSETS,
+  PATH_LINE_PX,
+  pathLineOffset,
   shiftLeft,
   sliceWindow,
   visualWaterDepth,
@@ -246,7 +248,17 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     const x = planeColumn(view) + 0.5;
     const y = planeRow(view, zoom, craft.z);
     if (crashed) sprites.drawWreck(ctx, x, y);
-    else sprites.drawSide(ctx, craft.pathAngle, x, y);
+    else {
+      // The gap between nose and path line is the angle of attack.
+      const end = pathLineOffset(craft.pathAngle, exaggeration(zoom), PATH_LINE_PX);
+      ctx.strokeStyle = PATH_LINE_COLOR;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.floor(x), Math.floor(y) + 0.5);
+      ctx.lineTo(Math.floor(x) + end.dx, Math.floor(y) + 0.5 + end.dy);
+      ctx.stroke();
+      sprites.drawSide(ctx, craft.pitch, x, y);
+    }
   }
 
   function drawLabels(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number): void {

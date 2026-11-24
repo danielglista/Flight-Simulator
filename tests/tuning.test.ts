@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createLoop } from '../src/app/loop';
 import { createStepper } from '../src/app/stepper';
-import { CEILING_Z, DEFAULT_TUNING, TUNING_RANGES, type Tuning } from '../src/config/motion';
+import { CEILING_Z, DEFAULT_TUNING, START_LEVER, TUNING_RANGES, type Tuning } from '../src/config/motion';
 import type { Command } from '../src/sim/commands';
+import { forcesOn } from '../src/sim/flight/forces';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
@@ -17,7 +18,7 @@ const run = (s: SimState, n: number, w = W): SimState => {
 
 describe('tune command', () => {
   it('sets a value inside the range', () => {
-    expect(applyCommands(initialState(), [tune('turnRateDegS', 60)], W).tuning.turnRateDegS).toBe(60);
+    expect(applyCommands(initialState(), [tune('rollRateDegS', 60)], W).tuning.rollRateDegS).toBe(60);
   });
   it('ignores unknown keys and non-finite values, and returns the same state', () => {
     const s = initialState();
@@ -38,13 +39,13 @@ describe('tune command', () => {
   });
   it('works while crashed and survives restart, place and rotate', () => {
     let s: SimState = { ...initialState(), crash: { tick: 1, speed: 1, pathAngle: 0 } };
-    s = applyCommands(s, [tune('pathMaxDeg', 25)], W);
-    expect(s.tuning.pathMaxDeg).toBe(25);
+    s = applyCommands(s, [tune('stallDeg', 18)], W);
+    expect(s.tuning.stallDeg).toBe(18);
     s = applyCommands(s, [{ kind: 'restart' }], W);
     expect(s.crash).toBeNull();
-    expect(s.tuning.pathMaxDeg).toBe(25);
+    expect(s.tuning.stallDeg).toBe(18);
     s = applyCommands(s, [{ kind: 'place', x: 5, y: 5 }, { kind: 'rotate', by: 1 }], W);
-    expect(s.tuning.pathMaxDeg).toBe(25);
+    expect(s.tuning.stallDeg).toBe(18);
   });
   it('defaults are in range and on a step', () => {
     for (const k of KEYS) {
@@ -60,16 +61,21 @@ describe('tune command', () => {
 });
 
 describe('tuning in motion', () => {
-  it('turn rate', () => {
-    let s = applyCommands(initialState(), [tune('turnRateDegS', 60), { kind: 'turn', value: 1 }], W);
-    const h = s.craft.heading;
-    s = run(s, 60);
-    expect((s.craft.heading - h) / DEG).toBeCloseTo(60, 6);
+  it('roll rate and turn multiplier', () => {
+    const roll = (rate: number): number => run(applyCommands(initialState(), [tune('rollRateDegS', rate), { kind: 'turn', value: 1 }], W), 30).craft.bank / DEG;
+    expect(roll(60)).toBeCloseTo(30, 6);
+    expect(roll(30)).toBeCloseTo(15, 6);
+    const turned = (mult: number): number => {
+      const s0 = applyCommands(initialState(), [tune('turnMult', mult), { kind: 'turn', value: 1 }], W);
+      const s = run(s0, 120);
+      return s.craft.heading - s0.craft.heading;
+    };
+    expect(turned(4) / turned(2)).toBeGreaterThan(1.8);
   });
   it('lever rate', () => {
     let s = applyCommands(initialState(), [tune('leverRatePctS', 10), { kind: 'throttle', value: 1 }], W);
     s = run(s, 60);
-    expect(s.craft.lever).toBeCloseTo(0.321 + 0.1, 9);
+    expect(s.craft.lever).toBeCloseTo(START_LEVER + 0.1, 9);
   });
   it('spool time constant: 63% of the way after one tau', () => {
     let s = applyCommands(initialState(), [tune('spoolTauS', 1), { kind: 'throttle', value: 1 }], W);
@@ -77,33 +83,34 @@ describe('tuning in motion', () => {
     s = run(s, 60);
     expect(s.craft.spool).toBeCloseTo(1 - Math.exp(-1), 9);
   });
-  it('raising mass slows a climb', () => {
-    const climb = (m: number): number => {
-      let s = applyCommands(initialState(), [tune('massT', m), { kind: 'pitch', value: 1 }], W);
-      s = run(s, 240);
-      return s.craft.speed;
+  it('raising mass sinks the plane: the start trim is for 24 t', () => {
+    const height = (m: number): number => run(applyCommands(initialState(), [tune('massT', m)], { ...W, heightAt: () => -1e9 }), 600, { ...W, heightAt: () => -1e9 }).craft.z;
+    expect(height(40)).toBeLessThan(height(24));
+    expect(height(24)).toBeLessThan(height(12));
+  });
+  it('pitch rate: S for 1 s at full authority raises the nose by about the slider value', () => {
+    const rise = (rate: number): number => {
+      let s = applyCommands(initialState(), [tune('pitchRateDegS', rate), { kind: 'pitch', value: 1 }], W);
+      const p0 = s.craft.pitch;
+      s = run(s, 60);
+      return (s.craft.pitch - p0) / DEG;
     };
-    expect(climb(40)).toBeLessThan(climb(12) + 1e-9);
+    expect(rise(20)).toBeGreaterThan(rise(10) * 1.4);
+    expect(rise(10)).toBeGreaterThan(7);
+    expect(rise(10)).toBeLessThan(10);
   });
-  it('path limit is reached exactly, and lowering it settles without overshoot', () => {
-    const fast = initialState();
-    let s = applyCommands({ ...fast, craft: { ...fast.craft, speed: 150 } }, [tune('pathMaxDeg', 30), { kind: 'pitch', value: 1 }], W);
-    s = run(s, 120);
-    expect(s.craft.pathAngle).toBe(30 * DEG);
-    s = applyCommands(s, [tune('pathMaxDeg', 10)], W);
-    let prev = s.craft.pathAngle;
-    for (let i = 0; i < 100; i++) {
-      s = run(s, 1);
-      expect(s.craft.pathAngle).toBeLessThanOrEqual(prev);
-      expect(s.craft.pathAngle).toBeGreaterThanOrEqual(10 * DEG);
-      prev = s.craft.pathAngle;
-    }
-    expect(s.craft.pathAngle).toBe(10 * DEG);
-  });
-  it('path rate', () => {
-    let s = applyCommands(initialState(), [tune('pathRateDegS', 60), { kind: 'pitch', value: 1 }], W);
-    s = run(s, 15);
-    expect(s.craft.pathAngle).toBeCloseTo(15 * DEG, 12);
+  it('a higher stall angle stalls later: the same pull separates more with a 10 deg stall angle than with 20', () => {
+    const pull = (deg: number): number => {
+      let s = applyCommands(initialState(), [tune('stallDeg', deg), { kind: 'pitch', value: 1 }], W);
+      let peak = 0;
+      for (let i = 0; i < 60 * 8; i++) {
+        s = advance(s, W);
+        peak = Math.max(peak, forcesOn(s.craft, s.tuning, 10).separation);
+      }
+      return peak;
+    };
+    expect(pull(10)).toBeGreaterThan(0.3);
+    expect(pull(20)).toBeLessThan(pull(10));
   });
   it('10,000 steps at every maximum and with mid-run changes: finite, above ground, under the ceiling', () => {
     const hills: SimWorld = { ...W, heightAt: (x, y) => 40 + 30 * Math.sin(x / 300) * Math.cos(y / 300) };
@@ -125,6 +132,9 @@ describe('tuning in motion', () => {
         for (const v of Object.values(s.craft)) expect(Number.isFinite(v)).toBe(true);
         expect(s.craft.z).toBeGreaterThanOrEqual(hills.heightAt(s.craft.x, s.craft.y) - 1e-9);
         expect(s.craft.z).toBeLessThanOrEqual(CEILING_Z);
+        expect(Math.abs(s.craft.pitch)).toBeLessThanOrEqual(30 * DEG + 1e-12);
+        expect(Math.abs(s.craft.bank)).toBeLessThanOrEqual(60 * DEG + 1e-12);
+        expect(Math.abs(s.craft.pathAngle)).toBeLessThanOrEqual(80 * DEG + 1e-12);
         expect(s.craft.speed === 0 || (s.craft.speed >= 20 && s.craft.speed <= 300)).toBe(true);
       }
     }
@@ -132,10 +142,10 @@ describe('tuning in motion', () => {
   it('is frame-rate independent with tune commands at fixed ticks', () => {
     const script: [number, Command][] = [
       [10, { kind: 'turn', value: 1 }],
-      [50, tune('turnRateDegS', 90)],
+      [50, tune('rollRateDegS', 90)],
       [100, tune('thrustMaxKn', 60)],
       [150, { kind: 'throttle', value: 1 }],
-      [200, tune('pathMaxDeg', 30)],
+      [200, tune('stallDeg', 12)],
       [220, { kind: 'pitch', value: 1 }],
     ];
     const final = (times: number[]): string => {
@@ -193,8 +203,8 @@ describe('tune through the loop', () => {
   });
   it('applies while paused', () => {
     const { loop } = make(true);
-    loop.send(tune('turnRateDegS', 90));
-    expect(loop.state.tuning.turnRateDegS).toBe(90);
+    loop.send(tune('rollRateDegS', 90));
+    expect(loop.state.tuning.rollRateDegS).toBe(90);
     expect(loop.state.tick).toBe(0);
   });
   it('onFrame skips the first frame and the first after a resume', () => {

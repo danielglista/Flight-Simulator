@@ -127,9 +127,10 @@ velocity = airVelocity(V, g, h) + wind
 
 `G` is gravity, `rho` uses displayed altitude, and the heading convention is clockwise from north. Below a minimum speed, the ground model takes over or the divisors are clamped.
 
-- **Cl** rises linearly, then falls past the stall angle. Smooth curves avoid sudden jumps.
-- **Keys command pitch and bank rates** with damping, limited by low-speed control authority. Control strength fades near the stall.
-- **Turn help:** optional automatic pitch compensation below a moderate bank.
+- **Cl** rises linearly, then falls past the stall angle; one smooth blend with a flat plate covers every angle (`sim/flight/aero.ts`). The stall is this curve plus a nose drop while separated, with no state machine and no randomness.
+- **Keys command pitch and bank rates** (rate command, attitude hold): the nose and the bank stay where released, except a bank under `levelBelowDeg`, which settles to level. A steep bank never rescues itself. Authority falls at low equivalent airspeed. Nose-up fades to nothing in a stall and between 2.5 and 4 g; nose-down fades toward -1 g (an arcade allowance, not a structural limit). Nose held to +/-30 deg, bank to +/-60 deg.
+- **Turn help:** automatic nose-up fed in as the bank grows, to 30 deg of bank (up to 4 deg of nose), so shallow turns hold height. Steeper turns need S, which costs energy.
+- **Soft ceiling:** near 600 m the path is turned level (the nose is lowered at no more than 20 deg/s), so no energy is added or removed.
 - **Ground:** rolling friction, brakes (reduced by rain), speed-dependent steering, gear loads, and a touchdown check on vertical speed, bank and runway position.
 - **Airspeed display:** indicated airspeed, derived from density. Ground speed is shown separately. Compressed altitude means climbs and descents exchange less energy than the altimeter suggests, so tune thrust and drag by feel.
 
@@ -431,4 +432,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4, B1 to B4 and C1 are built (see [C1_PLAN.md](C1_PLAN.md) §13). Next: C2, lift, angle of attack and stall. C1's `Cl` is the lift the commanded path would need, and `sagLimit` is a placeholder; C2 replaces both.
+A1 to A4, B1 to B4, C1, C2 and C3 are built (see [C2_C3_PLAN.md](C2_C3_PLAN.md) §13). Next: C4, takeoff and ground roll. Manual flights for C1 to C3 are still owed.
