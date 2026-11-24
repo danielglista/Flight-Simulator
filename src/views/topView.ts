@@ -12,20 +12,24 @@ import {
 } from '../sim/world/grid';
 import { createAirportLayer, type MapFrame } from './airportLayer';
 import { clampZoom, metersPerPixel, screenToWorld, worldToScreen, type Camera, type Point } from './camera';
+import { edgeArrow } from './edgeArrow';
+import { createPlaneSprites } from './sprite';
 import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
-import type { Probe } from './probe';
+import type { Craft } from '../sim/state';
 import { LAYER_OFFSETS, sliceWindow } from './sideCamera';
 import { colorChunk, reduce2x } from './terrainColors';
 
 
 /** What the side view currently shows, so the top view can mark the same stretch. */
 export interface SideLink {
-  readonly probe: Probe;
+  readonly craft: Craft;
   readonly size: Size;
   readonly zoom: number;
-  /** Distance ahead of the probe under the side-view cursor, or null. */
+  /** Distance ahead of the plane under the side-view cursor, or null. */
   readonly hoverDistance: number | null;
+  /** The craft has hit the ground: draw the wreck instead of the plane. */
+  readonly crashed: boolean;
 }
 
 export interface TopView {
@@ -36,7 +40,11 @@ export interface TopView {
     camera: Camera,
     cursor: Point | null,
     side: SideLink,
+    /** False in free look: shows the banner and an arrow to an off-screen plane. */
+    following: boolean,
   ): void;
+  /** Builds every chunk, airport patch and sprite frame now, so none is built mid-flight. */
+  warm(): void;
 }
 
 function toCanvas(data: Uint8ClampedArray, size: number): HTMLCanvasElement {
@@ -79,6 +87,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   }
 
   const airportLayer = createAirportLayer(grid.airports);
+  const sprites = createPlaneSprites();
 
   function drawTerrain(ctx: CanvasRenderingContext2D, view: Size, camera: Camera): MapFrame {
     const mpp = metersPerPixel(camera.zoom);
@@ -136,15 +145,23 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     drawText(ctx, text, 5, view.height - 4);
   }
 
-  /** Probe dot and the slice line, covering exactly what the side view shows. */
-  function drawSlice(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, side: SideLink): void {
-    const { probe } = side;
-    const w = sliceWindow(probe, side.size, side.zoom);
-    const dx = Math.sin(probe.heading);
-    const dy = Math.cos(probe.heading);
-    const at = (d: number): Point =>
-      worldToScreen(camera, view, probe.x + dx * d, probe.y + dy * d);
-    const p0 = at(0);
+  /**
+   * The slice corridor and line, covering exactly what the side view shows. All of it
+   * starts from the plane's own pixel (rule 2 in B2_PLAN section 5), so it never
+   * disagrees with the sprite by a pixel.
+   */
+  function drawSlice(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, side: SideLink): Point {
+    const { craft } = side;
+    const w = sliceWindow(craft, side.size, side.zoom);
+    const dx = Math.sin(craft.heading);
+    const dy = Math.cos(craft.heading);
+    const home = worldToScreen(camera, view, craft.x, craft.y);
+    const p0 = { x: Math.floor(home.x) + 0.5, y: Math.floor(home.y) + 0.5 };
+    const shifted = (wx: number, wy: number): Point => {
+      const q = worldToScreen(camera, view, wx, wy);
+      return { x: q.x - home.x + p0.x, y: q.y - home.y + p0.y };
+    };
+    const at = (d: number): Point => shifted(craft.x + dx * d, craft.y + dy * d);
     const back = at(w.startDistance);
     const end = at(w.startDistance + w.length);
     // Corridor drawn in the side view as hazy layers, to the left of the heading.
@@ -152,7 +169,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     const lx = -dy;
     const ly = dx;
     const corner = (d: number, o: number): Point =>
-      worldToScreen(camera, view, probe.x + dx * d + lx * o, probe.y + dy * d + ly * o);
+      shifted(craft.x + dx * d + lx * o, craft.y + dy * d + ly * o);
     const d0 = w.startDistance;
     const d1 = w.startDistance + w.length;
     const quad = [corner(d0, 0), corner(d1, 0), corner(d1, reach), corner(d0, reach)];
@@ -181,26 +198,10 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     ctx.moveTo(p0.x, p0.y);
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
-    // End tick (perpendicular) and arrow.
+    // End tick, perpendicular to the line.
     ctx.beginPath();
     ctx.moveTo(end.x - dy * 5, end.y - dx * 5);
     ctx.lineTo(end.x + dy * 5, end.y + dx * 5);
-    ctx.stroke();
-    // Screen direction: x = dx, y flipped.
-    const ux = dx;
-    const uy = -dy;
-    const tip = { x: p0.x + ux * 14, y: p0.y + uy * 14 };
-    ctx.fillStyle = MARKER_COLOR;
-    ctx.beginPath();
-    ctx.moveTo(tip.x, tip.y);
-    ctx.lineTo(tip.x - ux * 8 - uy * 4, tip.y - uy * 8 + ux * 4);
-    ctx.lineTo(tip.x - ux * 8 + uy * 4, tip.y - uy * 8 - ux * 4);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(p0.x, p0.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#000';
     ctx.stroke();
     if (side.hoverDistance !== null) {
       const h = at(side.hoverDistance);
@@ -211,14 +212,47 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       ctx.strokeStyle = '#000';
       ctx.stroke();
     }
+    return home;
+  }
+
+  /** Yellow arrow at the panel edge pointing at a plane that is off screen. */
+  function drawEdgeArrow(ctx: CanvasRenderingContext2D, view: Size, plane: Point): void {
+    const arrow = edgeArrow(view, plane);
+    if (!arrow) return;
+    ctx.save();
+    ctx.translate(arrow.x, arrow.y);
+    ctx.rotate(arrow.angle);
+    ctx.fillStyle = MARKER_COLOR;
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-7, -8);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-7, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   return {
-    draw(ctx, view, camera, cursor, side) {
+    draw(ctx, view, camera, cursor, side, following) {
       const frame = drawTerrain(ctx, view, camera);
       airportLayer.draw(ctx, frame, clampZoom(camera.zoom), view);
-      drawSlice(ctx, view, camera, side);
+      const plane = drawSlice(ctx, view, camera, side);
+      if (side.crashed) sprites.drawWreck(ctx, plane.x, plane.y);
+      else sprites.drawTop(ctx, side.craft.heading, plane.x, plane.y);
       drawOverlays(ctx, view, camera, cursor);
+      if (!following) {
+        drawText(ctx, 'FREE LOOK - C to follow', view.width / 2, 16, 'center');
+        drawEdgeArrow(ctx, view, plane);
+      }
+    },
+    warm() {
+      for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) for (let t = 0; t < 3; t++) chunkCanvas(cx, cy, t);
+      airportLayer.warm();
+      sprites.warm();
     },
   };
 }

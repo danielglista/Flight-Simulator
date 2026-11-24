@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { createLoop } from '../src/app/loop';
 import { createKeyState } from '../src/input/keyState';
 
-const B = { width: 5120, height: 5120 };
+const B = { width: 5120, height: 5120, heightAt: () => 0 };
 const DT = 1000 / 60;
 
 function make() {
   const keys = createKeyState();
   const loop = createLoop({
-    bounds: B,
+    world: B,
     draw: () => {},
     requestDraw: () => {},
     sampleKeys: () => keys.sample(),
@@ -81,5 +81,49 @@ describe('loop', () => {
     const h = loop.state.craft.heading;
     frames(loop, t, 10);
     expect(loop.state.craft.heading).toBeCloseTo(h, 9);
+  });
+});
+
+describe('crash and restart in the loop', () => {
+  let ground = 110; // above the start altitude, so the first step crashes
+  const FLAT = { ...B, heightAt: () => ground };
+  function crashing() {
+    ground = 110;
+    const keys = createKeyState();
+    const loop = createLoop({
+      world: FLAT,
+      draw: () => {},
+      requestDraw: () => {},
+      sampleKeys: () => keys.sample(),
+      clearKeys: () => keys.clear(),
+    });
+    return { loop, keys };
+  }
+  it('a key held through a restart keeps turning', () => {
+    const { loop, keys } = crashing();
+    loop.frame(0);
+    keys.keyDown({ code: 'KeyD' });
+    let t = frames(loop, 0, 90);
+    expect(loop.state.crash).not.toBeNull();
+    ground = 0;
+    loop.send({ kind: 'restart' });
+    t = frames(loop, t, 2);
+    expect(loop.state.crash).toBeNull();
+    const h = loop.state.craft.heading;
+    frames(loop, t, 30);
+    expect(loop.state.craft.heading).toBeGreaterThan(h);
+  });
+  it('restart while paused applies at once and never streaks', () => {
+    const { loop } = crashing();
+    const t = frames(loop, 0, 90);
+    expect(loop.state.crash).not.toBeNull();
+    ground = 0;
+    loop.pause();
+    const tick = loop.state.tick;
+    loop.send({ kind: 'restart' });
+    expect(loop.state.crash).toBeNull();
+    expect(loop.state.tick).toBe(tick);
+    expect(loop.snapshot()).toEqual(loop.state.craft);
+    void t;
   });
 });

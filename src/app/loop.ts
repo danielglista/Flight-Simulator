@@ -1,11 +1,11 @@
 import type { Command } from '../sim/commands';
 import { interpolate } from '../sim/interpolate';
 import { initialState, type Craft, type SimState } from '../sim/state';
-import { advance, applyCommands, type SimBounds } from '../sim/step';
+import { advance, applyCommands, type SimWorld } from '../sim/step';
 import { createStepper } from './stepper';
 
 export interface LoopOptions {
-  readonly bounds: SimBounds;
+  readonly world: SimWorld;
   /** Draws both views now, from `snapshot()`. */
   draw(): void;
   /** Schedules a draw on the next frame (used while paused). */
@@ -58,12 +58,12 @@ export function createLoop(o: LoopOptions): Loop {
       if (steps > 0) queue.push(...o.sampleKeys());
       for (let i = 0; i < steps; i++) {
         if (queue.length > 0) {
-          state = applyCommands(state, queue, o.bounds);
+          state = applyCommands(state, queue, o.world);
           queue = [];
         }
         // Taken after commands, so a click never streaks the dot across the map.
         prev = state;
-        state = advance(state, o.bounds);
+        state = advance(state, o.world);
       }
       o.draw();
     },
@@ -76,7 +76,7 @@ export function createLoop(o: LoopOptions): Loop {
     },
     send(command) {
       if (paused) {
-        state = applyCommands(state, [command], o.bounds);
+        state = applyCommands(state, [command], o.world);
         prev = state;
         alpha = 0;
         o.requestDraw();

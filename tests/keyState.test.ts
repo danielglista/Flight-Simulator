@@ -48,3 +48,29 @@ describe('keyState', () => {
     ]);
   });
 });
+
+describe('pitch keys', () => {
+  it('S climbs (+1), W descends (-1), and they cancel', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'KeyS' });
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: 1 }]);
+    k.keyDown({ code: 'KeyW' });
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: 0 }]);
+    k.keyUp({ code: 'KeyS' });
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: -1 }]);
+  });
+  it('a tap shorter than a sample still latches', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'KeyW' });
+    k.keyUp({ code: 'KeyW' });
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: -1 }]);
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: 0 }]);
+  });
+  it('clear emits zero for pitch', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'KeyS' });
+    k.sample();
+    k.clear();
+    expect(k.sample()).toEqual([{ kind: 'pitch', value: 0 }]);
+  });
+});

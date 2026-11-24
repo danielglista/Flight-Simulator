@@ -1,6 +1,9 @@
 import type { Point } from '../views/camera';
-import { DEGREES_PER_PIXEL } from '../views/probe';
+
 import { createWheelAccumulator, toInternal } from './pointer';
+
+/** Degrees turned per internal pixel of horizontal drag. */
+export const DEGREES_PER_PIXEL = 0.5;
 
 export interface SidePointerOptions {
   readonly canvas: HTMLCanvasElement;

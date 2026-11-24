@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatHeading } from '../src/views/probe';
+import { formatHeading } from '../src/views/format';
 
-describe('probe', () => {
+describe('format', () => {
   it('formats headings', () => {
     expect(formatHeading(0)).toBe('360');
     expect(formatHeading(Math.PI / 4)).toBe('045');

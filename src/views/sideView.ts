@@ -1,5 +1,5 @@
 import type { Size } from '../config/display';
-import { MARKER_COLOR, SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
+import { SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import { sliceAlong } from '../sim/world/slice';
 import { Terrain } from '../sim/world/terrain';
@@ -7,13 +7,16 @@ import { SNOW_LINE_M } from '../sim/world/testMap'; // temporary, until the map 
 import { runwaySpan } from '../sim/world/airport';
 import { heightAt, type WorldGrid } from '../sim/world/grid';
 import { surfaceName } from './surfaceName';
+import { createPlaneSprites } from './sprite';
 import { drawScaleBar, drawText } from './overlay';
-import { formatHeading, type Probe } from './probe';
+import type { Craft } from '../sim/state';
+import { formatHeading } from './format';
 import {
+  baseHeight,
   exaggeration,
   heightToY,
-  probeColumn,
-  seaRow,
+  planeRow,
+  planeColumn,
   sideMetersPerPixel,
   LAYER_HAZE,
   LAYER_OFFSETS,
@@ -44,12 +47,23 @@ const rgb = (c: Rgb, k = 1): string => {
 
 
 export interface SideView {
-  draw(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number, cursor: Point | null): void;
-  /** Distance ahead of the probe at an internal x. */
+  draw(
+    ctx: CanvasRenderingContext2D,
+    view: Size,
+    craft: Craft,
+    zoom: number,
+    cursor: Point | null,
+    crashed: boolean,
+  ): void;
+  /** Builds every sprite frame now, so none is built mid-flight. */
+  warm(): void;
+  /** Distance ahead of the plane at an internal x. */
   distanceAt(view: Size, zoom: number, x: number): number;
 }
 
 export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
+  const sprites = createPlaneSprites();
+
   function drawSky(ctx: CanvasRenderingContext2D, view: Size): void {
     const bandH = Math.ceil(view.height / SKY_BANDS.length);
     SKY_BANDS.forEach((c, i) => {
@@ -94,9 +108,10 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     zoom: number,
     w: SliceWindow,
     haze: number,
+    base: number,
   ) {
     const slice = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
-    const yOf = (h: number): number => Math.min(Math.round(heightToY(view, zoom, h)), view.height);
+    const yOf = (h: number): number => Math.min(Math.round(heightToY(view, zoom, h, base)), view.height);
     for (let x = 0; x < view.width; x++) {
       const code = slice.surface[x] as number;
       const bed = slice.groundWorldM[x] as number;
@@ -126,7 +141,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       let bodyTop = yBed + skin;
       if (code === Terrain.snow && !wet) {
         // Snow lies down to the snow line, so a peak is a solid white triangle.
-        const lineY = Math.min(Math.round(heightToY(view, zoom, snowLineWorld)), view.height);
+        const lineY = Math.min(Math.round(heightToY(view, zoom, snowLineWorld, base)), view.height);
         if (lineY > bodyTop) {
           ctx.fillStyle = rgb(mix(top, HAZE_COLOR, haze), 0.93);
           ctx.fillRect(x, bodyTop, 1, lineY - bodyTop);
@@ -144,17 +159,17 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     return slice;
   }
 
-  function drawGround(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number) {
-    const w = sliceWindow(probe, view, zoom);
+  function drawGround(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number) {
+    const w = sliceWindow(craft, view, zoom);
     LAYER_OFFSETS.forEach((offset, i) =>
-      drawProfile(ctx, view, zoom, shiftLeft(w, offset), LAYER_HAZE[i] as number),
+      drawProfile(ctx, view, zoom, shiftLeft(w, offset), LAYER_HAZE[i] as number, base),
     );
-    return drawProfile(ctx, view, zoom, w, 0);
+    return drawProfile(ctx, view, zoom, w, 0, base);
   }
 
   /** Posts at both ends of each runway the slice crosses, and its name. Independent of the sampling. */
-  function drawRunwaySpans(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number): void {
-    const w = sliceWindow(probe, view, zoom);
+  function drawRunwaySpans(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number): void {
+    const w = sliceWindow(craft, view, zoom);
     const mpp = sideMetersPerPixel(zoom);
     const dx = Math.sin(w.heading);
     const dy = Math.cos(w.heading);
@@ -165,38 +180,45 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
         const x0 = span.enter / mpp;
         const x1 = span.exit / mpp;
         if (x1 < 0 || x0 > view.width - 1) continue;
+        const postY = (t: number): number =>
+          Math.round(heightToY(view, zoom, heightAt(grid, scale, w.origin.x + dx * t, w.origin.y + dy * t), base));
         let top = view.height;
         for (const [t, col] of [
           [span.enter, x0],
           [span.exit, x1],
         ] as const) {
           if (col < 0 || col > view.width - 1) continue;
-          const ground = heightAt(grid, scale, w.origin.x + dx * t, w.origin.y + dy * t);
-          const y = Math.round(heightToY(view, zoom, ground));
+          const y = postY(t);
+          top = Math.min(top, y - 14);
+          // Off screen when the view has scrolled away from the ground.
+          if (y < 0 || y - 14 >= view.height) continue;
           ctx.fillStyle = '#fff';
           ctx.fillRect(Math.round(col), y - 14, 1, 14);
-          top = Math.min(top, y - 14);
         }
-        if (top === view.height) top = Math.round(heightToY(view, zoom, heightAt(grid, scale, w.origin.x + dx * span.enter, w.origin.y + dy * span.enter))) - 14;
+        if (top === view.height) top = postY(span.enter) - 14;
+        if (top < 12 || top > view.height - 20) continue;
         const mid = Math.min(view.width - 30, Math.max(30, (Math.max(0, x0) + Math.min(view.width - 1, x1)) / 2));
-        drawText(ctx, rw.names.join('/'), mid, Math.max(12, top - 4), 'center');
+        drawText(ctx, rw.names.join('/'), mid, top - 4, 'center');
       }
     }
   }
 
-  function drawScale(ctx: CanvasRenderingContext2D, view: Size, zoom: number): void {
+  function drawScale(ctx: CanvasRenderingContext2D, view: Size, zoom: number, base: number): void {
     // Tick every 1,000 REAL m = 100 world m at altitude scale 10.
     const stepWorld = 1000 / scale.altitude;
     ctx.strokeStyle = 'rgba(255,255,255,0.18)';
     ctx.lineWidth = 1;
-    const sea = Math.round(seaRow(view)) + 0.5;
-    ctx.beginPath();
-    ctx.moveTo(0, sea);
-    ctx.lineTo(view.width, sea);
-    ctx.stroke();
+    const sea = Math.round(heightToY(view, zoom, 0, base)) + 0.5;
+    if (sea < view.height - 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, sea);
+      ctx.lineTo(view.width, sea);
+      ctx.stroke();
+    }
     for (let k = 1; ; k++) {
-      const y = Math.round(heightToY(view, zoom, k * stepWorld)) + 0.5;
+      const y = Math.round(heightToY(view, zoom, k * stepWorld, base)) + 0.5;
       if (y < 0) break;
+      if (y > view.height - 16) continue; // below the panel or under the readout bar
       ctx.fillStyle = '#fff';
       ctx.fillRect(0, y - 0.5, 6, 1);
       // Same unit as the horizontal scale bar (world m), with the real altitude beside it.
@@ -204,30 +226,31 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     }
   }
 
-  function drawMarker(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number, groundH: number) {
-    const x = probeColumn(view) + 0.5;
-    const gy = heightToY(view, zoom, groundH);
-    ctx.strokeStyle = MARKER_COLOR;
+  /** Faint plumb line from the plane down to the ground: the height above terrain. */
+  function drawPlumb(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, groundH: number, base: number): void {
+    const x = planeColumn(view) + 0.5;
+    const planeY = planeRow(view, zoom, craft.z) + 0.5;
+    const groundY = heightToY(view, zoom, groundH, base);
+    if (groundY <= planeY) return;
+    ctx.strokeStyle = 'rgba(255,211,77,0.55)';
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([3, 4]);
     ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, view.height - 16);
+    ctx.moveTo(x, planeY);
+    ctx.lineTo(x, Math.min(groundY, view.height - 16));
     ctx.stroke();
     ctx.setLineDash([]);
-    const ty = Math.max(14, gy - 14);
-    ctx.fillStyle = MARKER_COLOR;
-    ctx.beginPath();
-    ctx.moveTo(x - 6, ty - 8);
-    ctx.lineTo(x + 6, ty - 8);
-    ctx.lineTo(x, ty);
-    ctx.closePath();
-    ctx.fill();
-    void probe;
   }
 
-  function drawLabels(ctx: CanvasRenderingContext2D, view: Size, probe: Probe, zoom: number): void {
-    drawText(ctx, `HDG ${formatHeading(probe.heading)}`, probeColumn(view) + 10, 16);
+  function drawPlane(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, crashed: boolean): void {
+    const x = planeColumn(view) + 0.5;
+    const y = planeRow(view, zoom, craft.z);
+    if (crashed) sprites.drawWreck(ctx, x, y);
+    else sprites.drawSide(ctx, craft.pathAngle, x, y);
+  }
+
+  function drawLabels(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number): void {
+    drawText(ctx, `HDG ${formatHeading(craft.heading)}`, planeColumn(view) + 10, 16);
     const ex = exaggeration(zoom);
     drawText(ctx, `vert x${ex}  water depth x${WATER_EXAGGERATION}`, view.width - 8, 16, 'right');
     drawScaleBar(ctx, sideMetersPerPixel(zoom), view.width - 180, view.height - 56);
@@ -241,7 +264,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     zoom: number,
     cursor: Point | null,
   ): void {
-    const col = Math.min(view.width - 1, Math.max(0, Math.floor(cursor ? cursor.x : probeColumn(view))));
+    const col = Math.min(view.width - 1, Math.max(0, Math.floor(cursor ? cursor.x : planeColumn(view))));
     const d = Math.round(xToDistance(view, zoom, col));
     const h = slice.heightWorldM[col] as number;
     const bed = slice.groundWorldM[col] as number;
@@ -264,15 +287,18 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   }
 
   return {
-    draw(ctx, view, probe, zoom, cursor) {
+    draw(ctx, view, craft, zoom, cursor, crashed) {
+      const base = baseHeight(view, zoom, craft.z);
       drawSky(ctx, view);
-      const slice = drawGround(ctx, view, probe, zoom);
-      drawRunwaySpans(ctx, view, probe, zoom);
-      drawScale(ctx, view, zoom);
-      drawMarker(ctx, view, probe, zoom, slice.heightWorldM[probeColumn(view)] as number);
-      drawLabels(ctx, view, probe, zoom);
-      drawReadout(ctx, view, slice, sliceWindow(probe, view, zoom), zoom, cursor);
+      const slice = drawGround(ctx, view, craft, zoom, base);
+      drawRunwaySpans(ctx, view, craft, zoom, base);
+      drawScale(ctx, view, zoom, base);
+      drawPlumb(ctx, view, craft, zoom, slice.heightWorldM[planeColumn(view)] as number, base);
+      drawPlane(ctx, view, craft, zoom, crashed);
+      drawLabels(ctx, view, craft, zoom);
+      drawReadout(ctx, view, slice, sliceWindow(craft, view, zoom), zoom, cursor);
     },
     distanceAt: (view, zoom, x) => xToDistance(view, zoom, Math.floor(x)),
+    warm: () => sprites.warm(),
   };
 }

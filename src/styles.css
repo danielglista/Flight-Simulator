@@ -129,13 +129,37 @@ canvas {
   color: var(--accent);
 }
 
-/* Over the page, no layout space: panel sizes are exact. */
-.pause-banner {
+/* Over the page, no layout space: panel sizes are exact. Banners stack when both show. */
+.banners {
   position: fixed;
   top: 8px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.banners > * {
+  pointer-events: auto;
+}
+
+.crash-banner {
+  padding: 6px 12px;
+  background: rgba(40, 8, 8, 0.92);
+  border: 1px solid #ff5a4a;
+  color: #ff8a7a;
+  letter-spacing: 0.1em;
+}
+
+.crash-banner[hidden] {
+  display: none;
+}
+
+.pause-banner {
   display: flex;
   align-items: center;
   gap: 12px;

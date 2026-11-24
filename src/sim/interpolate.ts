@@ -12,7 +12,9 @@ export function interpolate(prev: Craft, next: Craft, alpha: number): Craft {
   return {
     x: prev.x + (next.x - prev.x) * a,
     y: prev.y + (next.y - prev.y) * a,
+    z: prev.z + (next.z - prev.z) * a,
     heading: a === 1 ? next.heading : a === 0 ? prev.heading : heading,
     speed: prev.speed + (next.speed - prev.speed) * a,
+    pathAngle: prev.pathAngle + (next.pathAngle - prev.pathAngle) * a,
   };
 }

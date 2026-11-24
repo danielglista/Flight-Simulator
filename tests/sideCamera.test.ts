@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   SIDE_ZOOM_LEVELS,
+  baseHeight,
+  followRow,
+  planeRow,
+  verticalMetersPerPixel,
   distanceToX,
   exaggeration,
   heightToY,
-  probeColumn,
+  planeColumn,
   seaRow,
   shiftLeft,
   sliceWindow,
@@ -22,19 +26,19 @@ describe('side camera', () => {
       expect(xToDistance(view, z, distanceToX(view, z, 777))).toBeCloseTo(777, 6);
     }
   });
-  it('puts the probe a quarter of the way across', () => {
+  it('puts the plane a quarter of the way across', () => {
     expect(distanceToX(view, 1, 0)).toBe(160);
-    expect(probeColumn(view)).toBe(160);
+    expect(planeColumn(view)).toBe(160);
   });
   it('higher is up, and sea level is fixed', () => {
-    expect(heightToY(view, 1, 100)).toBeLessThan(heightToY(view, 1, 0));
-    for (let z = 0; z < 4; z++) expect(heightToY(view, z, 0)).toBe(seaRow(view));
+    expect(heightToY(view, 1, 100, 0)).toBeLessThan(heightToY(view, 1, 0, 0));
+    for (let z = 0; z < 4; z++) expect(heightToY(view, z, 0, 0)).toBe(seaRow(view));
   });
   it('has the planned exaggeration', () => {
     expect([0, 1, 2, 3].map(exaggeration)).toEqual([4, 2, 1, 1]);
   });
   it('peak height in pixels', () => {
-    expect(seaRow(view) - heightToY(view, 1, 182)).toBeCloseTo(72.8, 1);
+    expect(seaRow(view) - heightToY(view, 1, 182, 0)).toBeCloseTo(72.8, 1);
   });
   it('window covers the view with one sample per column', () => {
     const p = { x: 2560, y: 2560, heading: Math.PI / 2 };
@@ -73,5 +77,70 @@ describe('side camera', () => {
       expect(v).toBeGreaterThan(prev);
       prev = v;
     }
+  });
+});
+
+describe('vertical follow', () => {
+  const views = [
+    { width: 640, height: 360 },
+    { width: 640, height: 361 },
+  ];
+  const heights = [0, 1, 5, 99.9, 100, 209.9, 210, 210.1, 211, 333.3, 419, 420, 420.5, 421, 599.99, 600];
+  it('follow row is 40% down', () => {
+    expect(followRow(view)).toBe(144);
+  });
+  it('does not scroll at low altitude', () => {
+    for (let z = 0; z < 4; z++) {
+      expect(baseHeight(view, z, 0)).toBe(0);
+      expect(baseHeight(view, z, 100)).toBe(0);
+    }
+    // Thresholds: 420 m at the three farther zooms, 210 m at the closest.
+    expect(baseHeight(view, 0, 420)).toBe(0);
+    expect(baseHeight(view, 2, 420)).toBe(0);
+    expect(baseHeight(view, 3, 210)).toBe(0);
+    expect(baseHeight(view, 3, 211)).toBeGreaterThan(0);
+    expect(baseHeight(view, 1, 421)).toBeGreaterThan(0);
+  });
+  it('plane row is constant from the threshold to the ceiling, at every zoom and view height', () => {
+    for (const v of views) {
+      for (let zoom = 0; zoom < 4; zoom++) {
+        const mpp = verticalMetersPerPixel(zoom);
+        const start = (seaRow(v) - followRow(v)) * mpp;
+        for (const z of heights) {
+          if (z < start) continue;
+          expect(planeRow(v, zoom, z)).toBe(followRow(v));
+          // The plane's own drawn row matches the scrolled height mapping to within one pixel.
+          const y = heightToY(v, zoom, z, baseHeight(v, zoom, z));
+          expect(Math.floor(y)).toBe(followRow(v));
+        }
+      }
+    }
+  });
+  it('scrolls in whole pixels, so every height moves together', () => {
+    for (const v of views) {
+      for (let zoom = 0; zoom < 4; zoom++) {
+        const mpp = verticalMetersPerPixel(zoom);
+        for (const z of heights) {
+          const px = baseHeight(v, zoom, z) / mpp;
+          expect(px).toBe(Math.round(px));
+        }
+      }
+    }
+  });
+  it('has no jump at the threshold', () => {
+    for (let zoom = 0; zoom < 4; zoom++) {
+      const mpp = verticalMetersPerPixel(zoom);
+      const start = (seaRow(view) - followRow(view)) * mpp;
+      expect(planeRow(view, zoom, start - 0.01)).toBe(planeRow(view, zoom, start));
+      expect(planeRow(view, zoom, start + 0.01)).toBe(planeRow(view, zoom, start));
+    }
+  });
+  it('a whole-pixel rise in z moves terrain by exactly that many pixels', () => {
+    const zoom = 1;
+    const z0 = 500;
+    const z1 = z0 + 2.5 * 3;
+    const a = heightToY(view, zoom, 123, baseHeight(view, zoom, z0));
+    const b = heightToY(view, zoom, 123, baseHeight(view, zoom, z1));
+    expect(b - a).toBeCloseTo(3, 9);
   });
 });

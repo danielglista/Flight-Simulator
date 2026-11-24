@@ -348,7 +348,7 @@ Each step is small, ends with something to see or try, and leaves the game runna
 | C2 | Lift, angle of attack and stall | Plane stalls and can recover |
 | C3 | Banked turns | Steep turns cost energy |
 | C4 | Takeoff and ground roll | Plane can leave the runway |
-| C5 | Landing, crash and instant restart | A full circuit can be flown |
+| C5 | Landing, crash and instant restart (restart began in B3: Enter, every contact is a crash) | A full circuit can be flown |
 | C6 | Flaps, gear and brakes | They change how takeoff and landing feel |
 
 ### D. Cockpit
@@ -420,7 +420,7 @@ H1 is independent and can be pulled forward at any time after A4.
 | Base cell size | 10 m | E2 |
 | Altitude vs. vertical speed scale | Vertical speed unscaled | D2 |
 | Speed brake | Left out | C6 |
-| Canvas performance | Assume sufficient | Measure in B2 and D3 |
+| Canvas performance | Assume sufficient | B2 measured only synthetically (see B2_PLAN.md §14); real-frame check still owed, then D3 |
 | Internal resolution | Top and side views 640 x 360; instruments 320 x 200 | H1 |
 
 ### Later
@@ -431,4 +431,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4 and B1 are built (see [B1_PLAN.md](B1_PLAN.md) §14). Next: B2, plane sprite in both views with a follow camera.
+A1 to A4 and B1 to B3 are built (see [B3_PLAN.md](B3_PLAN.md) §14). Next: B4, basic readouts and debug panel.

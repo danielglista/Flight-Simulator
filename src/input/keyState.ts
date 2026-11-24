@@ -11,7 +11,7 @@ export interface KeyEventLike {
   readonly editable?: boolean;
 }
 
-type Channel = 'turn' | 'throttle';
+type Channel = 'turn' | 'throttle' | 'pitch';
 
 /** Physical key positions (event.code). */
 const BINDINGS: Readonly<Record<string, { channel: Channel; sign: 1 | -1 }>> = {
@@ -19,6 +19,9 @@ const BINDINGS: Readonly<Record<string, { channel: Channel; sign: 1 | -1 }>> = {
   KeyD: { channel: 'turn', sign: 1 },
   KeyE: { channel: 'throttle', sign: 1 },
   KeyQ: { channel: 'throttle', sign: -1 },
+  // Stick style: pull back (S) to climb.
+  KeyW: { channel: 'pitch', sign: -1 },
+  KeyS: { channel: 'pitch', sign: 1 },
 };
 
 export interface KeyState {
@@ -33,7 +36,7 @@ export interface KeyState {
 export function createKeyState(): KeyState {
   const held = new Set<string>();
   const latched = new Set<string>();
-  const emitted: Record<Channel, Axis> = { turn: 0, throttle: 0 };
+  const emitted: Record<Channel, Axis> = { turn: 0, throttle: 0, pitch: 0 };
 
   const axis = (channel: Channel): Axis => {
     let sum = 0;
@@ -57,7 +60,7 @@ export function createKeyState(): KeyState {
     },
     sample() {
       const out: Command[] = [];
-      for (const channel of ['turn', 'throttle'] as const) {
+      for (const channel of ['turn', 'throttle', 'pitch'] as const) {
         const v = axis(channel);
         if (v !== emitted[channel]) {
           emitted[channel] = v;

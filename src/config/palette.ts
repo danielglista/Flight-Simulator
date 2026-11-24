@@ -33,6 +33,6 @@ export function waterColor(depthRealM: number): Rgb {
   ];
 }
 
-/** Side-view sky bands, top to bottom, and the probe marker. Placeholders until H1. */
+/** Side-view sky bands, top to bottom, and the map marker. Placeholders until H1. */
 export const SKY_BANDS: readonly string[] = ['#16345f', '#1f4a80', '#2f6aa3', '#5a93c4'];
 export const MARKER_COLOR = '#ffd34d';

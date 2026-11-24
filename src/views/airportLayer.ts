@@ -1,6 +1,7 @@
 import { TERRAIN_COLORS, type Rgb } from '../config/palette';
 import { airportContains, fineSurfaceAt, type Airport, type Runway } from '../sim/world/airport';
 import { Terrain } from '../sim/world/terrain';
+import { ZOOM_LEVELS } from './camera';
 import { drawText } from './overlay';
 import { tinted } from './terrainColors';
 
@@ -53,6 +54,8 @@ const MIN_DRAWN_WIDTH_PX = 2;
 export interface AirportLayer {
   /** Patch, runways, markings and labels for every airport. `zoom` indexes ZOOM_LEVELS. */
   draw(ctx: CanvasRenderingContext2D, f: MapFrame, zoom: number, view: { width: number; height: number }): void;
+  /** Bakes every patch at every zoom that uses one. */
+  warm(): void;
 }
 
 function toCanvas(p: { data: Uint8ClampedArray; width: number; height: number }): HTMLCanvasElement {
@@ -147,6 +150,9 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
   }
 
   return {
+    warm() {
+      for (const a of airports) for (let z = 2; z < ZOOM_LEVELS.length; z++) patch(a, ZOOM_LEVELS[z] as number);
+    },
     draw(ctx, f, zoom, view) {
       for (const a of airports) {
         const x0 = frameX(f, a.minX);

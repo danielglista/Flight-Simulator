@@ -1,20 +1,23 @@
 import type { Size } from '../config/display';
-import { panBy, screenToWorld, zoomAt, type Bounds, type Camera, type Point } from '../views/camera';
+import { screenToWorld, type Camera, type Point } from '../views/camera';
 import { CLICK_THRESHOLD, createWheelAccumulator, toInternal } from './pointer';
 
 export interface MapPointerOptions {
   readonly canvas: HTMLCanvasElement;
   getView(): Size;
-  readonly bounds: Bounds;
+  /** The camera on screen right now, for converting a click to a world point. */
   getCamera(): Camera;
-  setCamera(camera: Camera): void;
+  /** Drag by this many internal pixels: the map follows the cursor. */
+  onPan(dx: number, dy: number): void;
+  /** Whole zoom levels (positive = closer) at a cursor position in internal pixels. */
+  onZoom(cursor: Point, steps: number): void;
   /** Cursor in internal pixels, or null when it has left the canvas. */
   setCursor(cursor: Point | null): void;
   /** A click (press and release without moving), as a world point. */
   onClick(world: Point): void;
 }
 
-/** Drag to pan, click to place the probe, wheel to zoom at the cursor. Returns a function that removes the listeners. */
+/** Drag to pan, click to place the plane, wheel to zoom at the cursor. Returns a function that removes the listeners. */
 export function attachMapPointer(o: MapPointerOptions): () => void {
   const { canvas } = o;
   let pressed = false;
@@ -45,7 +48,7 @@ export function attachMapPointer(o: MapPointerOptions): () => void {
         last = start; // no jump: the map follows from where the press began
       }
       if (panning) {
-        o.setCamera(panBy(o.getCamera(), p.x - last.x, p.y - last.y, o.bounds));
+        o.onPan(p.x - last.x, p.y - last.y);
         last = p;
       }
     }
@@ -74,7 +77,7 @@ export function attachMapPointer(o: MapPointerOptions): () => void {
     const steps = accumulate(e);
     if (steps === 0) return;
     const p = toInternal(canvas, e);
-    o.setCamera(zoomAt(o.getCamera(), o.getView(), p, -steps, o.bounds));
+    o.onZoom(p, -steps);
     o.setCursor(p);
   };
 
