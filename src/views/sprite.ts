@@ -12,7 +12,15 @@ import {
   WRECK_SIZE,
   type ShapePart,
 } from '../config/planeShape';
+import { PLANE_SIZE_TIERS } from '../config/display';
 import { wrapHeading } from '../sim/angles';
+import { heightScale, tierAltitude } from './depth';
+
+/** Scale of the top sprite at size step `tier`: the plane's own height scale, 1 + z / D. */
+export function tierScale(tier: number): number {
+  const z = tierAltitude(tier);
+  return heightScale(z, z);
+}
 
 function inside(points: ShapePart['points'], x: number, y: number): boolean {
   let hit = false;
@@ -80,6 +88,24 @@ export function rasterize(parts: readonly ShapePart[], angle: number, size: numb
   return data;
 }
 
+/** The same shape with every point scaled about the sprite origin, for the larger plane sizes. */
+export function scaleParts(parts: readonly ShapePart[], k: number): ShapePart[] {
+  return parts.map((p) => ({ color: p.color, points: p.points.map(([x, y]) => [x * k, y * k] as const) }));
+}
+
+/** Smallest odd size that holds the base top sprite scaled by k, so the center pixel stays on the origin. */
+export function tierSpriteSize(k: number): number {
+  const s = Math.ceil(TOP_SPRITE_SIZE * k);
+  return s % 2 === 0 ? s + 1 : s;
+}
+
+/** Same pixels and alpha, every color black: the plane's shadow. */
+export function silhouette(data: Uint8ClampedArray): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 3; i < data.length; i += 4) out[i] = data[i] as number;
+  return out;
+}
+
 /** Nearest of the TOP_FRAMES rotated frames; 357.5 degrees and above wrap to frame 0. */
 export function frameIndex(heading: number): number {
   return Math.round((wrapHeading(heading) / (Math.PI * 2)) * TOP_FRAMES) % TOP_FRAMES;
@@ -111,8 +137,10 @@ function toCanvas(data: Uint8ClampedArray, size: number): HTMLCanvasElement {
 }
 
 export interface PlaneSprites {
-  /** Draws the top sprite with its center pixel at floor(x), floor(y) (internal pixels). */
-  drawTop(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number): void;
+  /** Draws the top sprite of size `tier` (0 = base, larger = higher) with its center pixel at floor(x), floor(y) (internal pixels). */
+  drawTop(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number, tier?: number): void;
+  /** Draws the plane's shadow (base size, black) at floor(x + dx), floor(y + dy), with the given alpha. */
+  drawTopShadow(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number, dx: number, dy: number, alpha: number): void;
   /** Draws the side sprite, nose right, tilted to `pitch` (radians, positive = nose up), center at floor(x), floor(y). */
   drawSide(ctx: CanvasRenderingContext2D, pitch: number, x: number, y: number): void;
   /** Draws the wreck marker with its center pixel at floor(x), floor(y). Same in both views. */
@@ -123,13 +151,27 @@ export interface PlaneSprites {
 
 export function createPlaneSprites(): PlaneSprites {
   const top = new Map<number, HTMLCanvasElement>();
+  const shadow = new Map<number, HTMLCanvasElement>();
   const side = new Map<number, HTMLCanvasElement>();
   let wreck: HTMLCanvasElement | null = null;
-  const topFrame = (i: number): HTMLCanvasElement => {
-    let c = top.get(i);
+  const tierParts: ShapePart[][] = [];
+  const tierSize = (tier: number): number => tierSpriteSize(tierScale(tier));
+  const topFrame = (i: number, tier: number): HTMLCanvasElement => {
+    const key = tier * TOP_FRAMES + i;
+    let c = top.get(key);
     if (!c) {
-      c = toCanvas(rasterize(PLANE_TOP, frameAngle(i), TOP_SPRITE_SIZE), TOP_SPRITE_SIZE);
-      top.set(i, c);
+      const size = tierSize(tier);
+      const parts = (tierParts[tier] ??= scaleParts(PLANE_TOP, tierScale(tier)));
+      c = toCanvas(rasterize(parts, frameAngle(i), size), size);
+      top.set(key, c);
+    }
+    return c;
+  };
+  const shadowFrame = (i: number): HTMLCanvasElement => {
+    let c = shadow.get(i);
+    if (!c) {
+      c = toCanvas(silhouette(rasterize(PLANE_TOP, frameAngle(i), TOP_SPRITE_SIZE)), TOP_SPRITE_SIZE);
+      shadow.set(i, c);
     }
     return c;
   };
@@ -146,9 +188,17 @@ export function createPlaneSprites(): PlaneSprites {
     return wreck;
   };
   return {
-    drawTop(ctx, heading, x, y) {
+    drawTop(ctx, heading, x, y, tier = 0) {
+      const h = (tierSize(tier) - 1) / 2;
+      ctx.drawImage(topFrame(frameIndex(heading), tier), Math.floor(x) - h, Math.floor(y) - h);
+    },
+    drawTopShadow(ctx, heading, x, y, dx, dy, alpha) {
+      if (alpha <= 0) return;
       const h = (TOP_SPRITE_SIZE - 1) / 2;
-      ctx.drawImage(topFrame(frameIndex(heading)), Math.floor(x) - h, Math.floor(y) - h);
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = alpha;
+      ctx.drawImage(shadowFrame(frameIndex(heading)), Math.floor(x + dx) - h, Math.floor(y + dy) - h);
+      ctx.globalAlpha = prev;
     },
     drawSide(ctx, pitch, x, y) {
       const h = (SIDE_SPRITE_SIZE - 1) / 2;
@@ -159,7 +209,10 @@ export function createPlaneSprites(): PlaneSprites {
       ctx.drawImage(wreckFrame(), Math.floor(x) - h, Math.floor(y) - h);
     },
     warm() {
-      for (let i = 0; i < TOP_FRAMES; i++) topFrame(i);
+      for (let i = 0; i < TOP_FRAMES; i++) {
+        shadowFrame(i);
+        for (let t = 0; t < PLANE_SIZE_TIERS; t++) topFrame(i, t);
+      }
       for (let i = 0; i < PITCH_FRAMES; i++) sideFrame(i);
       wreckFrame();
     },

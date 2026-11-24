@@ -27,7 +27,7 @@ describe('follow camera', () => {
   });
   it('keeps the craft pixel fixed over 600 steps of turning flight', () => {
     for (const view of sizes) {
-      let s: SimState = { ...initialState(), controls: { turn: 1, throttle: 0, pitch: 0 } };
+      let s: SimState = { ...initialState(), controls: { turn: 1, throttle: 0, pitch: 0, level: false } };
       const f = initialFollow(4);
       const first = worldToScreen(cameraFor(f, s.craft), view, s.craft.x, s.craft.y);
       for (let i = 0; i < 600; i++) {

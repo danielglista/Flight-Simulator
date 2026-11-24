@@ -5,6 +5,8 @@ export type Command =
   | { readonly kind: 'turn'; readonly value: Axis }
   | { readonly kind: 'throttle'; readonly value: Axis }
   | { readonly kind: 'pitch'; readonly value: Axis }
+  /** Wings level: roll to zero bank and stop. A non-zero `turn` cancels it. */
+  | { readonly kind: 'level' }
   /** Back to the start position. Ignored unless crashed. Keeps tick and controls. */
   | { readonly kind: 'restart' }
   /** Pointer and test tool. */

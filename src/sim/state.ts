@@ -20,6 +20,8 @@ export interface Craft {
   readonly pitchRate: number;
   /** Radians, positive = right wing down. Banked lift turns the heading. */
   readonly bank: number;
+  /** Rate of change of bank, rad/s, positive = right wing down; follows the keys with a lag. */
+  readonly rollRate: number;
   /** Throttle lever, 0..1. Stays where the keys leave it. */
   readonly lever: number;
   /** Engine output, 0..1; follows the lever with a lag. */
@@ -32,6 +34,8 @@ export interface Controls {
   readonly throttle: Axis;
   /** +1 = nose up. */
   readonly pitch: Axis;
+  /** Wings level is running: the bank rolls to zero and stops. Any roll key cancels it. */
+  readonly level: boolean;
 }
 
 /** What the craft was doing at impact. */
@@ -53,8 +57,8 @@ export interface SimState {
 export function initialState(): SimState {
   return {
     tick: 0,
-    craft: { x: START_X, y: START_Y, z: START_Z, heading: START_HEADING, speed: START_SPEED, pathAngle: 0, pitch: START_PITCH, pitchRate: 0, bank: 0, lever: START_LEVER, spool: START_LEVER },
-    controls: { turn: 0, throttle: 0, pitch: 0 },
+    craft: { x: START_X, y: START_Y, z: START_Z, heading: START_HEADING, speed: START_SPEED, pathAngle: 0, pitch: START_PITCH, pitchRate: 0, bank: 0, rollRate: 0, lever: START_LEVER, spool: START_LEVER },
+    controls: { turn: 0, throttle: 0, pitch: 0, level: false },
     crash: null,
     tuning: DEFAULT_TUNING,
   };

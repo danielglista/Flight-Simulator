@@ -36,16 +36,24 @@ const isEditable = (t: EventTarget | null): boolean => {
 
 const isButton = (t: EventTarget | null): boolean => t instanceof HTMLElement && t.tagName === 'BUTTON';
 
+/** `fine` is true while Shift is held (the heading bug keys step 1 degree instead of 5). */
 export interface KeyActions {
-  readonly KeyP: () => void;
-  readonly KeyC: () => void;
-  readonly Enter: () => void;
-  readonly Backquote: () => void;
+  readonly KeyP: (fine: boolean) => void;
+  readonly KeyC: (fine: boolean) => void;
+  readonly Enter: (fine: boolean) => void;
+  readonly Backquote: (fine: boolean) => void;
+  readonly BracketLeft: (fine: boolean) => void;
+  readonly BracketRight: (fine: boolean) => void;
+  readonly Minus: (fine: boolean) => void;
+  readonly Equal: (fine: boolean) => void;
 }
 
 export type ActionCode = keyof KeyActions;
 
-const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true };
+const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true, BracketLeft: true, BracketRight: true, Minus: true, Equal: true };
+
+/** Actions that repeat while the key is held. */
+const REPEATING: ReadonlySet<string> = new Set(['BracketLeft', 'BracketRight', 'Minus', 'Equal']);
 
 export interface ActionEvent {
   readonly code: string;
@@ -63,15 +71,17 @@ export function actionFor(e: ActionEvent): ActionCode | null {
   if (!Object.hasOwn(ACTION_CODES, e.code)) return null;
   if (e.editable || e.ctrlKey || e.altKey || e.metaKey) return null;
   if (e.code === 'Enter' && e.button) return null;
-  if (e.repeat) return null;
+  if (e.repeat && !REPEATING.has(e.code)) return null;
   return e.code as ActionCode;
 }
 
-/** Window key listeners. P, C and Enter run their action once per press. */
+/** Window key listeners. P, C and Enter run their action once per press; the bracket, minus and equal keys repeat. */
 export function attachKeyboard(actions: KeyActions): Keyboard {
   const keys = createKeyState();
   const down = (e: KeyboardEvent): void => {
     const editable = isEditable(e.target);
+    // Space levels the wings: keep the page from scrolling and a focused button from reacting.
+    if (e.code === 'Space' && !editable && !e.ctrlKey && !e.altKey && !e.metaKey) e.preventDefault();
     if (Object.hasOwn(ACTION_CODES, e.code)) {
       // These keys never steer, whether or not the press ran an action.
       if (!editable && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -84,7 +94,7 @@ export function attachKeyboard(actions: KeyActions): Keyboard {
           editable,
           button: isButton(e.target),
         });
-        if (code) actions[code]();
+        if (code) actions[code](e.shiftKey);
         return;
       }
     }
@@ -97,7 +107,10 @@ export function attachKeyboard(actions: KeyActions): Keyboard {
       editable,
     });
   };
-  const up = (e: KeyboardEvent): void => keys.keyUp({ code: e.code });
+  const up = (e: KeyboardEvent): void => {
+    if (e.code === 'Space' && !isEditable(e.target) && !e.ctrlKey && !e.altKey && !e.metaKey) e.preventDefault();
+    keys.keyUp({ code: e.code });
+  };
   window.addEventListener('keydown', down);
   window.addEventListener('keyup', up);
   return {

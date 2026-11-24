@@ -61,7 +61,7 @@ describe('advance', () => {
   });
   it('full throttle settles at a level speed limit; idle slows to a lower one; more lever is faster', () => {
     const settle = (lever: number): number => {
-      let s = { ...initialState(), controls: { turn: 0 as const, throttle: 0 as const, pitch: 0 as const } };
+      let s = { ...initialState(), controls: { turn: 0 as const, throttle: 0 as const, pitch: 0 as const, level: false } };
       s = { ...s, craft: { ...s.craft, lever, spool: lever } };
       return run(s, 60 * 240, DEEP).craft.speed;
     };
@@ -138,12 +138,12 @@ describe('applyCommands', () => {
 });
 
 describe('interpolate', () => {
-  const a = { x: 0, y: 0, z: 100, heading: 1, speed: 0, pathAngle: 0, pitch: 0, pitchRate: 0, bank: 0, lever: 0, spool: 0 };
-  const b = { x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2, pitch: 0.4, pitchRate: 0.1, bank: 0.6, lever: 1, spool: 0.5 };
+  const a = { x: 0, y: 0, z: 100, heading: 1, speed: 0, pathAngle: 0, pitch: 0, pitchRate: 0, bank: 0, rollRate: 0, lever: 0, spool: 0 };
+  const b = { x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2, pitch: 0.4, pitchRate: 0.1, bank: 0.6, rollRate: 0.2, lever: 1, spool: 0.5 };
   it('ends are exact and midpoint blends', () => {
     expect(interpolate(a, b, 0)).toEqual(a);
     expect(interpolate(a, b, 1)).toEqual(b);
-    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1, pitch: 0.2, pitchRate: 0.05, bank: 0.3, lever: 0.5, spool: 0.25 });
+    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1, pitch: 0.2, pitchRate: 0.05, bank: 0.3, rollRate: 0.1, lever: 0.5, spool: 0.25 });
   });
   it('passes through north, not the long way', () => {
     const d = Math.PI / 180;

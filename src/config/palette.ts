@@ -47,3 +47,15 @@ export const WARN_COLOR = '#ffb020';
 export const STALL_COLOR = '#ff4a3d';
 /** The short line from the plane along its path in the side view. */
 export const PATH_LINE_COLOR = 'rgba(255,255,255,0.45)';
+/** The curved line ahead of the plane in the top view: where the current turn leads. */
+export const TURN_LINE_COLOR = 'rgba(255,211,77,0.75)';
+/** Pale veil over the top view terrain that thickens with altitude. */
+export const HAZE_COLOR: Rgb = [196, 214, 232];
+/** Side view foreground: terrain colors are mixed toward this (C3E). */
+export const FOREGROUND_TINT: Rgb = [24, 34, 48];
+/** Compass ring in the top view, and the heading bug on it. */
+export const RING_COLOR = 'rgba(255,255,255,0.4)';
+export const BUG_COLOR = '#4dd2ff';
+/** Altitude tape: backing panel, and the trend vector (where altitude will be in a few seconds). */
+export const TAPE_BACK_COLOR = 'rgba(0,0,0,0.5)';
+export const TREND_COLOR = '#ffd34d';

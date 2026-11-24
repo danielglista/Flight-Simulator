@@ -34,9 +34,12 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
       case 'throttle':
       case 'pitch': {
         const v = toAxis(c.value);
-        if (v !== null) controls = { ...controls, [c.kind]: v };
+        if (v !== null) controls = { ...controls, [c.kind]: v, ...(c.kind === 'turn' && v !== 0 ? { level: false } : {}) };
         break;
       }
+      case 'level':
+        if (!controls.level) controls = { ...controls, level: true };
+        break;
       case 'place':
         if (!crash && Number.isFinite(c.x) && Number.isFinite(c.y)) {
           const x = clamp(c.x, 0, world.width);
@@ -59,6 +62,7 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
         if (crash) {
           craft = initialState().craft;
           crash = null;
+          if (controls.level) controls = { ...controls, level: false };
         }
         break;
     }
@@ -79,7 +83,14 @@ export function advance(state: SimState, world: SimWorld): SimState {
   const lever = clamp(craft.lever + controls.throttle * (tuning.leverRatePctS / 100) * STEP_S, 0, 1);
   const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-STEP_S / tuning.spoolTauS));
   const sigma0 = densityRatio(craft.z, world.altitudeScale);
-  const bank = stepBank(craft.bank, controls.turn, craft.speed, sigma0, tuning, STEP_S);
+  const roll = stepBank(
+    { bank: craft.bank, rollRate: craft.rollRate, key: controls.turn, level: controls.level, speed: craft.speed, sigma: sigma0 },
+    tuning,
+    STEP_S,
+  );
+  const bank = roll.bank;
+  const rollRate = roll.rollRate;
+  const nextControls = roll.level === controls.level ? controls : { ...controls, level: roll.level };
   // Turn help is fed in as the bank changes, so there is one pitch value and rolling out gives it back.
   const help = turnHelp(bank, craft.speed, sigma0, tuning) - turnHelp(craft.bank, craft.speed, sigma0, tuning);
 
@@ -132,9 +143,10 @@ export function advance(state: SimState, world: SimWorld): SimState {
     return {
       ...state,
       tick,
-      craft: { ...hit, heading, speed: 0, pathAngle, pitch, pitchRate: 0, bank, lever: 0, spool: 0 },
+      craft: { ...hit, heading, speed: 0, pathAngle, pitch, pitchRate: 0, bank, rollRate: 0, lever: 0, spool: 0 },
+      controls: nextControls.level ? { ...nextControls, level: false } : nextControls,
       crash: { tick, speed, pathAngle },
     };
   }
-  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle, pitch, pitchRate, bank, lever, spool } };
+  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle, pitch, pitchRate, bank, rollRate, lever, spool }, controls: nextControls };
 }

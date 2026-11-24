@@ -42,8 +42,11 @@ export const CEILING_NOSE_RATE_DEG = 20;
 export const WARN_MARGIN_DEG = 3;
 export const STALLED_AT = 0.4;
 
-/** C3. Cosine floor in the heading rate, bank limit, self-leveling rate, and cap on turn help (degrees). */
+/** C3. Cosine floor in the heading rate, bank limit, and cap on turn help (degrees). */
 export const COS_FLOOR = 0.2;
 export const BANK_MAX_DEG = 60;
-export const LEVEL_RATE_DEG = 15;
+/** C3B. Roll rate follows the key with this time constant, seconds. */
+export const ROLL_LAG_S = 0.5;
+/** C3B. Wings level asks for this roll rate per radian of bank, per second (capped at the roll rate). */
+export const LEVEL_GAIN = 1.0;
 export const TURN_HELP_CAP_DEG = 4;

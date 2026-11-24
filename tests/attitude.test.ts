@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TUNING } from '../src/config/motion';
 import { stallState } from '../src/sim/flight/aero';
-import { authority, stepPitch, type PitchInput } from '../src/sim/flight/attitude';
+import { authority, stepBank, stepPitch, type BankInput, type PitchInput } from '../src/sim/flight/attitude';
 import { forcesOn } from '../src/sim/flight/forces';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
@@ -122,5 +122,73 @@ describe('stall and recovery', () => {
   });
   it('keeping S held with the engine idle does not recover in 8 s', () => {
     expect(stallState(secs(key(mush(), 1, -1), 8).craft, DEFAULT_TUNING)).not.toBe('none');
+  });
+});
+
+describe('stepBank', () => {
+  const dt = 1 / 60;
+  const start: BankInput = { bank: 0, rollRate: 0, key: 0, level: false, speed: 90, sigma: 1 };
+  const go = (i: BankInput, n: number, tuning = DEFAULT_TUNING, each?: (b: { bank: number; rollRate: number; level: boolean }) => void) => {
+    let b = { bank: i.bank, rollRate: i.rollRate, level: i.level };
+    for (let k = 0; k < n; k++) {
+      b = stepBank({ ...i, ...b }, tuning, dt);
+      each?.(b);
+    }
+    return b;
+  };
+
+  it('a held key never exceeds the roll rate, and ramps rather than jolting', () => {
+    const one = stepBank({ ...start, key: 1 }, DEFAULT_TUNING, dt);
+    expect(one.rollRate).toBeGreaterThan(0);
+    expect(one.rollRate).toBeLessThan(DEFAULT_TUNING.rollRateDegS * DEG * 0.1);
+    go({ ...start, key: 1 }, 600, DEFAULT_TUNING, (b) => expect(b.rollRate).toBeLessThanOrEqual(DEFAULT_TUNING.rollRateDegS * DEG + 1e-12));
+  });
+  it('after release the rate dies away and the bank does not drift back', () => {
+    const rolling = go({ ...start, key: 1 }, 60);
+    const after = go({ ...start, ...rolling }, 600);
+    expect(after.rollRate).toBeCloseTo(0, 6);
+    expect(after.bank).toBeGreaterThanOrEqual(rolling.bank);
+    expect(go({ ...start, ...after }, 600).bank).toBeCloseTo(after.bank, 6);
+  });
+  it('clamps at the bank limit with the rate zeroed', () => {
+    const b = go({ ...start, key: 1 }, 60 * 10);
+    expect(b.bank).toBe(60 * DEG);
+    expect(b.rollRate).toBe(0);
+  });
+  it('a short tap gives a smaller bank than a long one, and the same tap twice gives the same bank', () => {
+    const tap = (n: number) => {
+      const held = go({ ...start, key: 1 }, n);
+      return go({ ...start, ...held }, 600).bank;
+    };
+    expect(tap(9)).toBeLessThan(tap(60));
+    expect(tap(9)).toBeGreaterThan(0);
+    expect(tap(9)).toBe(tap(9));
+  });
+  it('no automatic leveling: 5 deg with no key is still 5 deg after 10 s', () => {
+    expect(go({ ...start, bank: 5 * DEG }, 600).bank).toBe(5 * DEG);
+  });
+  it('wings level reaches exactly 0 from any bank, either side, and never crosses it', () => {
+    for (const deg of [60, 30, 7, 1, -1, -7, -30, -60]) {
+      const sign = Math.sign(deg);
+      let b = { bank: deg * DEG, rollRate: 0, level: true };
+      for (let k = 0; k < 60 * 20 && b.level; k++) {
+        b = stepBank({ ...start, ...b }, DEFAULT_TUNING, dt);
+        expect(b.bank * sign).toBeGreaterThanOrEqual(0);
+      }
+      expect(b.level).toBe(false);
+      expect(b.bank).toBe(0);
+      expect(b.rollRate).toBe(0);
+    }
+  });
+  it('wings level is no faster than the roll rate, and low authority slows it', () => {
+    const fast = go({ ...start, bank: 30 * DEG, level: true }, 60);
+    const slow = go({ ...start, bank: 30 * DEG, level: true, speed: 35 }, 60);
+    expect(30 * DEG - fast.bank).toBeLessThanOrEqual(DEFAULT_TUNING.rollRateDegS * DEG * 1 + 1e-9);
+    expect(slow.bank).toBeGreaterThan(fast.bank);
+  });
+  it('a held key cancels wings level', () => {
+    const b = stepBank({ ...start, bank: 20 * DEG, level: true, key: 1 }, DEFAULT_TUNING, dt);
+    expect(b.level).toBe(false);
+    expect(b.rollRate).toBeGreaterThan(0);
   });
 });

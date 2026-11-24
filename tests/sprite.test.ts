@@ -14,7 +14,18 @@ import {
   WRECK_SIZE,
 } from '../src/config/planeShape';
 import type { Rgb } from '../src/config/palette';
-import { frameAngle, frameIndex, pitchFrameAngle, pitchFrameIndex, rasterize } from '../src/views/sprite';
+import { PLANE_SIZE_TIERS } from '../src/config/display';
+import {
+  frameAngle,
+  frameIndex,
+  pitchFrameAngle,
+  pitchFrameIndex,
+  rasterize,
+  scaleParts,
+  silhouette,
+  tierScale,
+  tierSpriteSize,
+} from '../src/views/sprite';
 
 const DEG = Math.PI / 180;
 
@@ -85,6 +96,58 @@ describe('top sprite', () => {
           expect(d[(py * S + px) * 4 + 3], `edge of frame ${i}`).toBe(0);
         }
       }
+    }
+  });
+});
+
+describe('top sprite size tiers', () => {
+  const tiers = Array.from({ length: PLANE_SIZE_TIERS }, (_, i) => i);
+  const frame = (tier: number, deg = 0) => {
+    const size = tierSpriteSize(tierScale(tier));
+    return { size, data: rasterize(scaleParts(PLANE_TOP, tierScale(tier)), deg * DEG, size) };
+  };
+  it('tier 0 is byte-identical to the base sprite', () => {
+    const t0 = frame(0, 35);
+    expect(t0.size).toBe(TOP_SPRITE_SIZE);
+    expect(Array.from(t0.data)).toEqual(Array.from(rasterize(PLANE_TOP, 35 * DEG, TOP_SPRITE_SIZE)));
+  });
+  it('grows with each tier, to about 1.4 times at the top, always at an odd size', () => {
+    let prev = 0;
+    for (const t of tiers) {
+      const { size } = frame(t);
+      expect(size % 2).toBe(1);
+      expect(size).toBeGreaterThanOrEqual(prev);
+      prev = size;
+    }
+    expect(tierScale(PLANE_SIZE_TIERS - 1)).toBeCloseTo(1.4, 6);
+  });
+  it('keeps the center pixel on the origin and the edge clear at every tier', () => {
+    for (const t of tiers) {
+      const { size, data } = frame(t, 20);
+      const c = (size - 1) / 2;
+      expect(data[(c * size + c) * 4 + 3], `center of tier ${t}`).toBe(255);
+      for (let k = 0; k < size; k++) {
+        for (const [px, py] of [[k, 0], [k, size - 1], [0, k], [size - 1, k]] as const) {
+          expect(data[(py * size + px) * 4 + 3], `edge of tier ${t}`).toBe(0);
+        }
+      }
+    }
+  });
+  it('scaleParts scales points and keeps colors', () => {
+    const [first] = scaleParts(PLANE_TOP, 2);
+    const [orig] = PLANE_TOP;
+    expect(first?.color).toBe(orig?.color);
+    expect(first?.points[1]).toEqual([(orig?.points[1]?.[0] ?? 0) * 2, (orig?.points[1]?.[1] ?? 0) * 2]);
+  });
+  it('silhouette keeps the alpha mask and zeroes the color', () => {
+    const src = rasterize(PLANE_TOP, 0, TOP_SPRITE_SIZE);
+    const s = silhouette(src);
+    expect(s.length).toBe(src.length);
+    for (let i = 0; i < src.length; i += 4) {
+      expect(s[i]).toBe(0);
+      expect(s[i + 1]).toBe(0);
+      expect(s[i + 2]).toBe(0);
+      expect(s[i + 3]).toBe(src[i + 3]);
     }
   });
 });

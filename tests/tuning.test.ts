@@ -63,8 +63,9 @@ describe('tune command', () => {
 describe('tuning in motion', () => {
   it('roll rate and turn multiplier', () => {
     const roll = (rate: number): number => run(applyCommands(initialState(), [tune('rollRateDegS', rate), { kind: 'turn', value: 1 }], W), 30).craft.bank / DEG;
-    expect(roll(60)).toBeCloseTo(30, 6);
-    expect(roll(30)).toBeCloseTo(15, 6);
+    // The roll rate builds through a lag, and authority is full at start speed, so the bank scales with the rate.
+    expect(roll(30)).toBeGreaterThan(5);
+    expect(roll(60) / roll(30)).toBeCloseTo(2, 6);
     const turned = (mult: number): number => {
       const s0 = applyCommands(initialState(), [tune('turnMult', mult), { kind: 'turn', value: 1 }], W);
       const s = run(s0, 120);

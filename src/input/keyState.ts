@@ -27,7 +27,7 @@ const BINDINGS: Readonly<Record<string, { channel: Channel; sign: 1 | -1 }>> = {
 export interface KeyState {
   keyDown(e: KeyEventLike): void;
   keyUp(e: KeyEventLike): void;
-  /** Commands for axes that changed since the last sample. */
+  /** Commands for axes that changed since the last sample, then one `level` if Space was pressed. */
   sample(): Command[];
   /** Forgets held and latched keys. Axes that were non-zero emit 0 on the next sample. */
   clear(): void;
@@ -37,6 +37,8 @@ export function createKeyState(): KeyState {
   const held = new Set<string>();
   const latched = new Set<string>();
   const emitted: Record<Channel, Axis> = { turn: 0, throttle: 0, pitch: 0 };
+  // Space asks for wings level once per press, even for a tap shorter than a sample.
+  let levelAsked = false;
 
   const axis = (channel: Channel): Axis => {
     let sum = 0;
@@ -49,6 +51,10 @@ export function createKeyState(): KeyState {
   return {
     keyDown(e) {
       if (e.repeat || e.editable || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (e.code === 'Space') {
+        levelAsked = true;
+        return;
+      }
       if (!(e.code in BINDINGS)) return;
       held.add(e.code);
       latched.add(e.code);
@@ -68,11 +74,14 @@ export function createKeyState(): KeyState {
         }
       }
       latched.clear();
+      if (levelAsked) out.push({ kind: 'level' });
+      levelAsked = false;
       return out;
     },
     clear() {
       held.clear();
       latched.clear();
+      levelAsked = false;
     },
   };
 }

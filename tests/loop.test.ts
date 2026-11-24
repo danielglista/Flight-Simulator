@@ -69,7 +69,7 @@ describe('loop', () => {
     frames(loop, DT + 0.1, 40);
     expect(loop.state.craft.heading).toBeGreaterThan(h);
   });
-  it('a key held through a pause stops rolling: the bank only levels or holds', () => {
+  it('a key held through a pause stops rolling: the bank settles and holds', () => {
     const { loop, keys } = make();
     let t = frames(loop, 0, 2);
     keys.keyDown({ code: 'KeyD' });
@@ -80,9 +80,11 @@ describe('loop', () => {
     loop.frame(50000);
     t = frames(loop, 50000, 3);
     expect(loop.state.controls.turn).toBe(0);
+    // The roll rate dies away through its lag; after that the bank holds.
+    t = frames(loop, t, 600);
     const b = loop.state.craft.bank;
-    frames(loop, t, 10);
-    expect(loop.state.craft.bank).toBeLessThanOrEqual(b);
+    frames(loop, t, 60);
+    expect(loop.state.craft.bank).toBeCloseTo(b, 7);
   });
 });
 

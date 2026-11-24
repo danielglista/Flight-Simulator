@@ -1,4 +1,4 @@
-import { AUTH_FULL, BANK_MAX_DEG, CL_ALPHA, GRAVITY, LEVEL_RATE_DEG, TURN_HELP_CAP_DEG, WING_AREA, AUTH_MIN, AUTH_ZERO, LOAD_FADE, LOAD_MAX, LOAD_MIN, PITCH_LAG, PITCH_MAX_CMD_DEG } from '../../config/flight';
+import { AUTH_FULL, BANK_MAX_DEG, CL_ALPHA, GRAVITY, LEVEL_GAIN, ROLL_LAG_S, TURN_HELP_CAP_DEG, WING_AREA, AUTH_MIN, AUTH_ZERO, LOAD_FADE, LOAD_MAX, LOAD_MIN, PITCH_LAG, PITCH_MAX_CMD_DEG } from '../../config/flight';
 import type { Tuning } from '../../config/motion';
 import type { Axis } from '../state';
 import { dynamicPressure } from './aero';
@@ -52,18 +52,44 @@ export function stepPitch(i: PitchInput, tuning: Tuning, dt: number): { pitch: n
   return { pitch, pitchRate };
 }
 
+export interface BankInput {
+  readonly bank: number;
+  readonly rollRate: number;
+  readonly key: Axis;
+  /** Wings-level is on: roll toward zero bank and stop there. A held key cancels it. */
+  readonly level: boolean;
+  readonly speed: number;
+  readonly sigma: number;
+}
+
+/** Wings level is done when the bank and the roll rate are both this small (radians, rad/s). */
+const LEVEL_DONE_BANK = 0.2 * DEG;
+const LEVEL_DONE_RATE = 2 * DEG;
+
 /**
- * One step of the bank. A held key rolls at the roll rate (scaled by authority) up to the limit; a released bank
- * stays put, except a small one (under `levelBelowDeg`), which settles to exactly level. A steep bank never rescues itself.
+ * One step of the bank. The keys command a roll rate (scaled by authority) that follows through a lag, so a tap
+ * is a small repeatable change and a hold is a full roll. A released bank stays where it is. Wings level rolls
+ * toward zero at up to the roll rate, easing in, and stops at exactly zero without crossing it. Returns the new
+ * bank, roll rate, and whether wings level is still running.
  */
-export function stepBank(bank: number, key: Axis, speed: number, sigma: number, tuning: Tuning, dt: number): number {
+export function stepBank(i: BankInput, tuning: Tuning, dt: number): { bank: number; rollRate: number; level: boolean } {
   const max = BANK_MAX_DEG * DEG;
-  if (key !== 0) return clamp(bank + key * tuning.rollRateDegS * DEG * authority(speed, sigma) * dt, -max, max);
-  if (Math.abs(bank) < tuning.levelBelowDeg * DEG) {
-    const move = LEVEL_RATE_DEG * DEG * dt;
-    return Math.abs(bank) <= move ? 0 : bank - Math.sign(bank) * move;
+  const r = tuning.rollRateDegS * DEG * authority(i.speed, i.sigma);
+  const level = i.level && i.key === 0;
+  const target = i.key !== 0 ? i.key * r : level ? clamp(-i.bank * LEVEL_GAIN, -r, r) : 0;
+  let rollRate = i.rollRate + (target - i.rollRate) * (1 - Math.exp(-dt / ROLL_LAG_S));
+  let bank = i.bank + rollRate * dt;
+  if (bank > max || bank < -max) {
+    bank = clamp(bank, -max, max);
+    rollRate = 0;
   }
-  return bank;
+  if (level) {
+    const crossed = i.bank !== 0 && Math.sign(bank) !== Math.sign(i.bank);
+    if (crossed || (Math.abs(bank) < LEVEL_DONE_BANK && Math.abs(rollRate) < LEVEL_DONE_RATE)) {
+      return { bank: 0, rollRate: 0, level: false };
+    }
+  }
+  return { bank, rollRate, level };
 }
 
 /**

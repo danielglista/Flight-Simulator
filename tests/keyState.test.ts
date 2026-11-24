@@ -74,3 +74,34 @@ describe('pitch keys', () => {
     expect(k.sample()).toEqual([{ kind: 'pitch', value: 0 }]);
   });
 });
+
+describe('wings-level key', () => {
+  it('Space emits one level command per press, even for a tap shorter than a sample', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'Space' });
+    k.keyUp({ code: 'Space' });
+    expect(k.sample()).toEqual([{ kind: 'level' }]);
+    expect(k.sample()).toEqual([]);
+  });
+  it('held Space does not repeat it, and ignores repeat events, modifiers and text fields', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'Space' });
+    expect(k.sample()).toEqual([{ kind: 'level' }]);
+    k.keyDown({ code: 'Space', repeat: true });
+    expect(k.sample()).toEqual([]);
+    k.keyDown({ code: 'Space', ctrlKey: true });
+    k.keyDown({ code: 'Space', editable: true });
+    expect(k.sample()).toEqual([]);
+  });
+  it('a second press gives a second command, and clear forgets a pending one', () => {
+    const k = createKeyState();
+    k.keyDown({ code: 'Space' });
+    k.sample();
+    k.keyUp({ code: 'Space' });
+    k.keyDown({ code: 'Space' });
+    expect(k.sample()).toEqual([{ kind: 'level' }]);
+    k.keyDown({ code: 'Space' });
+    k.clear();
+    expect(k.sample()).toEqual([]);
+  });
+});

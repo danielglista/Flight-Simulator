@@ -38,3 +38,12 @@ describe('isTextEntry', () => {
     expect(isTextEntry({ tagName: 'DIV', isContentEditable: true })).toBe(true);
   });
 });
+
+describe('heading bug keys', () => {
+  it('[ and ] are actions that repeat while held', () => {
+    expect(actionFor({ code: 'BracketLeft' })).toBe('BracketLeft');
+    expect(actionFor({ code: 'BracketRight', repeat: true })).toBe('BracketRight');
+    expect(actionFor({ code: 'BracketRight', editable: true })).toBeNull();
+    expect(actionFor({ code: 'BracketLeft', ctrlKey: true })).toBeNull();
+  });
+});

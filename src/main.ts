@@ -4,7 +4,7 @@ import { createDebugPanel } from './app/debugPanel';
 import { createFrameStats } from './app/frameStats';
 import { createLoop } from './app/loop';
 import { initPanels } from './app/panels';
-import { DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
+import { ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, BUG_FINE_DEG, BUG_STEP_DEG, DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
 import { attachPause } from './app/pause';
 import { SCALES } from './config/scales';
 import { attachKeyboard } from './input/keyboard';
@@ -20,7 +20,12 @@ import { cameraFor, initialFollow, panned, recentered, zoomed } from './views/fo
 import { clampSideZoom, DEFAULT_SIDE_ZOOM } from './views/sideCamera';
 import { createSideView } from './views/sideView';
 import { stallState } from './sim/flight/aero';
+import { forcesOn } from './sim/flight/forces';
 import { drawReadouts, readoutSentence, readoutText, sameReadout, type ReadoutText } from './views/instruments';
+import { stepBug } from './views/headingBug';
+import { stepAltBug } from './views/altitudeBug';
+import { displayedAltitudeFt } from './sim/units';
+import { initialState } from './sim/state';
 import { createTopView } from './views/topView';
 
 const grid = withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
@@ -41,6 +46,18 @@ let follow = initialFollow(DEFAULT_ZOOM);
 let cursor: Point | null = null;
 let sideZoom = DEFAULT_SIDE_ZOOM;
 let sideCursor: Point | null = null;
+// Heading bug (degrees, clockwise from north): a view setting. It starts at the plane's heading.
+let bugDeg = Math.round((initialState().craft.heading * 180) / Math.PI);
+const moveBug = (sign: -1 | 1, fine: boolean): void => {
+  bugDeg = stepBug(bugDeg, sign * (fine ? BUG_FINE_DEG : BUG_STEP_DEG));
+  if (loop.paused) panels.top.requestDraw();
+};
+// Altitude bug (displayed feet, the same feet as ALT): starts at the plane's altitude to the nearest 100 ft.
+let altBugFt = Math.round(displayedAltitudeFt(initialState().craft.z, SCALES) / 100) * 100;
+const moveAltBug = (sign: -1 | 1, fine: boolean): void => {
+  altBugFt = stepAltBug(altBugFt, sign * (fine ? ALT_BUG_FINE_FT : ALT_BUG_STEP_FT), ALT_BUG_MAX_FT);
+  if (loop.paused) panels.side.requestDraw();
+};
 // Kept here, not read from `panels`, because the first draws run inside initPanels.
 let sideSize = { width: 640, height: 360 };
 let sideSized = false;
@@ -54,6 +71,10 @@ const keyboard = attachKeyboard({
     if (loop.paused) panels.top.requestDraw();
   },
   Enter: () => loop.send({ kind: 'restart' }),
+  BracketLeft: (fine) => moveBug(-1, fine),
+  BracketRight: (fine) => moveBug(1, fine),
+  Minus: (fine) => moveAltBug(-1, fine),
+  Equal: (fine) => moveAltBug(1, fine),
   Backquote: () => {
     debug?.toggle();
     if (debug?.visible) debug.refresh();
@@ -147,14 +168,16 @@ const panels = initPanels({
       {
         craft,
         crashed: loop.state.crash !== null,
+        turnRate: forcesOn(craft, loop.state.tuning, SCALES.altitude).dHeadingDt,
       },
       follow.following,
+      bugDeg,
     );
   },
   side: (ctx, size) => {
     const changed = size.width !== sideSize.width || size.height !== sideSize.height;
     sideSize = { width: size.width, height: size.height };
-    sideView.draw(ctx, sideSize, currentCraft(), sideZoom, sideCursor, loop.state.crash !== null);
+    sideView.draw(ctx, sideSize, currentCraft(), sideZoom, sideCursor, loop.state.crash !== null, altBugFt);
     // The top view marks exactly what this panel shows, so it follows our size.
     // Redraw only on a change, so the two panels cannot trigger each other forever.
     if (changed || !sideSized) {

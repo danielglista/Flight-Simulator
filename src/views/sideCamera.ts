@@ -98,9 +98,10 @@ export interface SliceWindow {
 }
 
 /** Arguments for sliceAlong: one sample per pixel column, covering the whole view. */
-export function sliceWindow(craft: Pick<Craft, 'x' | 'y' | 'heading'>, view: Size, zoom: number): SliceWindow {
-  const mpp = sideMetersPerPixel(zoom);
-  const start = xToDistance(view, zoom, 0);
+export function sliceWindow(craft: Pick<Craft, 'x' | 'y' | 'heading'>, view: Size, zoom: number, k = 1): SliceWindow {
+  // A layer with parallax factor k covers 1/k as many meters per pixel, anchored at the plane's column.
+  const mpp = sideMetersPerPixel(zoom) / k;
+  const start = (0 - planeColumn(view)) * mpp;
   return {
     origin: {
       x: craft.x + Math.sin(craft.heading) * start,
@@ -115,13 +116,9 @@ export function sliceWindow(craft: Pick<Craft, 'x' | 'y' | 'heading'>, view: Siz
 
 /**
  * Terrain beside the flight line is drawn as hazy silhouettes behind the main
- * profile. The viewer is on the right of the heading looking left, so "behind"
- * is to the LEFT. Offsets in world meters, farthest first.
+ * profile (layers: SIDE_LAYERS in config/display.ts). The viewer is on the right
+ * of the heading looking left, so "behind" is to the LEFT.
  */
-export const LAYER_OFFSETS = [1200, 600, 250] as const;
-/** Haze (0 clear, 1 sky) for each layer, same order. */
-export const LAYER_HAZE = [0.7, 0.5, 0.3] as const;
-
 /** A slice window moved sideways to the left of the heading by `offset` meters. */
 export function shiftLeft(w: SliceWindow, offset: number): SliceWindow {
   return {

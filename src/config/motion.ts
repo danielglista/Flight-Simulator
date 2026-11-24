@@ -20,8 +20,6 @@ export interface Tuning {
   readonly turnMult: number;
   /** Banks up to this many degrees get automatic nose-up, so shallow turns hold height. */
   readonly turnHelpDeg: number;
-  /** Banks smaller than this level themselves when no key is held, degrees. */
-  readonly levelBelowDeg: number;
   /** Nose pitch rate with a key held at full authority, degrees per second. */
   readonly pitchRateDegS: number;
   /** Center of the stall in angle of attack, degrees. The lift peak is about 2 deg below it. */
@@ -43,10 +41,9 @@ export interface Tuning {
 }
 
 export const DEFAULT_TUNING: Tuning = {
-  rollRateDegS: 45,
-  turnMult: 2,
+  rollRateDegS: 20,
+  turnMult: 1.5,
   turnHelpDeg: 30,
-  levelBelowDeg: 10,
   pitchRateDegS: 10,
   stallDeg: 16,
   stallDropDegS: 14,
@@ -67,10 +64,9 @@ export interface TuningRange {
 }
 
 export const TUNING_RANGES: Readonly<Record<keyof Tuning, TuningRange>> = {
-  rollRateDegS: { label: 'Roll rate', unit: 'deg/s', min: 10, max: 120, step: 5 },
+  rollRateDegS: { label: 'Roll rate', unit: 'deg/s', min: 5, max: 90, step: 5 },
   turnMult: { label: 'Turn multiplier', unit: 'x', min: 1, max: 4, step: 0.25 },
   turnHelpDeg: { label: 'Turn help', unit: 'deg', min: 0, max: 45, step: 5 },
-  levelBelowDeg: { label: 'Self-level below', unit: 'deg', min: 0, max: 60, step: 5 },
   pitchRateDegS: { label: 'Pitch rate', unit: 'deg/s', min: 4, max: 30, step: 1 },
   stallDeg: { label: 'Stall angle', unit: 'deg', min: 10, max: 20, step: 1 },
   stallDropDegS: { label: 'Stall nose drop', unit: 'deg/s', min: 2, max: 40, step: 1 },

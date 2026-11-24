@@ -19,6 +19,7 @@ export function interpolate(prev: Craft, next: Craft, alpha: number): Craft {
     pitch: prev.pitch + (next.pitch - prev.pitch) * a,
     pitchRate: prev.pitchRate + (next.pitchRate - prev.pitchRate) * a,
     bank: prev.bank + (next.bank - prev.bank) * a,
+    rollRate: prev.rollRate + (next.rollRate - prev.rollRate) * a,
     lever: prev.lever + (next.lever - prev.lever) * a,
     spool: prev.spool + (next.spool - prev.spool) * a,
   };

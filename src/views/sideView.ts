@@ -1,7 +1,7 @@
-import type { Size } from '../config/display';
-import { PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TERRAIN_COLORS, waterColor, type Rgb } from '../config/palette';
+import { ALT_TAPE_MAX_HEIGHT_PX, ALT_TAPE_PX_PER_FT, ALT_TAPE_WIDTH_PX, ALT_TREND_S, FOREGROUND_ALPHA, FOREGROUND_DARKEN, FOREGROUND_MAX_RISE_PX, GHOST_ALPHA, SIDE_FOREGROUND, SIDE_FX, SIDE_LAYERS, SLOPE_SHADE_BODY, type SideLayer, type Size } from '../config/display';
+import { BUG_COLOR, FOREGROUND_TINT, PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TAPE_BACK_COLOR, TERRAIN_COLORS, TREND_COLOR, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
-import { sliceAlong } from '../sim/world/slice';
+import { sliceAlong, type Slice } from '../sim/world/slice';
 import { Terrain } from '../sim/world/terrain';
 import { SNOW_LINE_M } from '../sim/world/testMap'; // temporary, until the map carries its own snow line
 import { runwaySpan } from '../sim/world/airport';
@@ -11,15 +11,16 @@ import { createPlaneSprites } from './sprite';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
 import { formatHeading } from './format';
+import { bugWorldZ, climbNeededFt, formatClimb, interceptDistance, tapeY } from './altitudeBug';
+import { displayedAltitudeFt } from '../sim/units';
 import {
   baseHeight,
   exaggeration,
   heightToY,
   planeRow,
   planeColumn,
+  seaRow,
   sideMetersPerPixel,
-  LAYER_HAZE,
-  LAYER_OFFSETS,
   PATH_LINE_PX,
   pathLineOffset,
   shiftLeft,
@@ -31,13 +32,14 @@ import {
   xToDistance,
 } from './sideCamera';
 import type { Point } from './camera';
+import { envelope, laneOffsets, slopeShade } from './sideLayers';
 
 // Colors repeat from column to column, so cache the strings by their packed value.
 const rgbCache = new Map<number, string>();
 const rgb = (c: Rgb, k = 1): string => {
-  const r = Math.round(c[0] * k);
-  const g = Math.round(c[1] * k);
-  const b = Math.round(c[2] * k);
+  const r = Math.min(255, Math.round(c[0] * k));
+  const g = Math.min(255, Math.round(c[1] * k));
+  const b = Math.min(255, Math.round(c[2] * k));
   const key = (r << 16) | (g << 8) | b;
   let s = rgbCache.get(key);
   if (s === undefined) {
@@ -56,6 +58,8 @@ export interface SideView {
     zoom: number,
     cursor: Point | null,
     crashed: boolean,
+    /** Altitude bug, displayed feet. */
+    altBugFt: number,
   ): void;
   /** Builds every sprite frame now, so none is built mid-flight. */
   warm(): void;
@@ -108,18 +112,37 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     ctx: CanvasRenderingContext2D,
     view: Size,
     zoom: number,
-    w: SliceWindow,
+    slice: Slice,
     haze: number,
     base: number,
+    darken = 0,
+    maxRisePx = Infinity,
   ) {
-    const slice = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
-    const yOf = (h: number): number => Math.min(Math.round(heightToY(view, zoom, h, base)), view.height);
+    // Haze toward the sky, then (foreground only) darkening toward the foreground tint.
+    const tone = (c: Rgb): Rgb => {
+      const h = mix(c, HAZE_COLOR, haze);
+      return darken > 0 ? mix(h, FOREGROUND_TINT, darken) : h;
+    };
+    const topLimit = seaRow(view) - maxRisePx; // a finite cap flattens tall peaks into a ridge
+    const yOf = (h: number): number =>
+      Math.min(Math.max(Math.round(heightToY(view, zoom, h, base)), topLimit), view.height);
+    // Screen row of the surface (water surface when wet) per column, for the slope shading.
+    const tops = new Int32Array(view.width);
+    for (let x = 0; x < view.width; x++) {
+      const bed = slice.groundWorldM[x] as number;
+      const level = slice.waterWorldM[x] as number;
+      tops[x] = level > bed ? yOf(level) : yOf(bed);
+    }
     for (let x = 0; x < view.width; x++) {
       const code = slice.surface[x] as number;
       const bed = slice.groundWorldM[x] as number;
       const level = slice.waterWorldM[x] as number;
       const wet = level > bed; // false for NaN (dry)
-      const yTop = wet ? yOf(level) : yOf(bed);
+      const yTop = tops[x] as number;
+      const prev = tops[Math.max(0, x - 1)] as number;
+      const next = tops[Math.min(view.width - 1, x + 1)] as number;
+      const shade = SIDE_FX.slopeShade ? slopeShade(prev, next) : 1;
+      const shadeBody = SIDE_FX.slopeShade ? slopeShade(prev, next, SLOPE_SHADE_BODY) : 1;
       // Water depth is drawn larger than true (the surface itself is exact), so
       // rivers and lakes can be seen at this altitude scale.
       const yBed = wet
@@ -130,29 +153,29 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
         : yTop;
       if (wet) {
         const depthReal = (level - bed) * scale.altitude;
-        ctx.fillStyle = rgb(mix(waterColor(depthReal), HAZE_COLOR, haze));
+        ctx.fillStyle = rgb(tone(waterColor(depthReal)));
         ctx.fillRect(x, yTop, 1, view.height - yTop);
         // Bright line at the surface, so water reads against the sky.
-        ctx.fillStyle = rgb(mix([225, 245, 250], HAZE_COLOR, haze));
+        ctx.fillStyle = rgb(tone([225, 245, 250]));
         ctx.fillRect(x, yTop, 1, Math.min(1, view.height - yTop));
       }
       const top = (TERRAIN_COLORS[code] ?? SEA_COLOR) as Rgb;
       const skin = 4;
-      ctx.fillStyle = rgb(mix(top, HAZE_COLOR, haze), wet ? 0.7 : 1);
+      ctx.fillStyle = rgb(tone(top), wet ? 0.7 : shade);
       ctx.fillRect(x, yBed, 1, skin);
       let bodyTop = yBed + skin;
       if (code === Terrain.snow && !wet) {
         // Snow lies down to the snow line, so a peak is a solid white triangle.
         const lineY = Math.min(Math.round(heightToY(view, zoom, snowLineWorld, base)), view.height);
         if (lineY > bodyTop) {
-          ctx.fillStyle = rgb(mix(top, HAZE_COLOR, haze), 0.93);
+          ctx.fillStyle = rgb(tone(top), 0.93 * shade);
           ctx.fillRect(x, bodyTop, 1, lineY - bodyTop);
           bodyTop = lineY;
         }
       }
-      ctx.fillStyle = rgb(mix(bodyColor(bed), HAZE_COLOR, haze));
+      ctx.fillStyle = rgb(tone(bodyColor(bed)), shadeBody);
       ctx.fillRect(x, bodyTop, 1, Math.max(0, view.height - bodyTop));
-      if (code === Terrain.runway && haze === 0) {
+      if (code === Terrain.runway && haze === 0 && darken === 0) {
         // Runways are thin: a white line on top so they stand out from other pavement.
         ctx.fillStyle = '#fff';
         ctx.fillRect(x, yBed, 1, 1);
@@ -161,12 +184,59 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     return slice;
   }
 
+  function layerSlice(craft: Craft, view: Size, zoom: number, layer: SideLayer): Slice {
+    const w = sliceWindow(craft, view, zoom, SIDE_FX.parallax ? layer.k : 1);
+    const lanes = SIDE_FX.laneBands ? layer : { ...layer, lanes: 1 };
+    const slices = laneOffsets(lanes).map((offset) => {
+      const s = shiftLeft(w, offset);
+      return sliceAlong(grid, scale, s.origin, s.heading, s.length, s.samples);
+    });
+    return envelope(slices);
+  }
+
+  let fgCanvas: HTMLCanvasElement | null = null;
+
+  /**
+   * The foreground profile, drawn dark on an offscreen canvas and laid over the scene at FOREGROUND_ALPHA
+   * (one blend for the whole layer, so water and skin do not double up). Returns the screen row of its top
+   * per column, or null when it is off.
+   */
+  function drawForeground(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number): Float32Array | null {
+    if (!SIDE_FX.foreground) return null;
+    if (!fgCanvas) fgCanvas = document.createElement('canvas');
+    if (fgCanvas.width !== view.width || fgCanvas.height !== view.height) {
+      fgCanvas.width = view.width;
+      fgCanvas.height = view.height;
+    }
+    const off = fgCanvas.getContext('2d');
+    if (!off) return null;
+    off.clearRect(0, 0, view.width, view.height);
+    const slice = layerSlice(craft, view, zoom, SIDE_FOREGROUND);
+    drawProfile(off, view, zoom, slice, 0, base, FOREGROUND_DARKEN, FOREGROUND_MAX_RISE_PX);
+    ctx.globalAlpha = FOREGROUND_ALPHA;
+    ctx.drawImage(fgCanvas, 0, 0);
+    ctx.globalAlpha = 1;
+    const tops = new Float32Array(view.width);
+    for (let x = 0; x < view.width; x++) tops[x] = heightToY(view, zoom, slice.heightWorldM[x] as number, base);
+    return tops;
+  }
+
+  /** True when the foreground rises over the plane sprite or its path line, so the ghost is needed. */
+  function foregroundCoversPlane(view: Size, craft: Craft, zoom: number, tops: Float32Array): boolean {
+    const pc = planeColumn(view);
+    const y = planeRow(view, zoom, craft.z) + 6; // sprite half-height, about
+    for (let x = Math.max(0, pc - 24); x <= Math.min(view.width - 1, pc + 24 + PATH_LINE_PX); x++) {
+      if ((tops[x] as number) <= y) return true;
+    }
+    return false;
+  }
+
   function drawGround(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number) {
+    for (const layer of SIDE_LAYERS) drawProfile(ctx, view, zoom, layerSlice(craft, view, zoom, layer), layer.haze, base);
     const w = sliceWindow(craft, view, zoom);
-    LAYER_OFFSETS.forEach((offset, i) =>
-      drawProfile(ctx, view, zoom, shiftLeft(w, offset), LAYER_HAZE[i] as number, base),
-    );
-    return drawProfile(ctx, view, zoom, w, 0, base);
+    const main = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
+    drawProfile(ctx, view, zoom, main, 0, base);
+    return main;
   }
 
   /** Posts at both ends of each runway the slice crosses, and its name. Independent of the sampling. */
@@ -261,6 +331,86 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     }
   }
 
+  /**
+   * Altitude bug: a dashed line across the view at the target height, a tick where the current path reaches it,
+   * and a magnified altitude tape on the right (precision the main scale cannot show), with a trend vector.
+   */
+  function drawAltBug(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, bugFt: number): void {
+    const altFt = displayedAltitudeFt(craft.z, scale);
+    const need = climbNeededFt(altFt, bugFt);
+    const bugZ = bugWorldZ(bugFt, scale);
+    const tapeLeft = view.width - ALT_TAPE_WIDTH_PX - 6;
+
+    // Line across the main view, and where the path line reaches it.
+    const ly = Math.round(heightToY(view, zoom, bugZ, base)) + 0.5;
+    const onScreen = ly >= 0 && ly <= view.height - 16;
+    if (onScreen) {
+      ctx.strokeStyle = BUG_COLOR;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.8;
+      ctx.setLineDash([8, 5]);
+      ctx.beginPath();
+      ctx.moveTo(0, ly);
+      ctx.lineTo(tapeLeft - 4, ly);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = 1;
+      const d = interceptDistance(craft.z, bugZ, craft.pathAngle);
+      if (d !== null) {
+        const x = Math.round(planeColumn(view) + d / sideMetersPerPixel(zoom)) + 0.5;
+        if (x < tapeLeft - 4) {
+          ctx.strokeStyle = BUG_COLOR;
+          ctx.beginPath();
+          ctx.moveTo(x, ly - 7);
+          ctx.lineTo(x, ly + 7);
+          ctx.stroke();
+        }
+      }
+    }
+    const arrow = onScreen ? '' : ly < 0 ? '^ ' : 'v ';
+    const labelY = onScreen ? ly - 4 : ly < 0 ? 30 : view.height - 22;
+    drawText(ctx, `${arrow}ALT BUG ${bugFt} ft`, tapeLeft - 8, labelY, 'right');
+
+    // The tape: current altitude at the middle, 10 ft per 4 px.
+    const top = 40;
+    const h = Math.max(80, Math.min(ALT_TAPE_MAX_HEIGHT_PX, view.height - 16 - top - 18));
+    const cy = top + h / 2;
+    const half = h / 2;
+    ctx.fillStyle = TAPE_BACK_COLOR;
+    ctx.fillRect(tapeLeft, top, ALT_TAPE_WIDTH_PX, h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(tapeLeft, top, ALT_TAPE_WIDTH_PX, h);
+    ctx.clip();
+    const spanFt = half / ALT_TAPE_PX_PER_FT;
+    ctx.fillStyle = '#fff';
+    for (let ft = Math.ceil((altFt - spanFt) / 10) * 10; ft <= altFt + spanFt; ft += 10) {
+      const y = Math.round(cy - (ft - altFt) * ALT_TAPE_PX_PER_FT);
+      const major = ft % 100 === 0;
+      const len = major ? 12 : ft % 50 === 0 ? 8 : 4;
+      ctx.fillRect(tapeLeft + ALT_TAPE_WIDTH_PX - len, y, len, 1);
+      if (major) drawText(ctx, String(ft), tapeLeft + 4, y + 4);
+    }
+    // Trend: where altitude will be in ALT_TREND_S at the current climb rate.
+    const trendFt = displayedAltitudeFt(craft.speed * Math.sin(craft.pathAngle) * ALT_TREND_S, scale);
+    const ty = tapeY(altFt + trendFt, altFt, cy, ALT_TAPE_PX_PER_FT, half);
+    ctx.fillStyle = TREND_COLOR;
+    ctx.fillRect(tapeLeft + ALT_TAPE_WIDTH_PX - 3, Math.min(cy, ty), 3, Math.abs(ty - cy) + 1);
+    // Bug marker: a bar across the tape, clamped to the edge when far off.
+    const by = Math.round(tapeY(bugFt, altFt, cy, ALT_TAPE_PX_PER_FT, half));
+    ctx.fillStyle = BUG_COLOR;
+    ctx.fillRect(tapeLeft, by - 1, ALT_TAPE_WIDTH_PX, 3);
+    ctx.restore();
+    // Current altitude: a pointer at the middle, from the left.
+    ctx.fillStyle = TREND_COLOR;
+    ctx.beginPath();
+    ctx.moveTo(tapeLeft - 7, cy - 5);
+    ctx.lineTo(tapeLeft, cy);
+    ctx.lineTo(tapeLeft - 7, cy + 5);
+    ctx.fill();
+    drawText(ctx, `${formatClimb(need)}`, tapeLeft + ALT_TAPE_WIDTH_PX / 2, top + h + 14, 'center');
+  }
+
   function drawLabels(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number): void {
     drawText(ctx, `HDG ${formatHeading(craft.heading)}`, planeColumn(view) + 10, 16);
     const ex = exaggeration(zoom);
@@ -299,7 +449,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   }
 
   return {
-    draw(ctx, view, craft, zoom, cursor, crashed) {
+    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt) {
       const base = baseHeight(view, zoom, craft.z);
       drawSky(ctx, view);
       const slice = drawGround(ctx, view, craft, zoom, base);
@@ -307,6 +457,14 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       drawScale(ctx, view, zoom, base);
       drawPlumb(ctx, view, craft, zoom, slice.heightWorldM[planeColumn(view)] as number, base);
       drawPlane(ctx, view, craft, zoom, crashed);
+      const fgTops = drawForeground(ctx, view, craft, zoom, base);
+      if (fgTops && foregroundCoversPlane(view, craft, zoom, fgTops)) {
+        // The plane is never lost behind a ridge: a faint copy goes over the foreground.
+        ctx.globalAlpha = GHOST_ALPHA;
+        drawPlane(ctx, view, craft, zoom, crashed);
+        ctx.globalAlpha = 1;
+      }
+      if (!crashed) drawAltBug(ctx, view, craft, zoom, base, altBugFt);
       drawLabels(ctx, view, craft, zoom);
       drawReadout(ctx, view, slice, sliceWindow(craft, view, zoom), zoom, cursor);
     },
