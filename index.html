@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flight Simulator</title>
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main id="app">
+      <section class="panel" id="panel-top" aria-label="Top view">
+        <canvas role="img" aria-label="Top-down map view"></canvas>
+      </section>
+      <section class="panel" id="panel-side" aria-label="Side view">
+        <canvas role="img" aria-label="Side view of terrain ahead"></canvas>
+      </section>
+      <section class="panel" id="panel-instruments" aria-label="Instruments">
+        <canvas role="img" aria-label="Cockpit instruments"></canvas>
+      </section>
+      <section class="panel terminal" id="panel-terminal" aria-label="Comms terminal">
+        <header class="terminal-header">COMMS TERMINAL</header>
+        <div class="terminal-log" role="log" aria-live="polite">
+          <p><span class="who">TWR</span> Terminal offline. Radio comes in a later milestone.</p>
+          <p><span class="who">COPILOT</span> Standing by.</p>
+        </div>
+        <label class="terminal-input">
+          <span class="prompt" aria-hidden="true">&gt;</span>
+          <input type="text" disabled placeholder="input disabled" aria-label="Terminal input (not yet active)" />
+        </label>
+      </section>
+    </main>
+  </body>
+</html>
