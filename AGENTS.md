@@ -28,6 +28,7 @@ A 2D browser flight simulator: top view + side view of one plane, real geography
 
 - Work proceeds in small steps named by milestone (A1, B1, B2, ...). Each step has a plan in `docs/<ID>_PLAN.md` (scope in/out, behavior, files, steps, verification, decisions, risks, "done when", results). Read the current plan before changing code for that step, and keep its Status and Results sections accurate.
 - **All numbers in docs and code are provisional.** When a value changes, update the doc that states it. If code and a plan disagree, say so rather than silently picking one.
+- Older plans are history: skip them. `docs/CURRENT.md` describes present behavior; update it in the same change that alters behavior, and fix it if you find it wrong.
 - Don't add features from later milestones; the plans' "Out" tables say where things belong.
 - **Do not commit or push unless asked.** When asked, commit message format is `<ID>: short summary` (e.g. `B1: fixed-step loop, keyboard input and pause`).
 
@@ -41,6 +42,7 @@ Start the `dev` server and look at it in the browser pane; type checks and tests
 |---|---|
 | What the game is, pillars, scope | `docs/GAME_DESIGN.md` |
 | Tech choices, layout, sim loop, units, milestones, open decisions | `docs/ARCHITECTURE.md` |
-| What the current/last step does and how it was verified | `docs/B3_PLAN.md` (latest) |
+| What the game does right now and which file owns each behavior | `docs/CURRENT.md` (read this first) |
+| The step being built, and how the last one was verified | the latest `docs/<ID>_PLAN.md` |
 | Tuning (speeds, turn rates, climb angle) | `src/config/motion.ts` |
 | Map, airports, terrain | `src/sim/world/` |
