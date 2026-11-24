@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createLoop } from '../src/app/loop';
 import { createKeyState } from '../src/input/keyState';
 
-const B = { width: 5120, height: 5120, heightAt: () => 0 };
+const B = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
 const DT = 1000 / 60;
 
 function make() {

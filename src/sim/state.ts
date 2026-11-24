@@ -1,4 +1,4 @@
-import { DEFAULT_TUNING, START_HEADING, START_SPEED, START_X, START_Y, START_Z, type Tuning } from '../config/motion';
+import { DEFAULT_TUNING, START_HEADING, START_LEVER, START_SPEED, START_X, START_Y, START_Z, type Tuning } from '../config/motion';
 
 export type Axis = -1 | 0 | 1;
 
@@ -14,6 +14,10 @@ export interface Craft {
   readonly speed: number;
   /** Radians, positive = climbing. B3: the nose points along it. */
   readonly pathAngle: number;
+  /** Throttle lever, 0..1. Stays where the keys leave it. */
+  readonly lever: number;
+  /** Engine output, 0..1; follows the lever with a lag. */
+  readonly spool: number;
 }
 
 export interface Controls {
@@ -42,7 +46,7 @@ export interface SimState {
 export function initialState(): SimState {
   return {
     tick: 0,
-    craft: { x: START_X, y: START_Y, z: START_Z, heading: START_HEADING, speed: START_SPEED, pathAngle: 0 },
+    craft: { x: START_X, y: START_Y, z: START_Z, heading: START_HEADING, speed: START_SPEED, pathAngle: 0, lever: START_LEVER, spool: START_LEVER },
     controls: { turn: 0, throttle: 0, pitch: 0 },
     crash: null,
     tuning: DEFAULT_TUNING,

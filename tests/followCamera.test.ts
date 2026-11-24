@@ -6,7 +6,7 @@ import { edgeArrow } from '../src/views/edgeArrow';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from '../src/views/followCamera';
 import { distanceToX, planeColumn, sideMetersPerPixel, sliceWindow, SIDE_ZOOM_LEVELS, xToDistance } from '../src/views/sideCamera';
 
-const bounds = { width: 5120, height: 5120, heightAt: () => 0 };
+const bounds = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
 const craft = { x: 1234.5, y: 3456.7 };
 const sizes = [
   { width: 640, height: 360 },

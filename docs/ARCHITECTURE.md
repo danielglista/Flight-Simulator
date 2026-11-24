@@ -431,4 +431,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4 and B1 to B4 are built (see [B4_PLAN.md](B4_PLAN.md) §13). Next: C1, thrust, drag and weight.
+A1 to A4, B1 to B4 and C1 are built (see [C1_PLAN.md](C1_PLAN.md) §13). Next: C2, lift, angle of attack and stall. C1's `Cl` is the lift the commanded path would need, and `sagLimit` is a placeholder; C2 replaces both.

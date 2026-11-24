@@ -38,7 +38,7 @@ describe('formats', () => {
 
 describe('readoutText', () => {
   it('start state', () => {
-    expect(readoutText(initialState().craft, SCALES)).toEqual({ spd: '117', alt: '3,280', hdg: '045', vs: '0' });
+    expect(readoutText(initialState().craft, SCALES)).toEqual({ spd: '175', alt: '3,280', hdg: '045', vs: '0', thr: '32', eng: '32' });
   });
   it('a change too small to show gives the same text', () => {
     const c = initialState().craft;

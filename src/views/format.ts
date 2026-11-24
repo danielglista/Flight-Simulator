@@ -32,3 +32,8 @@ export function formatVerticalSpeed(fpm: number): string {
   if (r === 0) return '0';
   return (r < 0 ? '-' : '+') + withCommas(r);
 }
+
+/** A 0..1 fraction as a whole percent. */
+export function formatPercent(f: number): string {
+  return String(roundTo(f * 100, 1));
+}

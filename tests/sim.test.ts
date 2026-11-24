@@ -4,7 +4,7 @@ import { wrapHeading } from '../src/sim/angles';
 import type { Command } from '../src/sim/commands';
 import { interpolate } from '../src/sim/interpolate';
 import { initialState, type SimState } from '../src/sim/state';
-import { CEILING_Z, PLACE_CLEARANCE, START_Z } from '../src/config/motion';
+import { DEFAULT_TUNING, CEILING_Z, PLACE_CLEARANCE, START_X, START_Y, START_Z } from '../src/config/motion';
 import { SCALES } from '../src/config/scales';
 import { groundAt, heightAt, surfaceAt, waterLevelAt, worldHeight, worldWidth } from '../src/sim/world/grid';
 import { withAirports } from '../src/sim/world/placeAirports';
@@ -15,20 +15,24 @@ import { Terrain } from '../src/sim/world/terrain';
 const realGrid = () => withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
-const B: SimWorld = { width: 5120, height: 5120, heightAt: () => 0 };
-const at = (heading: number, speed = 60, x = 2560, y = 2560): SimState => {
+const B: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
+/** No engine and no drag: only weight changes speed, so geometry tests stay exact in level flight. */
+const FREE = { ...DEFAULT_TUNING, thrustMaxKn: 0, cd0Counts: 0, inducedCounts: 0 };
+const at = (heading: number, speed = 90, x = 2560, y = 2560): SimState => {
   const s = initialState();
-  return { ...s, craft: { x, y, z: s.craft.z, heading, speed, pathAngle: 0 } };
+  return { ...s, tuning: FREE, craft: { x, y, z: s.craft.z, heading, speed, pathAngle: 0, lever: 0, spool: 0 } };
 };
-const run = (s: SimState, n: number): SimState => {
-  for (let i = 0; i < n; i++) s = advance(s, B);
+/** Ground far below, so long runs never crash. */
+const DEEP: SimWorld = { ...B, heightAt: () => -1e9 };
+const run = (s: SimState, n: number, w: SimWorld = B): SimState => {
+  for (let i = 0; i < n; i++) s = advance(s, w);
   return s;
 };
 
 describe('advance', () => {
-  it('moves 60 m in 60 steps at 60 m/s', () => {
+  it('moves 90 m in 60 steps at 90 m/s', () => {
     const s = run(at(0), 60);
-    expect(s.craft.y).toBeCloseTo(2620, 6);
+    expect(s.craft.y).toBeCloseTo(2650, 6);
     expect(s.tick).toBe(60);
   });
   it('moves north, east, south, west', () => {
@@ -36,10 +40,10 @@ describe('advance', () => {
       const c = run(at(h), 60).craft;
       return [Math.round(c.x - 2560), Math.round(c.y - 2560)];
     };
-    expect(d(0)).toEqual([0, 60]);
-    expect(d(Math.PI / 2)).toEqual([60, 0]);
-    expect(d(Math.PI)).toEqual([0, -60]);
-    expect(d((3 * Math.PI) / 2)).toEqual([-60, 0]);
+    expect(d(0)).toEqual([0, 90]);
+    expect(d(Math.PI / 2)).toEqual([90, 0]);
+    expect(d(Math.PI)).toEqual([0, -90]);
+    expect(d((3 * Math.PI) / 2)).toEqual([-90, 0]);
   });
   it('D increases heading and 12 s of turn returns to start', () => {
     let s = applyCommands(at(1), [{ kind: 'turn', value: 1 }], B);
@@ -48,13 +52,23 @@ describe('advance', () => {
     s = run(s, 719);
     expect(s.craft.heading).toBeCloseTo(1, 6);
   });
-  it('limits speed at both ends', () => {
-    let s = applyCommands(at(0), [{ kind: 'throttle', value: 1 }], B);
-    s = run(s, 600);
-    expect(s.craft.speed).toBe(150);
-    s = applyCommands(s, [{ kind: 'throttle', value: -1 }], B);
-    s = run(s, 600);
-    expect(s.craft.speed).toBe(0);
+  it('full throttle settles at a level speed limit; idle slows to a lower one; more lever is faster', () => {
+    const settle = (lever: number): number => {
+      let s = { ...initialState(), controls: { turn: 0 as const, throttle: 0 as const, pitch: 0 as const } };
+      s = { ...s, craft: { ...s.craft, lever, spool: lever } };
+      return run(s, 60 * 240, DEEP).craft.speed;
+    };
+    const full = settle(1);
+    const half = settle(0.5);
+    const idle = settle(0);
+    expect(full).toBeGreaterThan(half);
+    expect(half).toBeGreaterThan(idle);
+    expect(full).toBeLessThan(300);
+    expect(idle).toBeGreaterThanOrEqual(20);
+    // Settled: the last second changes almost nothing.
+    const s = { ...initialState() };
+    const a = run({ ...s, craft: { ...s.craft, lever: 1, spool: 1 } }, 60 * 240, DEEP);
+    expect(Math.abs(run(a, 60, DEEP).craft.speed - a.craft.speed)).toBeLessThan(0.05);
   });
   it('clamps at each edge and corner', () => {
     expect(run(at(0, 150, 100, 5119), 60).craft.y).toBe(5120);
@@ -117,12 +131,12 @@ describe('applyCommands', () => {
 });
 
 describe('interpolate', () => {
-  const a = { x: 0, y: 0, z: 100, heading: 1, speed: 0, pathAngle: 0 };
-  const b = { x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2 };
+  const a = { x: 0, y: 0, z: 100, heading: 1, speed: 0, pathAngle: 0, lever: 0, spool: 0 };
+  const b = { x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2, lever: 1, spool: 0.5 };
   it('ends are exact and midpoint blends', () => {
     expect(interpolate(a, b, 0)).toEqual(a);
     expect(interpolate(a, b, 1)).toEqual(b);
-    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1 });
+    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1, lever: 0.5, spool: 0.25 });
   });
   it('passes through north, not the long way', () => {
     const d = Math.PI / 180;
@@ -154,19 +168,33 @@ describe('climb', () => {
   it('60 steps at full climb rise 60 x sin 15 and advance 60 x cos 15', () => {
     const settled = run(hold(at(0), 1), 60);
     expect(settled.craft.pathAngle).toBe(15 * DEG);
-    const s = run(settled, 60);
-    expect(s.craft.z - settled.craft.z).toBeCloseTo(60 * Math.sin(15 * DEG), 9);
-    expect(s.craft.y - settled.craft.y).toBeCloseTo(60 * Math.cos(15 * DEG), 9);
+    let s = settled;
+    let rise = 0;
+    let along = 0;
+    for (let i = 0; i < 60; i++) {
+      const n = advance(s, B);
+      const avg = (s.craft.speed + n.craft.speed) / 2;
+      rise += (avg * Math.sin(15 * DEG)) / 60;
+      along += (avg * Math.cos(15 * DEG)) / 60;
+      s = n;
+    }
+    expect(s.craft.z - settled.craft.z).toBeCloseTo(rise, 9);
+    expect(s.craft.y - settled.craft.y).toBeCloseTo(along, 9);
   });
   it('level flight keeps z exactly', () => {
     expect(run(at(0.3), 1000).craft.z).toBe(START_Z);
   });
-  it('climbing does not change speed, and speed 0 does not climb', () => {
-    expect(run(hold(at(0), 1), 300).craft.speed).toBe(60);
-    expect(run(hold(at(0, 0), 1), 300).craft.z).toBe(START_Z);
+  it('trade: climbing costs speed and descending gains it', () => {
+    const start = at(0);
+    const up = run(hold(start, 1), 240).craft;
+    const down = run(hold(start, -1), 240).craft;
+    expect(up.speed).toBeLessThan(90);
+    expect(up.z).toBeGreaterThan(START_Z);
+    expect(down.speed).toBeGreaterThan(90);
+    expect(down.z).toBeLessThan(START_Z);
   });
   it('stops at the ceiling with the angle at 0, and can descend from it', () => {
-    let s = run(hold(at(0, 150), 1), 2000);
+    let s = run(hold(at(0, 250), 1), 2000);
     expect(s.craft.z).toBe(CEILING_Z);
     expect(s.craft.pathAngle).toBe(0);
     for (let i = 0; i < 2000; i++) {
@@ -308,6 +336,7 @@ describe('real map', () => {
     width: worldWidth(grid),
     height: worldHeight(grid),
     heightAt: (x, y) => heightAt(grid, SCALES, x, y),
+    altitudeScale: SCALES.altitude,
   };
   const fly = (s: SimState, n: number): SimState => {
     for (let i = 0; i < n; i++) s = advance(s, world);
@@ -318,7 +347,7 @@ describe('real map', () => {
     for (let y = 0; y < grid.rows; y++)
       for (let x = 0; x < grid.cols; x++)
         top = Math.max(top, heightAt(grid, SCALES, (x + 0.5) * grid.cellSize, (y + 0.5) * grid.cellSize));
-    expect(START_Z).toBeGreaterThan(world.heightAt(2560, 2560));
+    expect(START_Z).toBeGreaterThan(world.heightAt(START_X, START_Y));
     expect(START_Z).toBeLessThan(top);
     expect(CEILING_Z).toBeGreaterThan(top);
   });

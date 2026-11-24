@@ -27,6 +27,7 @@ const world: SimWorld = {
   width: worldWidth(grid),
   height: worldHeight(grid),
   heightAt: (x, y) => heightAt(grid, SCALES, x, y),
+  altitudeScale: SCALES.altitude,
 };
 const bounds = world;
 const crashBanner = attachCrashBanner(grid, SCALES);

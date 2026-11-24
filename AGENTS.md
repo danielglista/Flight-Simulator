@@ -1,6 +1,6 @@
 # Flight Simulator
 
-A 2D browser flight simulator: top view + side view of one plane, real geography, ATC radio as gameplay. TypeScript (strict), Vite, Canvas 2D, Vitest. No UI framework, few dependencies. Phase B ("Move a plane") is built; next is phase C (flight model); see `docs/ARCHITECTURE.md` §14.
+A 2D browser flight simulator: top view + side view of one plane, real geography, ATC radio as gameplay. TypeScript (strict), Vite, Canvas 2D, Vitest. No UI framework, few dependencies. Phase B ("Move a plane") and C1 (thrust, drag, weight) are built; next is C2 (lift and stall); see `docs/ARCHITECTURE.md` §14.
 
 ## Commands (run from repo root; Windows/PowerShell)
 

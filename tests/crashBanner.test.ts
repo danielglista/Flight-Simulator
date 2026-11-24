@@ -10,7 +10,7 @@ import { buildTestMap, TEST_MAP_LANDMARKS } from '../src/sim/world/testMap';
 
 describe('crashMessage', () => {
   const grid = withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
-  const craft = (x: number, y: number) => ({ x, y, z: heightAt(grid, SCALES, x, y), heading: 0, speed: 0, pathAngle: 0 });
+  const craft = (x: number, y: number) => ({ x, y, z: heightAt(grid, SCALES, x, y), heading: 0, speed: 0, pathAngle: 0, lever: 0, spool: 0 });
   it('names the mountain with the height in feet', () => {
     const p = TEST_MAP_LANDMARKS.peak;
     const c = craft((p.col + 0.5) * grid.cellSize, (p.row + 0.5) * grid.cellSize);

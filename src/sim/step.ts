@@ -1,7 +1,9 @@
-import { CEILING_Z, PLACE_CLEARANCE, SPEED_MIN, STEP_S, TUNING_RANGES } from '../config/motion';
+import { SPEED_CAP, SPEED_FLOOR } from '../config/flight';
+import { CEILING_Z, PLACE_CLEARANCE, STEP_S, TUNING_RANGES } from '../config/motion';
 import { wrapHeading } from './angles';
 import type { Command } from './commands';
 import { sweepContact } from './contact';
+import { forcesOn, densityRatio, sagLimit } from './flight/forces';
 import { initialState, type Axis, type SimState } from './state';
 
 /** The world as the simulation sees it: the map size and the top surface. */
@@ -10,6 +12,8 @@ export interface SimWorld {
   readonly height: number;
   /** Top surface: water or ground, world m. */
   heightAt(x: number, y: number): number;
+  /** Real meters of altitude per world meter; air density needs real height. */
+  readonly altitudeScale: number;
 }
 
 const DEG = Math.PI / 180;
@@ -64,24 +68,32 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
 }
 
 /**
- * Exactly one 1/60 s step: speed, heading, flight path angle, then position.
+ * Exactly one 1/60 s step: lever and engine, heading, flight path angle, speed, then position.
  * Once crashed, only the tick moves.
  */
 export function advance(state: SimState, world: SimWorld): SimState {
   if (state.crash) return { ...state, tick: state.tick + 1 };
   const { craft, controls, tuning } = state;
-  const speed = clamp(craft.speed + controls.throttle * tuning.speedRate * STEP_S, SPEED_MIN, tuning.speedMax);
+  const lever = clamp(craft.lever + controls.throttle * (tuning.leverRatePctS / 100) * STEP_S, 0, 1);
+  const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-STEP_S / tuning.spoolTauS));
   const heading = wrapHeading(craft.heading + controls.turn * tuning.turnRateDegS * DEG * STEP_S);
 
-  const target = controls.pitch * tuning.pathMaxDeg * DEG;
+  const pathMax = tuning.pathMaxDeg * DEG;
+  const sigma = densityRatio(craft.z, world.altitudeScale);
+  let target = Math.min(controls.pitch * pathMax, sagLimit(craft.speed, sigma, pathMax));
+  if (craft.z >= CEILING_Z) target = Math.min(target, 0);
   const maxMove = tuning.pathRateDegS * DEG * STEP_S;
   const diff = target - craft.pathAngle;
   let pathAngle = Math.abs(diff) <= maxMove ? target : craft.pathAngle + Math.sign(diff) * maxMove;
 
-  const ground = speed * Math.cos(pathAngle) * STEP_S;
+  const f = forcesOn({ ...craft, pathAngle, lever, spool }, tuning, world.altitudeScale);
+  const speed = clamp(craft.speed + f.dVdt * STEP_S, SPEED_FLOOR, SPEED_CAP);
+  const avg = (craft.speed + speed) / 2;
+
+  const ground = avg * Math.cos(pathAngle) * STEP_S;
   const x = clamp(craft.x + Math.sin(heading) * ground, 0, world.width);
   const y = clamp(craft.y + Math.cos(heading) * ground, 0, world.height);
-  let z = craft.z + speed * Math.sin(pathAngle) * STEP_S;
+  let z = craft.z + avg * Math.sin(pathAngle) * STEP_S;
   if (z >= CEILING_Z) {
     z = CEILING_Z;
     if (pathAngle > 0) pathAngle = 0;
@@ -93,9 +105,9 @@ export function advance(state: SimState, world: SimWorld): SimState {
     return {
       ...state,
       tick,
-      craft: { ...hit, heading, speed: 0, pathAngle },
+      craft: { ...hit, heading, speed: 0, pathAngle, lever: 0, spool: 0 },
       crash: { tick, speed, pathAngle },
     };
   }
-  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle } };
+  return { ...state, tick, craft: { x, y, z, heading, speed, pathAngle, lever, spool } };
 }

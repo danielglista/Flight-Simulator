@@ -7,7 +7,7 @@ import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
 const DEG = Math.PI / 180;
-const W: SimWorld = { width: 5120, height: 5120, heightAt: () => 0 };
+const W: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
 const KEYS = Object.keys(TUNING_RANGES) as (keyof Tuning)[];
 const tune = (key: keyof Tuning, value: number): Command => ({ kind: 'tune', key, value });
 const run = (s: SimState, n: number, w = W): SimState => {
@@ -23,7 +23,7 @@ describe('tune command', () => {
     const s = initialState();
     expect(applyCommands(s, [{ kind: 'tune', key: 'bogus' as keyof Tuning, value: 5 }], W)).toBe(s);
     expect(applyCommands(s, [{ kind: 'tune', key: 'toString' as keyof Tuning, value: 5 }], W)).toBe(s);
-    for (const v of [NaN, Infinity, -Infinity]) expect(applyCommands(s, [tune('speedMax', v)], W)).toBe(s);
+    for (const v of [NaN, Infinity, -Infinity]) expect(applyCommands(s, [tune('massT', v)], W)).toBe(s);
   });
   it('clamps at both ends', () => {
     for (const k of KEYS) {
@@ -34,7 +34,7 @@ describe('tune command', () => {
   });
   it('same state object when the value is unchanged', () => {
     const s = initialState();
-    expect(applyCommands(s, [tune('speedMax', DEFAULT_TUNING.speedMax)], W)).toBe(s);
+    expect(applyCommands(s, [tune('massT', DEFAULT_TUNING.massT)], W)).toBe(s);
   });
   it('works while crashed and survives restart, place and rotate', () => {
     let s: SimState = { ...initialState(), crash: { tick: 1, speed: 1, pathAngle: 0 } };
@@ -52,7 +52,8 @@ describe('tune command', () => {
       const v = DEFAULT_TUNING[k];
       expect(v).toBeGreaterThanOrEqual(r.min);
       expect(v).toBeLessThanOrEqual(r.max);
-      expect((v - r.min) % r.step).toBe(0);
+      const n = (v - r.min) / r.step;
+      expect(Math.abs(n - Math.round(n))).toBeLessThan(1e-9);
     }
     expect(initialState().tuning).toEqual(DEFAULT_TUNING);
   });
@@ -65,18 +66,28 @@ describe('tuning in motion', () => {
     s = run(s, 60);
     expect((s.craft.heading - h) / DEG).toBeCloseTo(60, 6);
   });
-  it('throttle rate', () => {
-    let s = applyCommands(initialState(), [tune('speedRate', 10), { kind: 'throttle', value: 1 }], W);
+  it('lever rate', () => {
+    let s = applyCommands(initialState(), [tune('leverRatePctS', 10), { kind: 'throttle', value: 1 }], W);
     s = run(s, 60);
-    expect(s.craft.speed).toBeCloseTo(70, 9);
+    expect(s.craft.lever).toBeCloseTo(0.321 + 0.1, 9);
   });
-  it('lowering top speed cuts speed on the next step', () => {
-    let s = applyCommands(initialState(), [tune('speedMax', 50)], W);
-    s = run(s, 1);
-    expect(s.craft.speed).toBe(50);
+  it('spool time constant: 63% of the way after one tau', () => {
+    let s = applyCommands(initialState(), [tune('spoolTauS', 1), { kind: 'throttle', value: 1 }], W);
+    s = { ...s, craft: { ...s.craft, lever: 1, spool: 0 }, controls: { ...s.controls, throttle: 0 } };
+    s = run(s, 60);
+    expect(s.craft.spool).toBeCloseTo(1 - Math.exp(-1), 9);
+  });
+  it('raising mass slows a climb', () => {
+    const climb = (m: number): number => {
+      let s = applyCommands(initialState(), [tune('massT', m), { kind: 'pitch', value: 1 }], W);
+      s = run(s, 240);
+      return s.craft.speed;
+    };
+    expect(climb(40)).toBeLessThan(climb(12) + 1e-9);
   });
   it('path limit is reached exactly, and lowering it settles without overshoot', () => {
-    let s = applyCommands(initialState(), [tune('pathMaxDeg', 30), { kind: 'pitch', value: 1 }], W);
+    const fast = initialState();
+    let s = applyCommands({ ...fast, craft: { ...fast.craft, speed: 150 } }, [tune('pathMaxDeg', 30), { kind: 'pitch', value: 1 }], W);
     s = run(s, 120);
     expect(s.craft.pathAngle).toBe(30 * DEG);
     s = applyCommands(s, [tune('pathMaxDeg', 10)], W);
@@ -96,9 +107,9 @@ describe('tuning in motion', () => {
   });
   it('10,000 steps at every maximum and with mid-run changes: finite, above ground, under the ceiling', () => {
     const hills: SimWorld = { ...W, heightAt: (x, y) => 40 + 30 * Math.sin(x / 300) * Math.cos(y / 300) };
-    for (const mid of [false, true]) {
+    for (const [mode, mid] of [['max', false], ['min', false], ['mid', true]] as const) {
       let s = initialState();
-      if (!mid) for (const k of KEYS) s = applyCommands(s, [tune(k, TUNING_RANGES[k].max)], hills);
+      if (!mid) for (const k of KEYS) s = applyCommands(s, [tune(k, mode === 'max' ? TUNING_RANGES[k].max : TUNING_RANGES[k].min)], hills);
       for (let i = 0; i < 10000; i++) {
         const cmds: Command[] = [];
         if (i % 37 === 0) cmds.push({ kind: 'turn', value: ([-1, 0, 1] as const)[Math.floor(i / 37) % 3]! });
@@ -114,14 +125,15 @@ describe('tuning in motion', () => {
         for (const v of Object.values(s.craft)) expect(Number.isFinite(v)).toBe(true);
         expect(s.craft.z).toBeGreaterThanOrEqual(hills.heightAt(s.craft.x, s.craft.y) - 1e-9);
         expect(s.craft.z).toBeLessThanOrEqual(CEILING_Z);
+        expect(s.craft.speed === 0 || (s.craft.speed >= 20 && s.craft.speed <= 300)).toBe(true);
       }
     }
-  });
+  }, 30000);
   it('is frame-rate independent with tune commands at fixed ticks', () => {
     const script: [number, Command][] = [
       [10, { kind: 'turn', value: 1 }],
       [50, tune('turnRateDegS', 90)],
-      [100, tune('speedMax', 80)],
+      [100, tune('thrustMaxKn', 60)],
       [150, { kind: 'throttle', value: 1 }],
       [200, tune('pathMaxDeg', 30)],
       [220, { kind: 'pitch', value: 1 }],
@@ -172,12 +184,12 @@ describe('tune through the loop', () => {
     loop.frame(DT);
     const tick = loop.state.tick;
     const craft = loop.state.craft;
-    loop.send(tune('speedMax', 70));
-    expect(loop.state.tuning.speedMax).toBe(70);
+    loop.send(tune('massT', 30));
+    expect(loop.state.tuning.massT).toBe(30);
     expect(loop.state.tick).toBe(tick);
     expect(loop.state.craft).toBe(craft);
     loop.pause();
-    expect(loop.state.tuning.speedMax).toBe(70);
+    expect(loop.state.tuning.massT).toBe(30);
   });
   it('applies while paused', () => {
     const { loop } = make(true);

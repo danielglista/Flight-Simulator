@@ -1,6 +1,8 @@
 import { DEFAULT_TUNING, TUNING_RANGES, type Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
+import { GRAVITY } from '../config/flight';
 import { FRAME_SAMPLES } from '../config/display';
+import { forcesOn } from '../sim/flight/forces';
 import type { Loop } from './loop';
 import type { FrameStats, Summary } from './frameStats';
 
@@ -106,12 +108,18 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
     }
     const c = s.craft;
     const above = c.z - o.heightAt(c.x, c.y);
+    const f = forcesOn(c, s.tuning, scales.altitude);
+    const kn = (n: number): string => (n / 1000).toFixed(1);
     const lines = [
       `tick      ${s.tick}`,
       `x, y, z   ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)} m (world)`,
       `AGL       ${above.toFixed(1)} m world, ${(above * scales.altitude).toFixed(0)} m real`,
       `path      ${(c.pathAngle * DEG).toFixed(1)} deg`,
       `speed     ${c.speed.toFixed(1)} m/s`,
+      `lever     ${(c.lever * 100).toFixed(0)}%, engine ${(c.spool * 100).toFixed(0)}%`,
+      `thrust    ${kn(f.thrust)} kN, drag ${kn(f.drag)} kN, weight ${kn(f.weight)} kN`,
+      `dV/dt     ${f.dVdt.toFixed(2)} m/s per s, density ${f.sigma.toFixed(3)}`,
+      `energy    ${(c.z + (c.speed * c.speed) / (2 * GRAVITY)).toFixed(1)} m (z + V2/2g)`,
       `controls  turn ${s.controls.turn}, throttle ${s.controls.throttle}, pitch ${s.controls.pitch}`,
     ];
     if (s.crash) {
