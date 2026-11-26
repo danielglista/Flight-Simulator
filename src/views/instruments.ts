@@ -95,8 +95,8 @@ export function hsiOrigin(size: Size): readonly [number, number] {
 
 /**
  * The panel, centered:
- *   SPD  | horizon | ALT    |
- *   V/S  | POWER   | CONFIG | HSI (two cells square)
+ *   POWER  | SPD | horizon |
+ *   CONFIG | ALT | V/S     | HSI (two cells square)
  *   lamps strip, full width
  */
 export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelState): void {
@@ -113,16 +113,16 @@ export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelSta
   ctx.fillRect(left, top, 1, PANEL_H);
   for (const y of [0, HSI_SIZE, PANEL_H - 1]) ctx.fillRect(left, top + y, PANEL_W, 1);
 
-  drawAirspeed(ctx, ...cell(0, 0), s.spdDeg, s.stallRedKt, s.stallAmberKt, t.spd, s.spdBugDeg, s.speedMarks);
-  drawHorizon(ctx, ...cell(1, 0), s.pitchDeg, s.bankDeg, s.fpmDeg, `${t.pit} ${t.bnk}`);
-  drawAltimeter(ctx, ...cell(2, 0), s.altLongDeg, s.altShortDeg, t.alt.replace(',', ''), s.altBugDeg);
-  drawVsi(ctx, ...cell(0, 1), s.vsDeg, s.vsMode, t.vs);
-  drawPower(ctx, ...cell(1, 1), s.leverPct, s.enginePct);
-  drawConfig(ctx, ...cell(2, 1), s.config);
+  drawAirspeed(ctx, ...cell(1, 0), s.spdDeg, s.stallRedKt, s.stallAmberKt, t.spd, s.spdBugDeg, s.speedMarks);
+  drawHorizon(ctx, ...cell(2, 0), s.pitchDeg, s.bankDeg, s.fpmDeg, `${t.pit} ${t.bnk}`);
+  drawConfig(ctx, ...cell(0, 1), s.config);
+  drawPower(ctx, ...cell(0, 0), s.leverPct, s.enginePct);
+  drawAltimeter(ctx, ...cell(1, 1), s.altLongDeg, s.altShortDeg, t.alt.replace(',', ''), s.altBugDeg);
+  drawVsi(ctx, ...cell(2, 1), s.vsDeg, s.vsMode, t.vs);
   drawHsi(ctx, ...hsiOrigin(size), s.headingDeg, s.headingBug, t.hdg, s.hsi);
   drawLights(ctx, left, top + HSI_SIZE, s.lights);
   // Last, over the top of the speed dial and horizon: not in the lamps, so it does not read as a fault.
-  if (s.callout) drawCallout(ctx, left + PANEL_CELL, top + 1, s.callout, s.gearPrompt);
+  if (s.callout) drawCallout(ctx, left + PANEL_CELL * 2, top + 1, s.callout, s.gearPrompt);
 }
 
 /** The takeoff call-out: large text centered on `cx`, with GEAR UP under it when asked for. */

@@ -98,7 +98,7 @@ Live, in a full-size visible window: real-time feel of climb and settle, both vi
 
 ## Instruments panel (D1)
 
-A fixed 400 x 192 block, centered in the instruments canvas (`views/instruments.ts` `drawPanel`): 3 x 2 gauge cells of 80 px (SPD, horizon, ALT; V/S, power, flaps and gear), the 160 px HSI to their right, and a strip of lamps along the bottom. In a window too small for 2x (1280 x 720 at 100% display scaling) it draws at 1x, half size. Needles and ticks are drawn pixel by pixel with the bitmap fonts (`config/pixelFont.ts`, `views/gauges/pixels.ts`); static faces are cached offscreen (`gauges/dial.ts`).
+A fixed 400 x 192 block, centered in the instruments canvas (`views/instruments.ts` `drawPanel`): 3 x 2 gauge cells of 80 px (top: power, SPD, horizon; bottom: flaps and gear, ALT, V/S), the 160 px HSI to their right, and a strip of lamps along the bottom. In a window too small for 2x (1280 x 720 at 100% display scaling) it draws at 1x, half size. Needles and ticks are drawn pixel by pixel with the bitmap fonts (`config/pixelFont.ts`, `views/gauges/pixels.ts`); static faces are cached offscreen (`gauges/dial.ts`).
 
 - Airspeed: piecewise-linear `ASI_TABLE` (`config/display.ts`), red arc to the live level stall speed (moves with flaps, bank, mass), amber to 1.2x. Hidden after a crash and on the ground under 30 kt.
 - Altimeter: long hand 1,000 ft per turn, short hand 10,000 ft, digits in a window.
