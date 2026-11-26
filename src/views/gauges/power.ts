@@ -1,6 +1,6 @@
 import { SPOOL_STABLE } from '../../config/flight';
 import { N1_IDLE_PCT, N1_RED_PCT, N1_SWEEP_DEG, N1_ZERO_DEG, PANEL_CELL } from '../../config/display';
-import { GAUGE_BG, GAUGE_NEEDLE, GAUGE_NUM, GAUGE_RING, GAUGE_TICK, GAUGE_WINDOW, N1_FILL, N1_GAP, N1_LEVER, N1_RED, N1_STABLE, READOUT_LABEL, READOUT_UNIT } from '../../config/palette';
+import { GAUGE_BG, GAUGE_NEEDLE, GAUGE_NUM, GAUGE_RING, GAUGE_TICK, GAUGE_WINDOW, N1_FILL, N1_GAP, N1_LEVER, N1_RED, N1_STABLE, READOUT_UNIT } from '../../config/palette';
 import { powerPct } from '../format';
 import { createFaceCache, fillArc, polar } from './dial';
 import { drawLine, drawText, fillDisk, textWidth } from './pixels';
@@ -85,7 +85,6 @@ export function drawPower(ctx: CanvasRenderingContext2D, ox: number, oy: number,
   drawLine(ctx, cx, cy, cx + nx, cy + ny, GAUGE_NEEDLE, 2);
   fillDisk(ctx, cx, cy, 2, GAUGE_NEEDLE);
 
-  drawText(ctx, 'N1', ox + 4, oy + 4, READOUT_LABEL);
   const labels = powerLabels(leverPct, enginePct);
   ctx.fillStyle = GAUGE_RING;
   ctx.fillRect(cx + 6, cy + 6, 27, 13);

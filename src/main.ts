@@ -6,6 +6,9 @@ import { createLoop } from './app/loop';
 import { initPanels } from './app/panels';
 import { ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, SPD_BUG_FINE_KT, SPD_BUG_STEP_KT, BUG_FINE_DEG, BUG_STEP_DEG, DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
 import { attachPause } from './app/pause';
+import { createRunwayMenu, type RunwayMenu } from './app/runwayMenu';
+import { runwayEnd } from './views/runwaySelect';
+import { hsiGuide, hsiSentence, type HsiGuide } from './views/hsiData';
 import { fetchWithProgress } from './app/loadMap';
 import { MID_ATLANTIC_URL } from './config/map';
 import { SCALES, type ScaleConfig } from './config/scales';
@@ -153,6 +156,8 @@ const moveSpeedBug = (sign: -1 | 1, fine: boolean): void => {
 let sideSize = { width: 640, height: 360 };
 let sideSized = false;
 let requestTop: () => void = () => {};
+// Runway selection (D5C). Made after the panels, whose first draws run before it.
+let runwayMenu: RunwayMenu | null = null;
 
 /**
  * Once per drawn frame (idempotent within one): the zoom phase and easing, and the takeoff HUD. Paused, the zoom snaps
@@ -258,7 +263,7 @@ function syncScreenReader(now: number): void {
   }
   if (!srEl || !shownReadout || now - lastSrMs < 1000 / READOUT_SR_HZ) return;
   lastSrMs = now;
-  const text = readoutSentence(shownReadout) + apSentence(loop.state.autopilot, loop.state.tick);
+  const text = readoutSentence(shownReadout) + apSentence(loop.state.autopilot, loop.state.tick) + hsiSentence(currentApproach());
   if (text === shownSr) return;
   shownSr = text;
   srEl.textContent = text;
@@ -301,6 +306,11 @@ const loop = createLoop({
 });
 // Camera and plane both come from one snapshot, so they cannot disagree.
 const currentCraft = () => loop.snapshot();
+/** The HSI's figures for the picked runway, or null with none. */
+const currentApproach = (): HsiGuide | null => {
+  const end = runwayEnd(grid.airports, runwayMenu?.selected ?? null);
+  return end && hsiGuide(currentCraft(), end, world.heightAt);
+};
 const currentPanel = (): PanelState => {
   const craft = currentCraft();
   const crashed = loop.state.crash !== null;
@@ -310,7 +320,9 @@ const currentPanel = (): PanelState => {
     braking: loop.state.controls.brake,
     terr: !crashed && terrainAhead(craft, world.heightAt),
     autopilot: loop.state.autopilot,
-    headingBugDeg: bugsShown ? bugDeg : null,
+    // The HSI keeps its bug on an approach; the other views do not (D5D).
+    headingBugDeg: !crashed && takeoffHud === null ? bugDeg : null,
+    approach: currentApproach(),
     altBugFt: bugsShown ? altBugFt : null,
     gearWarn: !crashed && gearWarning(craft, heightAboveGround(craft.z, world.heightAt(craft.x, craft.y)), indicatedSpeed(craft, scales)),
     crashed,
@@ -328,6 +340,7 @@ const panels = initPanels({
     shownPanel = currentPanel();
     shownReadout = shownPanel.text;
     drawPanel(ctx, size, shownPanel);
+    runwayMenu?.place();
   },
   top: (ctx, size) => {
     syncFrame();
@@ -363,6 +376,17 @@ const panels = initPanels({
   },
 });
 requestTop = panels.top.requestDraw;
+runwayMenu = createRunwayMenu({
+  airports: grid.airports,
+  canvas: panels.instruments.canvas,
+  size: () => panels.instruments.size,
+  craft: () => currentCraft(),
+  destination: () => routeFor(grid.airports, loop.state.start)?.toIdent ?? null,
+  // While running, the next frame draws it.
+  onChange: () => {
+    if (loop.paused) panels.instruments.requestDraw();
+  },
+});
 const debug = createDebugPanel({ loop, scales: scales, timing, heightAt: world.heightAt, groundKind: world.groundKind, starts: STARTS, onDisplayChange: () => panels.instruments.requestDraw() });
 
 // While running, the loop draws every frame. Draw on demand only when paused.

@@ -1,6 +1,8 @@
 # D5 Implementation Plan: Instruments for approach, takeoff and power
 
-**Status:** D5A, D5B and the slow spool from idle (§8, first row) built; **not flown by hand**. D5C to D5E are a plan, nothing built.
+**Status:** D5A, D5B, the slow spool from idle (§8, first row), D5C and D5D built; **not flown by hand**. D5E is a plan, nothing built.
+
+**D5C changed:** no NAV unit on the instrument panel. The selector is a floating menu opened by clicking the compass (the HSI after D5D). Expected to be iterated on. 
 **Origin:** a brainstorming session on why landing is hard (mainly lining up on final), then on the panel. All mockups were throwaway inline sketches; none are in the project.
 **Not yet in ARCHITECTURE.md §14.** E4 is listed there as next; whether D5 goes before or after it is open (§9, question 1). "D5" is a proposed ID.
 
@@ -75,11 +77,11 @@ D5A and D5B are independent of each other and of the rest. D5D needs D5C. D5E ca
 ### 6.1 Selection (D5C)
 - The player picks an airport, then a runway end. No automatic switching. `CLEAR` returns to normal flight.
 - Selection is view state, like the bugs. Available at any time, including on the ground.
-- Decided: a **built-in selector unit** beside the instruments rather than a pop-up list: airport buttons (three at a time, with arrows), runway buttons, clear. Placement is open (§9, question 2).
+- Decided (replaces the built-in unit): a **floating menu** opened by clicking the compass or HSI: airport buttons (three at a time, with arrows), runway buttons, clear. The NAV unit in §6.4 is dropped.
 - List order: destination first, then nearest, favoring those ahead. The order must not change while the player is clicking. Search is for when there are many airports; today there are two.
-- Hovering or focusing a runway previews it.
+- ~~Hovering or focusing a runway previews it.~~ Removed with the map line (§13).
 - Controls are real HTML buttons (hover, keyboard focus, screen reader labels). Flight keys keep working while the pointer is on them.
-- While selected: the runway center line is drawn on the top view from far out, with the end to land on marked, without the current gear, height and alignment conditions.
+- ~~While selected: the runway center line is drawn on the top view from far out.~~ Removed (§13).
 
 ### 6.2 HSI (D5D)
 Replaces the compass cell. With nothing selected it is today's heading indicator.
@@ -172,7 +174,7 @@ Discussed for the same landing problem; they need their own plan or a later D5 s
 ## 9. Open questions
 
 1. **Order:** D5 before or after E4? Landing is what blocks flying the trip, which E4 depends on.
-2. **Where the selector goes:** the 80 px unit beside the instruments (chosen) or a `NAV` tab in the terminal quarter (suggested later)? And what happens at 1280 x 720?
+2. **Where the selector goes:** settled for now: a floating menu from the compass, which also fits 1280 x 720. The HSI's size (§6.4) and what D5E is for remain open.
 3. **Knobs:** heading and course, or heading only with course set automatically?
 4. **Deviation:** angle or distance?
 5. **Distance on the HSI:** displayed NM is world distance x 25, which misleads near an airport (the route readout hides it within 2 km world, E_PLAN §4.6). Show NM, time to go, or something else on final? The mockups' small NM figures ignored this.
@@ -230,3 +232,20 @@ Seen while building, not changed:
 - `IDLE` replaces the number at minimum power.
 - 685 tests: 684 pass in the full run; the 10,000-step tuning test hit its 30 s timeout under load and passes alone (5.6 s). Typecheck passes.
 - **Not done:** feel by hand, a late go-around, autopilot speed hold from idle by eye.
+
+**D5C.**
+
+- Built as the floating menu above. `Escape` closes it (the plan added no key commands; this is for the popup only). A click outside does not close it, because a click on the map moves the plane.
+- Checked in the browser at 1280 x 720 and 1920 x 950: menu placement, airport switch, pick, `CLEAR`, `Escape`, the line, end mark and label; console clean.
+- **Not done:** by hand with the game running (hover preview by eye, flight keys with the menu open, a screen reader). Paging is tested only as a function: there are two airports.
+
+**D5D**, built to the user's mockups.
+
+- Layout: 3 x 2 gauges, 160 px HSI, lamp strip; 400 x 192 (§6.4 without the NAV unit). Drawn at 1x, so half size, where 2x does not fit (1280 x 720 at 100% scaling).
+- Style: the HSI is drawn on an 80 px grid at 2x; letters were added to the 3x5 font.
+- Settled by default, easy to change: deviation is an angle (question 4); distance is world km (question 5); no knobs (question 3).
+- Changed at the user's request: the corner shows the airport code over the runway name, not the source `APP` of §6.2.
+- Checked in the browser from drawn panel states and a picked runway in the paused game; console clean.
+- **Not done:** the by-hand test in §2 (line up on a selected runway using the HSI); watching the needles move.
+
+**Map line removed** at the user's request: the selected runway draws nothing on the top view (no center line, end mark, label or hover preview). This drops the last bullet of §6.1; the selection shows on the HSI only. Mentions of the line and preview in the D5C results above are history.

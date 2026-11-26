@@ -26,6 +26,7 @@ What the game does **right now**, and which file owns it. Plans in `docs/*_PLAN.
 | Enter | After a crash, or after landing and stopping (under 0.5 m/s with a touchdown on record), restart at the start position. Ignored otherwise (in flight, or at the runway start), and ignored on a focused button | `input/keyboard.ts` (`actionFor`), `sim/step.ts` |
 | Top-view click | Place the plane there, at least 20 m above ground | `input/mapPointer.ts` |
 | Top-view drag / wheel | Pan (leaves follow mode) / zoom | `input/mapPointer.ts`, `views/followCamera.ts` |
+| HSI click | Open or close the runway menu (below); `Escape` or `X` also closes it | `app/runwayMenu.ts` |
 | Side-view drag / wheel | Rotate heading / zoom | `input/sidePointer.ts`, `views/sideCamera.ts` |
 
 Both wheels edit the zoom of the current phase only (ground or air, below).
@@ -97,7 +98,7 @@ Live, in a full-size visible window: real-time feel of climb and settle, both vi
 
 ## Instruments panel (D1)
 
-A fixed 4 x 2 grid of 80 px cells, centered in the instruments canvas (`views/instruments.ts` `drawPanel`). SPD and ALT cells are dials (`views/gauges/airspeed.ts`, `altimeter.ts`); the other cells are still text, drawn with the bitmap font (`config/pixelFont.ts`, `views/gauges/pixels.ts`). Needles and ticks are drawn pixel by pixel; static faces are cached offscreen (`gauges/dial.ts`).
+A fixed 400 x 192 block, centered in the instruments canvas (`views/instruments.ts` `drawPanel`): 3 x 2 gauge cells of 80 px (SPD, horizon, ALT; V/S, power, flaps and gear), the 160 px HSI to their right, and a strip of lamps along the bottom. In a window too small for 2x (1280 x 720 at 100% display scaling) it draws at 1x, half size. Needles and ticks are drawn pixel by pixel with the bitmap fonts (`config/pixelFont.ts`, `views/gauges/pixels.ts`); static faces are cached offscreen (`gauges/dial.ts`).
 
 - Airspeed: piecewise-linear `ASI_TABLE` (`config/display.ts`), red arc to the live level stall speed (moves with flaps, bank, mass), amber to 1.2x. Hidden after a crash and on the ground under 30 kt.
 - Altimeter: long hand 1,000 ft per turn, short hand 10,000 ft, digits in a window.
@@ -105,16 +106,16 @@ A fixed 4 x 2 grid of 80 px cells, centered in the instruments canvas (`views/in
 
 ## Instruments panel (D2)
 
-Horizon (`gauges/horizon.ts`), compass (`compass.ts`) and vertical speed (`vsi.ts`) replace the PIT/BNK, HDG and V/S text cells.
+Horizon (`gauges/horizon.ts`), the compass card (now part of the HSI, below) and vertical speed (`vsi.ts`) replace the PIT/BNK, HDG and V/S text cells.
 - Horizon: 1.5 px per degree of pitch, pegged with 4 px of sky or ground left; in a right bank the horizon's right end is higher. Ladder every 5/10 deg, fixed wings, bank scale with a pointer that moves the way the plane banks, green flight-path marker (hidden on the ground and after a crash). Pitch and bank numbers sit under the disc. The disc is radius 34, not 76 px wide as D_PLAN said, to make room for them (about +/-22 deg visible).
-- Compass: heading-up card, N E S W and 3, 6, 12 ..., heading digits in the middle, cyan heading bug on the rim.
+- Heading-up card with the cyan heading bug on its rim: see HSI (D5D).
 - Altimeter: cyan altitude bug on the rim (its hundreds) within 500 ft of the altitude.
-- Both bugs are hidden in takeoff mode, approach mode and after a crash, like the top and side views.
+- Both bugs are hidden in takeoff mode, approach mode and after a crash, like the top and side views, except the HSI keeps its heading bug on an approach.
 - V/S: `VS_MODE` in `config/display.ts` is `world` (default, the old readout) or `altimeter` (rate the altimeter changes, times the altitude scale). The debug panel's INSTRUMENTS checkbox flips it live; it changes the dial and the readout, not the touchdown banner. **Not yet decided** (needs the D2 flights): then delete the other mode and the checkbox.
 
 ## Instruments panel (D3)
 
-No text cells remain. POWER is the N1 dial (D5B, below). CONFIG (`gearFlaps.ts`): flap lever on UP/1/2 notches with a bar for the real flap position; a gear lamp (green DN, amber moving, dark UP) with a lever mark; BRK and SPL lamps on the ground only (the old `brakeText` conditions). LIGHTS (`lights.ts`): STALL (amber warning, red stalled), GEAR (amber), TERR (red), each in its own place so two can show at once; AP, HDG, ALT, SPD are dark until D4; the slot under TERR is left for TRFC (G2). All warning lamps are dark after a crash. No flashing.
+No text cells remain. POWER is the N1 dial (D5B, below). CONFIG (`gearFlaps.ts`): flap lever on UP/1/2 notches with a bar for the real flap position; a gear lamp (green DN, amber moving, dark UP) with a lever mark; BRK and SPL lamps on the ground only (the old `brakeText` conditions). Lamps (`lights.ts`, a strip): STALL (amber warning, red stalled), GEAR (amber), TERR (red), AP, HDG, ALT, SPD, each in its own place so several can show at once. TRFC (G2) has no slot yet. All warning lamps are dark after a crash. No flashing.
 
 - `terrainAhead(craft, heightAt, crashed)` in `sim/flight/terrain.ts`: straight along the velocity for 8 s in 30 m steps, warns within 10 m of the ground (`TERR_*` in `config/flight.ts`). Off on the ground, when crashed, and with the gear not up under 150 m above ground.
 - `readoutText.warn` priority for the screen-reader sentence: STALL, TERR, GEAR (new optional last argument `terr`).
@@ -136,8 +137,26 @@ No text cells remain. POWER is the N1 dial (D5B, below). CONFIG (`gearFlaps.ts`)
 - **Speed marks:** `1`, `R`, `2` on the speed dial rim at V1, VR, V2 while takeoff mode is on, the next one to reach in yellow (`speedMarks` in `gauges/airspeed.ts`). No `1` off a runway. No numbers are shown for the speeds.
 - **V1 merged:** a V1 within 5 kt (`V1_MERGE_KT`) of VR has no mark, and VR's call-out reads `V1 ROTATE`. That is the usual case at default mass on both airports' runways.
 - **Call-outs** (`views/takeoffStrip.ts`, drawn by `views/instruments.ts`): large text over the top of the speed dial and horizon, `V1`, `ROTATE` (or `V1 ROTATE`), `POSITIVE RATE` (5 m up, climbing) and `V2`, 2 s each, once per takeoff, in order. `POSITIVE RATE` adds `GEAR UP` while the gear lever is down; `V2` waits for it to end. A separate live region (`#callout-sr`) speaks each one.
-- **Power dial** (`gauges/power.ts`): `N1`. White needle and green fill: engine. Yellow marker on the rim: lever. Amber band: the gap between them. Boxed engine value and `THR` value. The red arc from 95 is decoration.
+- **Power dial** (`gauges/power.ts`): no label on it (the docs and code call its scale N1). White needle and green fill: engine. Yellow marker on the rim: lever. Amber band: the gap between them. Boxed engine value and `THR` value. The red arc from 95 is decoration.
 - **Power scale:** the dial, `THR` and the screen-reader line read 20 at idle to 100 at full (`powerPct` in `views/format.ts`). Display only; thrust, V1 and the autopilot are unchanged, and the debug panel still shows 0 to 100.
 - **Slow spool from idle** (`spoolUpTau` in `sim/flight/forces.ts`): spooling up, the lag is 14 s at idle (`spoolIdleTauS`, slider "Spool lag at idle") and eases smoothly to the normal 1.2 s at 40% thrust (`SPOOL_FULL_RESPONSE`, 52 on the dial). Full lever from idle reads 40 after about 3 s and 90 after about 5.5 s. Spooling down is unchanged. Applies in the air too, so a late go-around is harder. At 0 on the slider there is no slow range.
 - **Stable mark:** a green tick at 40 on the dial (`SPOOL_STABLE`), and a `STABLE` call-out the first time the engine passes it on the ground in takeoff mode. It is not a gate.
 - **IDLE:** at minimum power the boxed value reads `IDLE`; the line under it reads `IDLE` when only the lever is at minimum (`powerLabels`). The screen reader says "idle".
+
+## Runway selection (D5C)
+
+- **Menu:** clicking the HSI (a real button laid over it) opens a floating menu above the instrument block: up to three airports at a time (`<` `>` when there are more), the chosen airport's runway ends, `CLEAR`. Picking a runway or `CLEAR` closes it. Clicking elsewhere does not. Flight keys keep working.
+- **Order:** the destination first, then nearest, with airports behind counted twice as far; fixed while the menu is open (`airportOrder` in `views/runwaySelect.ts`). It opens on the selected airport, else the first.
+- **Maps:** the selection draws nothing in either view; it shows only on the HSI. The green approach guide is unchanged.
+- The selection is view state: it survives restarts and crashes, not a reload. It changes nothing in the sim or the autopilot.
+
+## HSI (D5D)
+
+`views/gauges/hsi.ts` (drawing, on an 80 px grid scaled 2x), `views/hsiData.ts` (numbers).
+
+- **No runway picked:** heading-up card, heading in a window, the heading bug, a fixed airplane, and `SELECT RWY`.
+- **Runway picked:** green course arrow at the runway's geometry heading (so runway 01's arrow points near 002); green deviation bar and four dots (bar right = the center line is right); thin magenta bearing needle to the threshold; the airport code and runway name top left (`PHL` over `27L`); distance top right.
+- **Deviation:** an angle, full scale 2.5 deg as seen from the far end of the runway, pegged beyond.
+- **Glide slope:** green diamond on a scale at the right, full scale 0.7 deg from the 3 deg path to the aim point; diamond high = plane low. Shown only before the aim point, within 8 km and 35 deg of the center line.
+- **Distance** is world kilometers to the threshold (`3.2 KM`), not the route readout's NM.
+- Not built: knobs, to/from and warning flags. The screen-reader line gives the runway, distance and which side the line and path are.

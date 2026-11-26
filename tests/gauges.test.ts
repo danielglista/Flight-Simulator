@@ -12,7 +12,7 @@ import { horizonColumns, horizonOffsetPx, pathMarkerOffsetPx } from '../src/view
 import { speedMarks } from '../src/views/gauges/airspeed';
 import { powerAngle, powerLabels, sectorRuns } from '../src/views/gauges/power';
 import { powerPct } from '../src/views/format';
-import { compassAngle } from '../src/views/gauges/compass';
+import { compassAngle } from '../src/views/gauges/hsi';
 import { vsiAngle } from '../src/views/gauges/vsi';
 import { turnNeeded } from '../src/views/headingBug';
 import { formatVerticalSpeed } from '../src/views/format';
@@ -147,7 +147,7 @@ describe('pixel font', () => {
 
   it('covers every character the panel prints', () => {
     for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-.,%/> ') expect(hasGlyph(ch), ch).toBe(true);
-    for (const ch of '0123456789 ') expect(hasGlyph(ch, '3x5'), ch).toBe(true);
+    for (const ch of '0123456789. ABCDEFGHIJKLMNOPQRSTUVWXYZ') expect(hasGlyph(ch, '3x5'), ch).toBe(true);
   });
 
   it('measures and places text', () => {
@@ -316,6 +316,21 @@ describe('power dial (D5B)', () => {
 
   it('the screen-reader sentence uses the same numbers', () => {
     expect(readoutSentence(readoutText(craft({ lever: 0, spool: 0.5 }), SCALES))).toContain('throttle idle, engine 60 percent');
+  });
+});
+
+describe('selected approach on the panel (D5D)', () => {
+  const air = craft({ z: 200, speed: 80 });
+  const approach = { ident: 'PHL', name: '09R', courseDeg: 80.2, deviation: 0.5, bearingDeg: 75.1, glide: -1, distanceM: 3240 };
+  const state = (a: typeof approach | null) => buildPanelState(air, SCALES, DEFAULT_TUNING, { ...input, approach: a });
+
+  it('is in dial pixels, null with no runway, and redraws on a change', () => {
+    expect(state(null).hsi).toBeNull();
+    expect(state(approach).hsi).toEqual({ courseDeg: 80, bearingDeg: 75, barPx: 6, glidePx: -14, ident: 'PHL', name: '09R', distance: '3.2' });
+    expect(samePanelState(state(approach), state({ ...approach, distanceM: 3201 }))).toBe(true);
+    expect(samePanelState(state(approach), state({ ...approach, deviation: 0.6 }))).toBe(false);
+    expect(samePanelState(state(approach), state(null))).toBe(false);
+    expect(samePanelState(state(approach), state({ ...approach, ident: 'DCA' }))).toBe(false);
   });
 });
 

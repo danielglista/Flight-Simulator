@@ -1,4 +1,4 @@
-import { AP_CAPTURE_DEG, AP_CAPTURE_FT, AP_CAPTURE_KT, ALT_BUG_RIM_FT, ALT_LONG_FT, ASI_AMBER_MULT, ASI_ARC_MIN_KT, ASI_TABLE, VS_MODE, type VsMode } from '../config/display';
+import { AP_CAPTURE_DEG, AP_CAPTURE_FT, AP_CAPTURE_KT, ALT_BUG_RIM_FT, ALT_LONG_FT, ASI_AMBER_MULT, ASI_ARC_MIN_KT, ASI_TABLE, HSI_DEV_PX, HSI_GS_PX, VS_MODE, type VsMode } from '../config/display';
 import type { Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
 import { AP_FLOOR_MULT } from '../config/flight';
@@ -13,6 +13,8 @@ import { altimeterVerticalSpeedFpm, displayedAltitudeFt, indicatedSpeed, metersP
 import { altimeterHands, quantizeDeg, tableAngle } from './gauges/dial';
 import { vsiAngle } from './gauges/vsi';
 import type { SpeedMark } from './gauges/airspeed';
+import type { HsiApproach } from './gauges/hsi';
+import { hsiDistance, type HsiGuide } from './hsiData';
 import type { Callout } from './takeoffStrip';
 import type { ConfigState } from './gauges/gearFlaps';
 import type { Lights } from './gauges/lights';
@@ -51,6 +53,8 @@ export interface PanelState {
   /** The takeoff call-out on screen, and whether it asks for gear up. */
   readonly callout: Callout | null;
   readonly gearPrompt: boolean;
+  /** The selected approach on the HSI (D5D), null with no runway picked. */
+  readonly hsi: HsiApproach | null;
 }
 
 export interface PanelInput {
@@ -69,6 +73,7 @@ export interface PanelInput {
   readonly speedMarks?: readonly SpeedMark[];
   readonly callout?: Callout | null;
   readonly gearPrompt?: boolean;
+  readonly approach?: HsiGuide | null;
 }
 
 let cacheKey = '';
@@ -83,6 +88,20 @@ export function cachedStallSpeed(tuning: Tuning, bank: number, flaps: number): n
   }
   return cacheValue;
 }
+
+const hsiPixels = (g: HsiGuide): HsiApproach => ({
+  courseDeg: quantizeDeg(g.courseDeg),
+  bearingDeg: quantizeDeg(g.bearingDeg),
+  barPx: Math.round(g.deviation * HSI_DEV_PX),
+  glidePx: g.glide === null ? null : Math.round(g.glide * HSI_GS_PX),
+  ident: g.ident,
+  name: g.name,
+  distance: hsiDistance(g.distanceM),
+});
+
+const sameHsi = (a: HsiApproach | null, b: HsiApproach | null): boolean =>
+  a === b ||
+  (a !== null && b !== null && a.courseDeg === b.courseDeg && a.bearingDeg === b.bearingDeg && a.barPx === b.barPx && a.glidePx === b.glidePx && a.ident === b.ident && a.name === b.name && a.distance === b.distance);
 
 export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning, input: PanelInput): PanelState {
   const kt = metersPerSecondToKnots(indicatedSpeed(craft, scale));
@@ -135,6 +154,7 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
     speedMarks: input.speedMarks ?? [],
     callout: input.callout ?? null,
     gearPrompt: input.gearPrompt ?? false,
+    hsi: input.approach ? hsiPixels(input.approach) : null,
   };
 }
 
@@ -143,6 +163,7 @@ const sameMarks = (a: readonly SpeedMark[], b: readonly SpeedMark[]): boolean =>
 
 export const samePanelState = (a: PanelState, b: PanelState): boolean =>
   sameMarks(a.speedMarks, b.speedMarks) &&
+  sameHsi(a.hsi, b.hsi) &&
   a.callout === b.callout &&
   a.gearPrompt === b.gearPrompt &&
   a.crashed === b.crashed &&

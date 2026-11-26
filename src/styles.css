@@ -267,3 +267,79 @@ canvas {
   text-align: center;
   z-index: 10;
 }
+
+/* Runway selection (D5C): a clear button over the HSI, and the menu floating above the instruments. */
+.hsi-button {
+  position: absolute;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.hsi-button:hover,
+.hsi-button:focus-visible,
+.hsi-button[aria-expanded='true'] {
+  border-color: var(--accent);
+}
+
+.runway-menu {
+  position: fixed;
+  z-index: 8;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 190px;
+  padding: 8px 10px;
+  background: rgba(11, 14, 20, 0.96);
+  border: 1px solid var(--accent);
+  font-size: 13px;
+}
+
+.runway-menu[hidden] {
+  display: none;
+}
+
+.runway-menu-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.runway-menu-title {
+  justify-content: space-between;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+}
+
+.runway-menu-label {
+  min-width: 3ch;
+  color: var(--dim);
+}
+
+.runway-menu-button {
+  min-width: 4ch;
+  font: inherit;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.runway-menu-button:hover,
+.runway-menu-button:focus-visible {
+  border-color: var(--accent);
+}
+
+.runway-menu-button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+
+.runway-menu-button:disabled {
+  color: var(--dim);
+  border-color: var(--border);
+  cursor: default;
+}

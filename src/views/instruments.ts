@@ -1,13 +1,13 @@
 import type { ScaleConfig } from '../config/scales';
 import { CALLOUT_BG, CALLOUT_COLOR, CALLOUT_PROMPT_COLOR, PANEL_LINE, READOUT_BG } from '../config/palette';
-import { CALLOUT_TEXT_SCALE, N1_IDLE_PCT, PANEL_CELL, PANEL_COLS, PANEL_ROWS, VS_MODE, type Size, type VsMode } from '../config/display';
+import { CALLOUT_TEXT_SCALE, N1_IDLE_PCT, HSI_SIZE, PANEL_CELL, PANEL_COLS, PANEL_H, PANEL_ROWS, PANEL_W, VS_MODE, type Size, type VsMode } from '../config/display';
 import type { Craft } from '../sim/state';
 import { spoilersOut } from '../sim/flight/ground';
 import type { StallState } from '../sim/flight/aero';
 import { altimeterVerticalSpeedFpm, displayedAltitudeFt, indicatedSpeed, metersPerSecondToKnots, verticalSpeedFpm } from '../sim/units';
 import { drawAirspeed } from './gauges/airspeed';
 import { drawAltimeter } from './gauges/altimeter';
-import { drawCompass } from './gauges/compass';
+import { drawHsi } from './gauges/hsi';
 import { drawHorizon } from './gauges/horizon';
 import { drawConfig } from './gauges/gearFlaps';
 import { drawLights } from './gauges/lights';
@@ -81,31 +81,46 @@ const powerWords = (v: string): string => (v === String(N1_IDLE_PCT) ? 'idle' : 
 export const readoutSentence = (t: ReadoutText): string =>
   `Speed ${t.spd} knots, altitude ${t.alt} feet, heading ${t.hdg}, vertical speed ${t.vs} feet per minute, pitch ${t.pit} degrees, bank ${t.bnk}, throttle ${powerWords(t.thr)}, engine ${powerWords(t.eng)}, ${t.brk ? `brakes ${t.brk}, ` : ''}flaps ${t.flp === 'UP' ? 'up' : t.flp.replace('>', 'moving to ')}, gear ${t.gear === 'DN' ? 'down' : t.gear === 'UP' ? 'up' : 'moving'}${t.warn === 'GEAR' ? ', gear warning' : t.warn === 'TERR' ? ', terrain warning' : t.warn ? (t.stalled ? ', stalled' : ', stall warning') : ''}`;
 
+/** Top-left corner of the instrument block, centered in the canvas. */
+export const panelOrigin = (size: Size): { readonly left: number; readonly top: number } => ({
+  left: Math.floor((size.width - PANEL_W) / 2),
+  top: Math.floor((size.height - PANEL_H) / 2),
+});
+
+/** Where the HSI starts (its side is HSI_SIZE). Clicking it opens the runway menu (D5C). */
+export function hsiOrigin(size: Size): readonly [number, number] {
+  const { left, top } = panelOrigin(size);
+  return [left + PANEL_CELL * PANEL_COLS, top];
+}
+
 /**
- * The panel: a fixed 4 x 2 block of 80 px cells, centered.
- *   SPD dial | horizon | ALT dial | V/S dial
- *   POWER    | compass | CONFIG   | LIGHTS
+ * The panel, centered:
+ *   SPD  | horizon | ALT    |
+ *   V/S  | POWER   | CONFIG | HSI (two cells square)
+ *   lamps strip, full width
  */
 export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelState): void {
   ctx.fillStyle = READOUT_BG;
   ctx.fillRect(0, 0, size.width, size.height);
-  const left = Math.floor((size.width - PANEL_CELL * PANEL_COLS) / 2);
-  const top = Math.floor((size.height - PANEL_CELL * PANEL_ROWS) / 2);
+  const { left, top } = panelOrigin(size);
   const cell = (col: number, row: number): readonly [number, number] => [left + col * PANEL_CELL, top + row * PANEL_CELL];
   const t = s.text;
 
   ctx.fillStyle = PANEL_LINE;
-  for (let c = 0; c <= PANEL_COLS; c++) ctx.fillRect(left + c * PANEL_CELL - (c === PANEL_COLS ? 1 : 0), top, 1, PANEL_CELL * PANEL_ROWS);
-  for (let r = 0; r <= PANEL_ROWS; r++) ctx.fillRect(left, top + r * PANEL_CELL - (r === PANEL_ROWS ? 1 : 0), PANEL_CELL * PANEL_COLS, 1);
+  for (let c = 0; c <= PANEL_COLS; c++) ctx.fillRect(left + c * PANEL_CELL, top, 1, HSI_SIZE);
+  for (let r = 0; r < PANEL_ROWS; r++) ctx.fillRect(left, top + r * PANEL_CELL, PANEL_CELL * PANEL_COLS, 1);
+  ctx.fillRect(left + PANEL_W - 1, top, 1, PANEL_H);
+  ctx.fillRect(left, top, 1, PANEL_H);
+  for (const y of [0, HSI_SIZE, PANEL_H - 1]) ctx.fillRect(left, top + y, PANEL_W, 1);
 
   drawAirspeed(ctx, ...cell(0, 0), s.spdDeg, s.stallRedKt, s.stallAmberKt, t.spd, s.spdBugDeg, s.speedMarks);
   drawHorizon(ctx, ...cell(1, 0), s.pitchDeg, s.bankDeg, s.fpmDeg, `${t.pit} ${t.bnk}`);
   drawAltimeter(ctx, ...cell(2, 0), s.altLongDeg, s.altShortDeg, t.alt.replace(',', ''), s.altBugDeg);
-  drawVsi(ctx, ...cell(3, 0), s.vsDeg, s.vsMode, t.vs);
-  drawPower(ctx, ...cell(0, 1), s.leverPct, s.enginePct);
-  drawCompass(ctx, ...cell(1, 1), s.headingDeg, s.headingBug, t.hdg);
+  drawVsi(ctx, ...cell(0, 1), s.vsDeg, s.vsMode, t.vs);
+  drawPower(ctx, ...cell(1, 1), s.leverPct, s.enginePct);
   drawConfig(ctx, ...cell(2, 1), s.config);
-  drawLights(ctx, ...cell(3, 1), s.lights);
+  drawHsi(ctx, ...hsiOrigin(size), s.headingDeg, s.headingBug, t.hdg, s.hsi);
+  drawLights(ctx, left, top + HSI_SIZE, s.lights);
   // Last, over the top of the speed dial and horizon: not in the lamps, so it does not read as a fault.
   if (s.callout) drawCallout(ctx, left + PANEL_CELL, top + 1, s.callout, s.gearPrompt);
 }

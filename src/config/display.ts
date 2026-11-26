@@ -11,16 +11,20 @@ export const CANVAS_PANELS: Readonly<
 > = {
   top: { label: 'TOP VIEW', internal: { width: 640, height: 360 } },
   side: { label: 'SIDE VIEW', internal: { width: 640, height: 360 } },
-  instruments: { label: 'INSTRUMENTS', internal: { width: 320, height: 160 } },
+  instruments: { label: 'INSTRUMENTS', internal: { width: 400, height: 192 } },
 };
 
 /**
- * Instruments panel (D1): a fixed PANEL_COLS x PANEL_ROWS block of PANEL_CELL px cells, centered in the canvas.
- * Dials have radius DIAL_R and are redrawn only when a needle moves NEEDLE_QUANT_DEG of dial angle.
+ * Instruments panel (D1, D5D): PANEL_COLS x PANEL_ROWS gauge cells of PANEL_CELL px, the HSI_SIZE square HSI to their
+ * right, and a LIGHTS_STRIP_H strip of lamps under both; the block is centered in the canvas.
  */
 export const PANEL_CELL = 80;
-export const PANEL_COLS = 4;
+export const PANEL_COLS = 3;
 export const PANEL_ROWS = 2;
+export const HSI_SIZE = PANEL_CELL * PANEL_ROWS;
+export const LIGHTS_STRIP_H = 32;
+export const PANEL_W = PANEL_CELL * PANEL_COLS + HSI_SIZE;
+export const PANEL_H = HSI_SIZE + LIGHTS_STRIP_H;
 export const DIAL_R = 36;
 export const NEEDLE_QUANT_DEG = 0.5;
 
@@ -204,6 +208,18 @@ export const APPROACH_WIDTH_M = 2500;
 /** The guide path: its angle (deg) and the aim point past the threshold (m). Matches the Final start. */
 export const APPROACH_PATH_DEG = 3;
 export const APPROACH_AIM_M = 150;
+
+/** Runway selection (D5C): airports shown at once, and how much farther one behind the plane counts when ordering them. */
+export const AIRPORT_PAGE_SIZE = 3;
+export const ORDER_BEHIND_WEIGHT = 2;
+
+/** HSI (D5D): full-scale deviations as angles (sideways from the far end, vertically from the aim point), where the glide path shows, and the pixels of full scale on the HSI's 80 px drawing grid. */
+export const HSI_LOC_FULL_DEG = 2.5;
+export const HSI_GS_FULL_DEG = 0.7;
+export const HSI_GS_RANGE_M = 8000;
+export const HSI_GS_CONE_DEG = 35;
+export const HSI_DEV_PX = 12;
+export const HSI_GS_PX = 14;
 
 /** Autopilot (D4): keys step the speed target by this many knots (Shift = fine); a notice stays this long (s); the lamps read "captured" inside these margins. */
 export const SPD_BUG_STEP_KT = 5;

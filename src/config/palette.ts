@@ -103,3 +103,6 @@ export const N1_RED = '#ff4a3d';
 export const N1_STABLE = '#7dffa0';
 /** Top view: the route between two airports (E3). */
 export const ROUTE_COLOR = '#ff6ad5';
+/** HSI (D5D): course arrow, deviation bar and glide diamond; and the bearing needle. */
+export const HSI_COURSE = '#5fe07f';
+export const HSI_BEARING = '#ff6ad5';
