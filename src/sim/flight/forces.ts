@@ -1,4 +1,4 @@
-import { COS_FLOOR, GRAVITY, SPEED_FLOOR, THRUST_LAPSE, WING_AREA } from '../../config/flight';
+import { COS_FLOOR, GRAVITY, SPEED_FLOOR, THRUST_LAPSE, WING_AREA, SPOOL_FULL_RESPONSE } from '../../config/flight';
 import type { Tuning } from '../../config/motion';
 import type { Craft } from '../state';
 import { aeroAt, dynamicPressure } from './aero';
@@ -71,7 +71,17 @@ export function forcesOn(craft: Craft, tuning: Tuning, altitudeScale: number): F
   };
 }
 
-/** Lever and engine for one step: the lever follows the throttle keys, the engine follows the lever with a lag. */
+/** The spool-up time constant at this engine fraction: long at idle, easing smoothly to normal at SPOOL_FULL_RESPONSE. */
+export function spoolUpTau(spool: number, tuning: Tuning): number {
+  const x = Math.min(1, Math.max(0, spool / SPOOL_FULL_RESPONSE));
+  const eased = x * x * (3 - 2 * x);
+  return tuning.spoolTauS + Math.max(0, tuning.spoolIdleTauS - tuning.spoolTauS) * (1 - eased);
+}
+
+/**
+ * Lever and engine for one step: the lever follows the throttle keys, the engine follows the lever with a lag. The lag
+ * is longer spooling up from near idle (`spoolUpTau`); spooling down is not.
+ */
 export function stepEngine(
   craft: Pick<Craft, 'lever' | 'spool'>,
   throttle: number,
@@ -79,6 +89,7 @@ export function stepEngine(
   dt: number,
 ): { lever: number; spool: number } {
   const lever = Math.min(1, Math.max(0, craft.lever + throttle * (tuning.leverRatePctS / 100) * dt));
-  const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-dt / tuning.spoolTauS));
+  const tau = lever > craft.spool ? spoolUpTau(craft.spool, tuning) : tuning.spoolTauS;
+  const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-dt / tau));
   return { lever, spool };
 }

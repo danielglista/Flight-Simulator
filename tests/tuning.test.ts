@@ -81,7 +81,7 @@ describe('tuning in motion', () => {
     expect(s.craft.lever).toBeCloseTo(START_LEVER + 0.1, 9);
   });
   it('spool time constant: 63% of the way after one tau', () => {
-    let s = applyCommands(initialState(), [tune('spoolTauS', 1), { kind: 'throttle', value: 1 }], W);
+    let s = applyCommands(initialState(), [tune('spoolTauS', 1), tune('spoolIdleTauS', 0), { kind: 'throttle', value: 1 }], W);
     s = { ...s, craft: { ...s.craft, lever: 1, spool: 0 }, controls: { ...s.controls, throttle: 0 } };
     s = run(s, 60);
     expect(s.craft.spool).toBeCloseTo(1 - Math.exp(-1), 9);

@@ -1,6 +1,6 @@
 import type { ScaleConfig } from '../config/scales';
 import { CALLOUT_BG, CALLOUT_COLOR, CALLOUT_PROMPT_COLOR, PANEL_LINE, READOUT_BG } from '../config/palette';
-import { CALLOUT_TEXT_SCALE, PANEL_CELL, PANEL_COLS, PANEL_ROWS, VS_MODE, type Size, type VsMode } from '../config/display';
+import { CALLOUT_TEXT_SCALE, N1_IDLE_PCT, PANEL_CELL, PANEL_COLS, PANEL_ROWS, VS_MODE, type Size, type VsMode } from '../config/display';
 import type { Craft } from '../sim/state';
 import { spoilersOut } from '../sim/flight/ground';
 import type { StallState } from '../sim/flight/aero';
@@ -75,9 +75,11 @@ export function brakeText(craft: Pick<Craft, 'onGround' | 'lever' | 'speed'>, br
 export const sameReadout = (a: ReadoutText, b: ReadoutText): boolean =>
   a.spd === b.spd && a.alt === b.alt && a.hdg === b.hdg && a.vs === b.vs && a.pit === b.pit && a.bnk === b.bnk && a.thr === b.thr && a.eng === b.eng && a.gear === b.gear && a.brk === b.brk && a.flp === b.flp && a.warn === b.warn && a.stalled === b.stalled;
 
+const powerWords = (v: string): string => (v === String(N1_IDLE_PCT) ? 'idle' : `${v} percent`);
+
 /** One line for screen readers. */
 export const readoutSentence = (t: ReadoutText): string =>
-  `Speed ${t.spd} knots, altitude ${t.alt} feet, heading ${t.hdg}, vertical speed ${t.vs} feet per minute, pitch ${t.pit} degrees, bank ${t.bnk}, throttle ${t.thr} percent, engine ${t.eng} percent, ${t.brk ? `brakes ${t.brk}, ` : ''}flaps ${t.flp === 'UP' ? 'up' : t.flp.replace('>', 'moving to ')}, gear ${t.gear === 'DN' ? 'down' : t.gear === 'UP' ? 'up' : 'moving'}${t.warn === 'GEAR' ? ', gear warning' : t.warn === 'TERR' ? ', terrain warning' : t.warn ? (t.stalled ? ', stalled' : ', stall warning') : ''}`;
+  `Speed ${t.spd} knots, altitude ${t.alt} feet, heading ${t.hdg}, vertical speed ${t.vs} feet per minute, pitch ${t.pit} degrees, bank ${t.bnk}, throttle ${powerWords(t.thr)}, engine ${powerWords(t.eng)}, ${t.brk ? `brakes ${t.brk}, ` : ''}flaps ${t.flp === 'UP' ? 'up' : t.flp.replace('>', 'moving to ')}, gear ${t.gear === 'DN' ? 'down' : t.gear === 'UP' ? 'up' : 'moving'}${t.warn === 'GEAR' ? ', gear warning' : t.warn === 'TERR' ? ', terrain warning' : t.warn ? (t.stalled ? ', stalled' : ', stall warning') : ''}`;
 
 /**
  * The panel: a fixed 4 x 2 block of 80 px cells, centered.

@@ -31,6 +31,8 @@ export interface Tuning {
   readonly leverRatePctS: number;
   /** Engine spool time constant, seconds. */
   readonly spoolTauS: number;
+  /** Spool-up time constant at idle, seconds; at or below `spoolTauS` there is no slow range. */
+  readonly spoolIdleTauS: number;
   /** Sea-level thrust at full power, kN. */
   readonly thrustMaxKn: number;
   /** Mass, tonnes. */
@@ -62,6 +64,7 @@ export const DEFAULT_TUNING: Tuning = {
   stallDropDegS: 14,
   leverRatePctS: 50,
   spoolTauS: 1.2,
+  spoolIdleTauS: 14,
   thrustMaxKn: 100,
   massT: 24,
   cd0Counts: 700,
@@ -91,6 +94,7 @@ export const TUNING_RANGES: Readonly<Record<keyof Tuning, TuningRange>> = {
   stallDropDegS: { label: 'Stall nose drop', unit: 'deg/s', min: 2, max: 40, step: 1 },
   leverRatePctS: { label: 'Lever rate', unit: '%/s', min: 10, max: 200, step: 10 },
   spoolTauS: { label: 'Engine spool', unit: 's', min: 0.2, max: 5, step: 0.1 },
+  spoolIdleTauS: { label: 'Spool lag at idle', unit: 's', min: 0, max: 30, step: 1 },
   thrustMaxKn: { label: 'Max thrust', unit: 'kN', min: 40, max: 200, step: 5 },
   massT: { label: 'Mass', unit: 't', min: 12, max: 40, step: 1 },
   cd0Counts: { label: 'Parasite drag', unit: 'counts', min: 200, max: 2000, step: 50 },

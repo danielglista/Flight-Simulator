@@ -1,6 +1,6 @@
 # D5 Implementation Plan: Instruments for approach, takeoff and power
 
-**Status:** PLAN, for review. Nothing built.
+**Status:** D5A, D5B and the slow spool from idle (§8, first row) built; **not flown by hand**. D5C to D5E are a plan, nothing built.
 **Origin:** a brainstorming session on why landing is hard (mainly lining up on final), then on the panel. All mockups were throwaway inline sketches; none are in the project.
 **Not yet in ARCHITECTURE.md §14.** E4 is listed there as next; whether D5 goes before or after it is open (§9, question 1). "D5" is a proposed ID.
 
@@ -28,7 +28,7 @@ D5A and D5B are independent of each other and of the rest. D5D needs D5C. D5E ca
 | Out | Where it belongs |
 |---|---|
 | Localizer and glide slope radio behavior, approach autopilot | Its own later step; D5D's numbers should be reusable |
-| Slow engine spool from idle, engine temperature, fuel, engine failure | §8, after approaches can be flown by hand |
+| Engine temperature, fuel, engine failure | §8, after approaches can be flown by hand |
 | Flap and gear speed limits, overspeed | §8 |
 | ATC selecting the runway, copilot messages in the terminal | F |
 | Wind and runway choice by wind | G6 |
@@ -46,8 +46,9 @@ D5A and D5B are independent of each other and of the rest. D5D needs D5C. D5E ca
 ## 4. D5A: takeoff speeds and call-outs
 
 **Behavior**
-- Marks `1`, `R`, `2` on the speed dial rim at V1, VR, V2, shown while takeoff mode is on. V1 is omitted off a runway, as now (`--`).
-- Call-outs (`V1`, `ROTATE`, `POSITIVE RATE`, `V2`) show large in the instrument panel, next to the speed dial or horizon, for 2 s each, once per takeoff, as now. Not in the warning lamps, so they do not read as faults.
+- Marks `1`, `R`, `2` on the speed dial rim at V1, VR, V2, shown while takeoff mode is on. V1 is omitted off a runway.
+- A V1 within 5 kt of VR has no mark, and VR's call-out reads `V1 ROTATE`.
+- Call-outs (`V1`, `ROTATE`, `POSITIVE RATE`, `V2`) show large in the instrument panel, next to the speed dial or horizon, for 2 s each, once per takeoff, as now, except that `V2` waits for `POSITIVE RATE` to end. Not in the warning lamps, so they do not read as faults.
 - `POSITIVE RATE` also prompts for gear up.
 - Runway remaining stays in the side view.
 - Remove the V-speed strip and call-outs from the side view once the panel versions work.
@@ -149,7 +150,7 @@ It does not fit at 320 x 160. Options: raise the minimum size; or keep today's g
 
 | Idea | Note |
 |---|---|
-| Slow spool from idle (about 3 s near idle, quicker above 40%) | A felt mechanic, not a gate. Mark at 40% and a `STABLE` call-out. Makes late go-arounds harder, changes takeoff distance, V1 and speed hold. Add a debug slider |
+| **Built.** Slow spool from idle (about 3 s from idle to 40, eased into normal response) | A felt mechanic, not a gate. Mark at 40% and a `STABLE` call-out. Makes late go-arounds harder, changes takeoff distance, V1 and speed hold. Add a debug slider |
 | Engine temperature gauge | Tied to time at high power; amber, red, then power loss. Gives the red arc a purpose |
 | Fuel | Needs scaling or multi-leg flights; the DCA to PHL leg is too short for real burn |
 | Engine failure | Tied to abuse, or an optional random emergency using seeded RNG |
@@ -175,7 +176,7 @@ Discussed for the same landing problem; they need their own plan or a later D5 s
 3. **Knobs:** heading and course, or heading only with course set automatically?
 4. **Deviation:** angle or distance?
 5. **Distance on the HSI:** displayed NM is world distance x 25, which misleads near an airport (the route readout hides it within 2 km world, E_PLAN §4.6). Show NM, time to go, or something else on final? The mockups' small NM figures ignored this.
-6. **Power scale:** does `THR` also read 20 to 100?
+6. **Power scale:** does `THR` also read 20 to 100? Built as yes, with the screen-reader line; easy to reverse.
 7. **Aids outside the panel (§8):** include any in D5? The panel alone does not fix how little of the map is visible ahead.
 
 ## 10. Verification
@@ -205,4 +206,27 @@ Each step's "done when" in §2 is met, the checks in §10 pass or are named as n
 
 ## 13. Results
 
-None yet.
+**D5A and D5B.**
+
+| Check | Result |
+|---|---|
+| `npm test`, `npm run typecheck` | Pass, 674 tests |
+| Simulated takeoff, 1,052 m runway, on-time and late rotation | `V1 ROTATE`, `POSITIVE RATE`, `V2`, about 2 s each |
+| By eye, 1280 x 720 | Marks, banners and dial drawn from the real panel code; console clean |
+| In the running app | A takeoff was stepped from a script (the pane was hidden), before the V1 merge |
+| By hand | **Not done:** a takeoff using only panel cues; large window; screen reader |
+
+Differences from the plan: V1 merge and the `V2` wait (above); `index.html` gained the `#callout-sr` live region; the side view no longer shows speed numbers anywhere.
+
+Seen while building, not changed:
+- `vSpeeds` works out stopping distance without flaps.
+- From reading the code, takeoff call-outs can fire on a landing rollout. Not tested.
+
+**Slow spool from idle (brought forward from §8) and IDLE readout.**
+
+- "40%" is read as 40 on the power dial (25% thrust).
+- The lag eases from 14 s at idle to 1.2 s at 52 on the dial; there is no step in rate at 40.
+- Simulated takeoff, full lever from idle: liftoff 17.8 s against 15.1 s without it, runway used 497 m against 495 m. `accelerateStopM` still assumes full power from the start.
+- `IDLE` replaces the number at minimum power.
+- 685 tests: 684 pass in the full run; the 10,000-step tuning test hit its 30 s timeout under load and passes alone (5.6 s). Typecheck passes.
+- **Not done:** feel by hand, a late go-around, autopilot speed hold from idle by eye.

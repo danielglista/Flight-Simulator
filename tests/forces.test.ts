@@ -1,3 +1,7 @@
+import { SPOOL_FULL_RESPONSE } from '../src/config/flight';
+import { spoolUpTau } from '../src/sim/flight/forces';
+import { SPOOL_STABLE } from '../src/config/flight';
+import { stepEngine } from '../src/sim/flight/forces';
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../src/config/scales';
 import { GRAVITY } from '../src/config/flight';
@@ -193,5 +197,50 @@ describe('forcesOn', () => {
     expect(f.dVdt).toBeCloseTo((f.thrust * Math.cos(f.alpha) - f.drag) / 24000 - GRAVITY * Math.sin(5 * DEG), 12);
     expect(f.loadFactor).toBeCloseTo(f.lift / (24000 * GRAVITY), 12);
     expect(f.weight).toBeCloseTo(24000 * GRAVITY * Math.sin(5 * DEG), 6);
+  });
+});
+
+describe('spool from idle', () => {
+  const dt = 1 / 60;
+  const off = { ...DEFAULT_TUNING, spoolIdleTauS: 0 };
+  const secondsTo = (target: number, from: number, tuning = DEFAULT_TUNING): number => {
+    let c = { lever: 1, spool: from };
+    let n = 0;
+    while (c.spool < target && n < 6000) {
+      c = stepEngine(c, 0, tuning, dt);
+      n++;
+    }
+    return n * dt;
+  };
+
+  it('takes about 3 s from idle to the stable mark', () => {
+    expect(secondsTo(SPOOL_STABLE, 0)).toBeGreaterThan(2.7);
+    expect(secondsTo(SPOOL_STABLE, 0)).toBeLessThan(3.3);
+    expect(secondsTo(SPOOL_STABLE, 0, off)).toBeLessThan(0.5);
+  });
+
+  it('eases to the normal lag with no step anywhere', () => {
+    expect(spoolUpTau(0, DEFAULT_TUNING)).toBe(DEFAULT_TUNING.spoolIdleTauS);
+    expect(spoolUpTau(SPOOL_FULL_RESPONSE, DEFAULT_TUNING)).toBe(DEFAULT_TUNING.spoolTauS);
+    expect(spoolUpTau(1, DEFAULT_TUNING)).toBe(DEFAULT_TUNING.spoolTauS);
+    let last = spoolUpTau(0, DEFAULT_TUNING);
+    for (let s = 0.005; s <= 0.5; s += 0.005) {
+      const tau = spoolUpTau(s, DEFAULT_TUNING);
+      expect(tau).toBeLessThanOrEqual(last);
+      expect(last - tau).toBeLessThan(0.3);
+      last = tau;
+    }
+  });
+
+  it('never slows spooling down', () => {
+    const down = { lever: 0, spool: 0.2 };
+    expect(stepEngine(down, 0, DEFAULT_TUNING, dt).spool).toBe(stepEngine(down, 0, off, dt).spool);
+  });
+
+  it('still reaches a lever set low, without passing it', () => {
+    let c = { lever: 0.1, spool: 0 };
+    for (let i = 0; i < 60 * 120; i++) c = stepEngine(c, 0, DEFAULT_TUNING, dt);
+    expect(c.spool).toBeLessThanOrEqual(0.1);
+    expect(c.spool).toBeCloseTo(0.1, 3);
   });
 });

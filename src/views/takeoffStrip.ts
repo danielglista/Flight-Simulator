@@ -1,6 +1,7 @@
 import { CALLOUT_HOLD_S, GEAR_UP_AT, POSITIVE_RATE_AGL_M, TAKEOFF_HUD_AGL_M, VSPEED_FREEZE_MS } from '../config/display';
 import type { Tuning } from '../config/motion';
 import { STEP_HZ } from '../config/motion';
+import { SPOOL_STABLE } from '../config/flight';
 import { vSpeeds, type VSpeeds } from '../sim/flight/vspeeds';
 import type { Craft } from '../sim/state';
 import { runwayFrame, type Runway } from '../sim/world/airport';
@@ -30,7 +31,7 @@ export function stepSpeeds(prev: VSpeeds | null, craft: Pick<Craft, 'onGround' |
 
 type CalloutStep = 'V1' | 'ROTATE' | 'POSITIVE RATE' | 'V2';
 /** What is called out: a step of the takeoff, or V1 and ROTATE as one when the speeds are close. */
-export type Callout = CalloutStep | 'V1 ROTATE';
+export type Callout = CalloutStep | 'V1 ROTATE' | 'STABLE';
 const SEQUENCE: readonly CalloutStep[] = ['V1', 'ROTATE', 'POSITIVE RATE', 'V2'];
 
 /** How far through the call-outs a takeoff is, and what is on screen. View state; the sim emits nothing. */
@@ -40,14 +41,16 @@ export interface CalloutState {
   readonly shown: Callout | null;
   /** Tick it was shown at. */
   readonly shownTick: number;
+  /** STABLE has been called. */
+  readonly stable: boolean;
 }
 
-export const NO_CALLOUTS: CalloutState = { next: 0, shown: null, shownTick: 0 };
+export const NO_CALLOUTS: CalloutState = { next: 0, shown: null, shownTick: 0, stable: false };
 
 export interface CalloutInput {
   readonly tick: number;
   readonly mode: boolean;
-  readonly craft: Pick<Craft, 'onGround' | 'speed' | 'pathAngle'>;
+  readonly craft: Pick<Craft, 'onGround' | 'speed' | 'pathAngle'> & { readonly spool?: number };
   /** Indicated airspeed, m/s. */
   readonly ias: number;
   readonly speeds: VSpeeds | null;
@@ -71,21 +74,25 @@ const reached = (c: CalloutStep, i: CalloutInput, s: VSpeeds): boolean => {
 /**
  * One tick of the call-outs. Each fires once per takeoff, in order, and only after its condition holds. V1 is skipped
  * while there is no V1, and joins ROTATE when the two are close. Nothing cuts POSITIVE RATE short, since it carries the
- * gear prompt: V2 waits for it to end. A restart (at rest on the ground) or the end of takeoff mode starts them over.
+ * gear prompt: V2 waits for it to end. STABLE comes before them, when the engine passes SPOOL_STABLE on the ground,
+ * moving or not. A restart (at rest on the ground, engine below that) or the end of takeoff mode starts them over.
  */
 export function stepCallouts(prev: CalloutState, i: CalloutInput): CalloutState {
-  if (!i.mode || !i.speeds || (i.craft.onGround && i.craft.speed < VSPEED_FREEZE_MS)) return NO_CALLOUTS;
-  let { next, shown, shownTick } = prev;
+  const atRest = i.craft.onGround && i.craft.speed < VSPEED_FREEZE_MS;
+  const spooled = (i.craft.spool ?? 0) >= SPOOL_STABLE;
+  if (!i.mode || !i.speeds || (atRest && !spooled)) return NO_CALLOUTS;
+  let { next, shown, shownTick, stable } = prev;
   if (shown && i.tick - shownTick > CALLOUT_HOLD_S * STEP_HZ) shown = null;
+  if (!stable && next === 0 && i.craft.onGround && spooled) return { next, shown: 'STABLE', shownTick: i.tick, stable: true };
   const merged = v1Merged(i.speeds);
   while (next < SEQUENCE.length && SEQUENCE[next] === 'V1' && (i.speeds.v1 === null || merged)) next++;
   const c = SEQUENCE[next];
-  if (c && shown !== 'POSITIVE RATE' && reached(c, i, i.speeds)) {
+  if (!atRest && c && shown !== 'POSITIVE RATE' && reached(c, i, i.speeds)) {
     shown = c === 'ROTATE' && merged ? 'V1 ROTATE' : c;
     shownTick = i.tick;
     next++;
   }
-  return next === prev.next && shown === prev.shown && shownTick === prev.shownTick ? prev : { next, shown, shownTick };
+  return next === prev.next && shown === prev.shown && shownTick === prev.shownTick ? prev : { next, shown, shownTick, stable };
 }
 
 /** Meters of runway ahead of the plane along its heading, or null when it is not over the runway. */

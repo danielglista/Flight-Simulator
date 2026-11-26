@@ -1,7 +1,9 @@
-import { N1_RED_PCT, N1_SWEEP_DEG, N1_ZERO_DEG, PANEL_CELL } from '../../config/display';
-import { GAUGE_BG, GAUGE_NEEDLE, GAUGE_NUM, GAUGE_RING, GAUGE_TICK, GAUGE_WINDOW, N1_FILL, N1_GAP, N1_LEVER, N1_RED, READOUT_LABEL, READOUT_UNIT } from '../../config/palette';
+import { SPOOL_STABLE } from '../../config/flight';
+import { N1_IDLE_PCT, N1_RED_PCT, N1_SWEEP_DEG, N1_ZERO_DEG, PANEL_CELL } from '../../config/display';
+import { GAUGE_BG, GAUGE_NEEDLE, GAUGE_NUM, GAUGE_RING, GAUGE_TICK, GAUGE_WINDOW, N1_FILL, N1_GAP, N1_LEVER, N1_RED, N1_STABLE, READOUT_LABEL, READOUT_UNIT } from '../../config/palette';
+import { powerPct } from '../format';
 import { createFaceCache, fillArc, polar } from './dial';
-import { drawLine, drawText, fillDisk } from './pixels';
+import { drawLine, drawText, fillDisk, textWidth } from './pixels';
 
 const C = PANEL_CELL / 2;
 const R = 36;
@@ -9,6 +11,18 @@ const overlay = createFaceCache();
 
 /** Dial angle (degrees clockwise from the top, may pass 360) of a power reading. */
 export const powerAngle = (pct: number): number => N1_ZERO_DEG + (Math.min(100, Math.max(0, pct)) / 100) * N1_SWEEP_DEG;
+
+/**
+ * The two readouts. At the minimum they say IDLE instead of a number. The lever's line is dropped (null) when the box
+ * already says IDLE for both.
+ */
+export function powerLabels(leverPct: number, enginePct: number): { readonly engine: string; readonly lever: string | null } {
+  const idle = (pct: number): boolean => pct <= N1_IDLE_PCT;
+  return {
+    engine: idle(enginePct) ? 'IDLE' : String(enginePct),
+    lever: !idle(leverPct) ? `THR ${leverPct}` : idle(enginePct) ? null : 'IDLE',
+  };
+}
 
 /** A pie slice from `deg0` to `deg1` clockwise, radius `r`, as horizontal runs `[x, y, width]` from its center. */
 export function sectorRuns(r: number, deg0: number, deg1: number): readonly (readonly [number, number, number])[] {
@@ -40,6 +54,10 @@ function paintOverlay(ctx: CanvasRenderingContext2D): void {
     const [x1, y1] = polar(deg, R - 3);
     drawLine(ctx, C + x0, C + y0, C + x1, C + y1, GAUGE_TICK);
   }
+  // Below this mark the engine is still sluggish.
+  const [sx0, sy0] = polar(powerAngle(powerPct(SPOOL_STABLE)), R - 7);
+  const [sx1, sy1] = polar(powerAngle(powerPct(SPOOL_STABLE)), R + 1);
+  drawLine(ctx, C + sx0, C + sy0, C + sx1, C + sy1, N1_STABLE, 2);
   for (let pct = 20; pct <= 100; pct += 20) {
     const [x, y] = polar(powerAngle(pct), R - 14);
     drawText(ctx, String(pct / 10), Math.round(C + x), Math.round(C + y) - 2, GAUGE_NUM, '3x5', 'center');
@@ -68,10 +86,20 @@ export function drawPower(ctx: CanvasRenderingContext2D, ox: number, oy: number,
   fillDisk(ctx, cx, cy, 2, GAUGE_NEEDLE);
 
   drawText(ctx, 'N1', ox + 4, oy + 4, READOUT_LABEL);
+  const labels = powerLabels(leverPct, enginePct);
   ctx.fillStyle = GAUGE_RING;
-  ctx.fillRect(cx + 7, cy + 6, 25, 13);
+  ctx.fillRect(cx + 6, cy + 6, 27, 13);
   ctx.fillStyle = GAUGE_WINDOW;
-  ctx.fillRect(cx + 8, cy + 7, 23, 11);
-  drawText(ctx, String(enginePct), cx + 29, cy + 9, GAUGE_NUM, '5x7', 'right');
-  drawText(ctx, `THR ${leverPct}`, ox + PANEL_CELL - 3, cy + 25, READOUT_UNIT, '5x7', 'right');
+  ctx.fillRect(cx + 7, cy + 7, 25, 11);
+  drawText(ctx, labels.engine, cx + 31, cy + 9, GAUGE_NUM, '5x7', 'right');
+  if (labels.lever === null) return;
+  // Label and number apart, with a narrower gap than a space, so the label stays clear of the rim.
+  const [head, value] = labels.lever.split(' ');
+  const right = ox + PANEL_CELL - 3;
+  if (value === undefined) {
+    drawText(ctx, labels.lever, right, cy + 25, READOUT_UNIT, '5x7', 'right');
+    return;
+  }
+  drawText(ctx, value, right, cy + 25, READOUT_UNIT, '5x7', 'right');
+  drawText(ctx, head ?? '', right - textWidth(value) - 3, cy + 25, READOUT_UNIT, '5x7', 'right');
 }

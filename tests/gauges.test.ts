@@ -10,7 +10,7 @@ import { levelStallSpeed } from '../src/sim/flight/vspeeds';
 import { altimeterVerticalSpeedFpm, displayedAltitudeFt, metersPerSecondToKnots, verticalSpeedFpm } from '../src/sim/units';
 import { horizonColumns, horizonOffsetPx, pathMarkerOffsetPx } from '../src/views/gauges/horizon';
 import { speedMarks } from '../src/views/gauges/airspeed';
-import { powerAngle, sectorRuns } from '../src/views/gauges/power';
+import { powerAngle, powerLabels, sectorRuns } from '../src/views/gauges/power';
 import { powerPct } from '../src/views/format';
 import { compassAngle } from '../src/views/gauges/compass';
 import { vsiAngle } from '../src/views/gauges/vsi';
@@ -306,8 +306,16 @@ describe('power dial (D5B)', () => {
     for (const p of ['-8,8', '-8,-8', '8,-8', '0,-10']) expect(set.has(p), p).toBe(true);
   });
 
+  it('says IDLE at the minimum', () => {
+    expect(powerLabels(20, 20)).toEqual({ engine: 'IDLE', lever: null });
+    expect(powerLabels(20, 54)).toEqual({ engine: '54', lever: 'IDLE' });
+    expect(powerLabels(70, 20)).toEqual({ engine: 'IDLE', lever: 'THR 70' });
+    expect(powerLabels(70, 54)).toEqual({ engine: '54', lever: 'THR 70' });
+    expect(readoutSentence(readoutText(craft({ lever: 0, spool: 0 }), SCALES))).toContain('throttle idle, engine idle');
+  });
+
   it('the screen-reader sentence uses the same numbers', () => {
-    expect(readoutSentence(readoutText(craft({ lever: 0, spool: 0.5 }), SCALES))).toContain('throttle 20 percent, engine 60 percent');
+    expect(readoutSentence(readoutText(craft({ lever: 0, spool: 0.5 }), SCALES))).toContain('throttle idle, engine 60 percent');
   });
 });
 

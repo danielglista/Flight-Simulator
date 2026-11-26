@@ -93,6 +93,10 @@ export const SPOILER_CD = 0.06;
 export const LANDED_SPEED = 0.5;
 export const LANDED_HIDE_SPEED = 2;
 
+/** The engine fraction (0..1; N1 40 on the power dial) marked as stable: past the worst of the slow range. */
+export const SPOOL_STABLE = 0.25;
+/** Spool-up lag eases from `spoolIdleTauS` at idle to the normal `spoolTauS` at this engine fraction (N1 52). */
+export const SPOOL_FULL_RESPONSE = 0.4;
 /** C4B. Gear takes this long to travel fully up or down, seconds. */
 export const GEAR_TIME_S = 3;
 /** Rotation and initial-climb speeds as multiples of the (indicated) stall speed. Calibrated by flying, never by changing the formula. */

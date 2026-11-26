@@ -99,5 +99,7 @@ export const N1_FILL = '#1f7a45';
 export const N1_LEVER = '#ffd34d';
 export const N1_GAP = '#ffb020';
 export const N1_RED = '#ff4a3d';
+/** The mark on the power dial below which the engine spools up slowly. */
+export const N1_STABLE = '#7dffa0';
 /** Top view: the route between two airports (E3). */
 export const ROUTE_COLOR = '#ff6ad5';

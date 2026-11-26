@@ -1,3 +1,4 @@
+import { SPOOL_STABLE } from '../src/config/flight';
 import { metersPerSecondToKnots } from '../src/sim/units';
 import { ASI_TABLE, VMARK_LABEL_MIN_DEG } from '../src/config/display';
 import { speedMarks, v1Merged } from '../src/views/gauges/airspeed';
@@ -193,6 +194,22 @@ describe('call-outs', () => {
     expect(gap(5.1)).toBe(false);
     expect(v1Merged({ ...v, v1: null })).toBe(false);
   });
+  it('calls STABLE once as the engine passes the mark, even at rest, and starts over at idle', () => {
+    const at = (tick: number, spool: number, speed = 0) => input({ tick, craft: { onGround: true, speed, pathAngle: 0, spool }, ias: speed });
+    expect(stepCallouts(NO_CALLOUTS, at(1, SPOOL_STABLE - 0.01))).toBe(NO_CALLOUTS);
+    let st = stepCallouts(NO_CALLOUTS, at(2, SPOOL_STABLE));
+    expect(st.shown).toBe('STABLE');
+    st = stepCallouts(st, at(3 + 2 * STEP_HZ, 1, 10));
+    expect(st.shown).toBeNull();
+    expect(stepCallouts(st, at(4 + 2 * STEP_HZ, 1, 20)).shown).toBeNull(); // not again
+    expect(stepCallouts(st, at(5 + 2 * STEP_HZ, 0))).toBe(NO_CALLOUTS);
+  });
+  it('calls no STABLE in the air, nor after the speed call-outs have begun', () => {
+    const air = input({ craft: { onGround: false, speed: 80, pathAngle: 0, spool: 1 }, ias: 30, aglM: 2 });
+    expect(stepCallouts(NO_CALLOUTS, air).shown).toBeNull();
+    const rolling = stepCallouts(NO_CALLOUTS, input({ ias: v.vr + 1 }));
+    expect(stepCallouts(rolling, input({ ias: v.vr + 1, craft: { onGround: true, speed: 60, pathAngle: 0, spool: 1 } })).shown).toBe('ROTATE');
+  });
   it('a call-out stays 2 s, then goes', () => {
     let st = stepCallouts(NO_CALLOUTS, input({ tick: 10, ias: v.vr + 1 }));
     expect(st.shown).toBe('ROTATE');
@@ -226,7 +243,7 @@ describe('call-outs', () => {
       if (s.crash) break;
     }
     expect(s.crash).toBeNull();
-    expect(seen).toEqual(['ROTATE', 'POSITIVE RATE', 'V2']);
+    expect(seen).toEqual(['STABLE', 'ROTATE', 'POSITIVE RATE', 'V2']);
   });
 });
 
