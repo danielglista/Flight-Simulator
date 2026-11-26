@@ -80,13 +80,15 @@ describe('wings-level key', () => {
     const k = createKeyState();
     k.keyDown({ code: 'Space' });
     k.keyUp({ code: 'Space' });
-    expect(k.sample()).toEqual([{ kind: 'level' }]);
+    // A tap brakes for one sample, then lets go.
+    expect(k.sample()).toEqual([{ kind: 'brake', value: true }, { kind: 'level' }]);
+    expect(k.sample()).toEqual([{ kind: 'brake', value: false }]);
     expect(k.sample()).toEqual([]);
   });
   it('held Space does not repeat it, and ignores repeat events, modifiers and text fields', () => {
     const k = createKeyState();
     k.keyDown({ code: 'Space' });
-    expect(k.sample()).toEqual([{ kind: 'level' }]);
+    expect(k.sample()).toEqual([{ kind: 'brake', value: true }, { kind: 'level' }]);
     k.keyDown({ code: 'Space', repeat: true });
     expect(k.sample()).toEqual([]);
     k.keyDown({ code: 'Space', ctrlKey: true });
@@ -102,6 +104,8 @@ describe('wings-level key', () => {
     expect(k.sample()).toEqual([{ kind: 'level' }]);
     k.keyDown({ code: 'Space' });
     k.clear();
+    // A pause releases the brake and forgets the pending press.
+    expect(k.sample()).toEqual([{ kind: 'brake', value: false }]);
     expect(k.sample()).toEqual([]);
   });
 });

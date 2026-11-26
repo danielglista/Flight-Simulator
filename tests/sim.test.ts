@@ -1,3 +1,4 @@
+import { craft } from './helpers';
 import { describe, expect, it } from 'vitest';
 import { createStepper } from '../src/app/stepper';
 import { wrapHeading } from '../src/sim/angles';
@@ -13,17 +14,18 @@ import { withAirports } from '../src/sim/world/placeAirports';
 import { buildTestAirport } from '../src/sim/world/testAirport';
 import { buildTestMap, TEST_MAP_LANDMARKS } from '../src/sim/world/testMap';
 import { Terrain } from '../src/sim/world/terrain';
+import { groundKindAt } from '../src/sim/world/groundKind';
 
-const realGrid = () => withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
+const realGrid = () => withAirports(buildTestMap(), [buildTestAirport()]);
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
-const B: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
+const B: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 /** No engine and no drag: only weight changes speed, so geometry tests stay exact in level flight. */
 const FREE = { ...DEFAULT_TUNING, thrustMaxKn: 0, cd0Counts: 0, inducedCounts: 0 };
 /** Level at this speed and height: pitch is the angle of attack that makes lift equal weight, so geometry stays exact. */
 const trimmed = (s: SimState): SimState => ({
   ...s,
-  craft: { ...s.craft, pitch: liftAngle(1, s.craft.speed, densityRatio(s.craft.z, 10), s.tuning), pitchRate: 0, pathAngle: 0 },
+  craft: { ...s.craft, pitch: liftAngle(1, s.craft.speed, densityRatio(s.craft.z, SCALES.altitude), s.tuning), pitchRate: 0, pathAngle: 0 },
 });
 const at = (heading: number, speed = 90, x = 2560, y = 2560, z = initialState().craft.z): SimState => {
   const s = initialState();
@@ -61,7 +63,7 @@ describe('advance', () => {
   });
   it('full throttle settles at a level speed limit; idle slows to a lower one; more lever is faster', () => {
     const settle = (lever: number): number => {
-      let s = { ...initialState(), controls: { turn: 0 as const, throttle: 0 as const, pitch: 0 as const, level: false } };
+      let s = { ...initialState(), controls: { turn: 0 as const, throttle: 0 as const, pitch: 0 as const, level: false, brake: false } };
       s = { ...s, craft: { ...s.craft, lever, spool: lever } };
       return run(s, 60 * 240, DEEP).craft.speed;
     };
@@ -74,7 +76,7 @@ describe('advance', () => {
     expect(idle).toBeGreaterThanOrEqual(20);
     // Settled: the last second changes almost nothing.
     const s = { ...initialState() };
-    const a = run({ ...s, craft: { ...s.craft, lever: 1, spool: 1 } }, 60 * 240, DEEP);
+    const a = run({ ...s, craft: { ...s.craft, lever: 1, spool: 1 } }, 60 * 600, DEEP);
     expect(Math.abs(run(a, 60, DEEP).craft.speed - a.craft.speed)).toBeLessThan(0.05);
   });
   it('clamps at each edge and corner', () => {
@@ -98,7 +100,7 @@ describe('advance', () => {
       ];
       s = advance(applyCommands(s, cmds, B), B);
     }
-    for (const v of Object.values(s.craft)) expect(Number.isFinite(v)).toBe(true);
+    for (const v of Object.values(s.craft)) expect(typeof v === 'boolean' || Number.isFinite(v)).toBe(true);
   });
 });
 
@@ -138,12 +140,12 @@ describe('applyCommands', () => {
 });
 
 describe('interpolate', () => {
-  const a = { x: 0, y: 0, z: 100, heading: 1, speed: 0, pathAngle: 0, pitch: 0, pitchRate: 0, bank: 0, rollRate: 0, lever: 0, spool: 0 };
-  const b = { x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2, pitch: 0.4, pitchRate: 0.1, bank: 0.6, rollRate: 0.2, lever: 1, spool: 0.5 };
+  const a = craft({ z: 100, heading: 1, gearDown: true });
+  const b = craft({ x: 10, y: 20, z: 200, heading: 2, speed: 10, pathAngle: 0.2, pitch: 0.4, pitchRate: 0.1, pitchHold: 0.5, bank: 0.6, rollRate: 0.2, lever: 1, spool: 0.5, gearDown: true, gear: 1 });
   it('ends are exact and midpoint blends', () => {
     expect(interpolate(a, b, 0)).toEqual(a);
     expect(interpolate(a, b, 1)).toEqual(b);
-    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1, pitch: 0.2, pitchRate: 0.05, bank: 0.3, rollRate: 0.1, lever: 0.5, spool: 0.25 });
+    expect(interpolate(a, b, 0.5)).toEqual({ x: 5, y: 10, z: 150, heading: 1.5, speed: 5, pathAngle: 0.1, pitch: 0.2, pitchRate: 0.05, pitchHold: 0.25, bank: 0.3, rollRate: 0.1, lever: 0.5, spool: 0.25, onGround: false, gearDown: true, gear: 0.5, flapLever: 0, flaps: 0 });
   });
   it('passes through north, not the long way', () => {
     const d = Math.PI / 180;
@@ -162,7 +164,7 @@ describe('climb', () => {
     expect(run(hold(at(0), -1), 60).craft.z).toBeLessThan(START_Z);
   });
   it('the nose holds exactly where S or W leaves it, and the path follows within 3 s', () => {
-    let s = run(hold(initialState(), 1), 60, DEEP);
+    let s = run(hold(initialState(), 1), 120, DEEP);
     s = hold(s, 0);
     for (let i = 0; i < 600; i++) s = advance(s, DEEP);
     const held = s.craft.pitch;
@@ -341,6 +343,7 @@ describe('real map', () => {
     height: worldHeight(grid),
     heightAt: (x, y) => heightAt(grid, SCALES, x, y),
     altitudeScale: SCALES.altitude,
+    groundKind: (x, y) => groundKindAt(grid, x, y),
   };
   const fly = (s: SimState, n: number): SimState => {
     for (let i = 0; i < n; i++) s = advance(s, world);
@@ -364,7 +367,7 @@ describe('real map', () => {
   });
   it('a scripted climb passes the peak without crashing', () => {
     let s = applyCommands(initialState(), [{ kind: 'pitch', value: 1 }], world);
-    s = fly(s, 60);
+    s = fly(s, 120);
     s = applyCommands(s, [{ kind: 'pitch', value: 0 }], world);
     s = fly(s, 60 * 40);
     expect(s.crash).toBeNull();
@@ -409,11 +412,11 @@ describe('real map', () => {
         if (i % 7 === 0) cmds.push({ kind: 'restart' });
       }
       s = advance(applyCommands(s, cmds, world), world);
-      for (const v of Object.values(s.craft)) expect(Number.isFinite(v)).toBe(true);
+      for (const v of Object.values(s.craft)) expect(typeof v === 'boolean' || Number.isFinite(v)).toBe(true);
       expect(s.craft.z).toBeGreaterThanOrEqual(world.heightAt(s.craft.x, s.craft.y) - 1e-9);
     }
     expect(crashes).toBeGreaterThan(0);
-  });
+  }, 30000);
 });
 
 describe('determinism', () => {

@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
 import { createLoop } from '../src/app/loop';
 import { createStepper } from '../src/app/stepper';
 import { CEILING_Z, DEFAULT_TUNING, START_LEVER, TUNING_RANGES, type Tuning } from '../src/config/motion';
 import type { Command } from '../src/sim/commands';
+import { stepPitch } from '../src/sim/flight/attitude';
 import { forcesOn } from '../src/sim/flight/forces';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
 const DEG = Math.PI / 180;
-const W: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
+const W: SimWorld = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const KEYS = Object.keys(TUNING_RANGES) as (keyof Tuning)[];
 const tune = (key: keyof Tuning, value: number): Command => ({ kind: 'tune', key, value });
 const run = (s: SimState, n: number, w = W): SimState => {
@@ -38,7 +40,7 @@ describe('tune command', () => {
     expect(applyCommands(s, [tune('massT', DEFAULT_TUNING.massT)], W)).toBe(s);
   });
   it('works while crashed and survives restart, place and rotate', () => {
-    let s: SimState = { ...initialState(), crash: { tick: 1, speed: 1, pathAngle: 0 } };
+    let s: SimState = { ...initialState(), crash: { tick: 1, speed: 1, pathAngle: 0, cause: "terrain" as const, sink: 0 } };
     s = applyCommands(s, [tune('stallDeg', 18)], W);
     expect(s.tuning.stallDeg).toBe(18);
     s = applyCommands(s, [{ kind: 'restart' }], W);
@@ -89,16 +91,17 @@ describe('tuning in motion', () => {
     expect(height(40)).toBeLessThan(height(24));
     expect(height(24)).toBeLessThan(height(12));
   });
-  it('pitch rate: S for 1 s at full authority raises the nose by about the slider value', () => {
-    const rise = (rate: number): number => {
-      let s = applyCommands(initialState(), [tune('pitchRateDegS', rate), { kind: 'pitch', value: 1 }], W);
-      const p0 = s.craft.pitch;
-      s = run(s, 60);
-      return (s.craft.pitch - p0) / DEG;
+  it('pitch rate: a key held past the ramp commands about the slider value, and a tap far less', () => {
+    const base = { pitch: 0, pitchRate: 0, hold: 0, key: 1 as const, speed: 90, sigma: 1, alpha: 0.05, separation: 0, loadFactor: 1 };
+    const settled = (rate: number, steps: number): number => {
+      let p = { pitch: 0, pitchRate: 0, hold: 0 };
+      for (let i = 0; i < steps; i++) p = stepPitch({ ...base, ...p, pitch: 0 }, { ...DEFAULT_TUNING, pitchRateDegS: rate }, 1 / 60);
+      return p.pitchRate / DEG;
     };
-    expect(rise(20)).toBeGreaterThan(rise(10) * 1.4);
-    expect(rise(10)).toBeGreaterThan(7);
-    expect(rise(10)).toBeLessThan(10);
+    expect(settled(20, 180)).toBeGreaterThan(settled(10, 180) * 1.4);
+    expect(settled(10, 180)).toBeGreaterThan(9);
+    expect(settled(10, 180)).toBeLessThanOrEqual(10);
+    expect(settled(10, 6)).toBeLessThan(1);
   });
   it('a higher stall angle stalls later: the same pull separates more with a 10 deg stall angle than with 20', () => {
     const pull = (deg: number): number => {
@@ -106,7 +109,7 @@ describe('tuning in motion', () => {
       let peak = 0;
       for (let i = 0; i < 60 * 8; i++) {
         s = advance(s, W);
-        peak = Math.max(peak, forcesOn(s.craft, s.tuning, 10).separation);
+        peak = Math.max(peak, forcesOn(s.craft, s.tuning, SCALES.altitude).separation);
       }
       return peak;
     };
@@ -130,7 +133,7 @@ describe('tuning in motion', () => {
         }
         if (s.crash && i % 7 === 0) cmds.push({ kind: 'restart' });
         s = advance(applyCommands(s, cmds, hills), hills);
-        for (const v of Object.values(s.craft)) expect(Number.isFinite(v)).toBe(true);
+        for (const v of Object.values(s.craft)) expect(typeof v === 'boolean' || Number.isFinite(v)).toBe(true);
         expect(s.craft.z).toBeGreaterThanOrEqual(hills.heightAt(s.craft.x, s.craft.y) - 1e-9);
         expect(s.craft.z).toBeLessThanOrEqual(CEILING_Z);
         expect(Math.abs(s.craft.pitch)).toBeLessThanOrEqual(30 * DEG + 1e-12);

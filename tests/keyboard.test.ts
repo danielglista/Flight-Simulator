@@ -47,3 +47,15 @@ describe('heading bug keys', () => {
     expect(actionFor({ code: 'BracketLeft', ctrlKey: true })).toBeNull();
   });
 });
+
+describe('autopilot keys (D4)', () => {
+  it('Z, X, comma and period are one-shot actions; comma and period repeat', () => {
+    expect(actionFor({ code: 'KeyZ' })).toBe('KeyZ');
+    expect(actionFor({ code: 'KeyX' })).toBe('KeyX');
+    expect(actionFor({ code: 'KeyZ', repeat: true })).toBeNull();
+    expect(actionFor({ code: 'Comma', repeat: true })).toBe('Comma');
+    expect(actionFor({ code: 'Period', repeat: true })).toBe('Period');
+    expect(actionFor({ code: 'KeyZ', ctrlKey: true })).toBeNull();
+    expect(actionFor({ code: 'KeyZ', editable: true })).toBeNull();
+  });
+});

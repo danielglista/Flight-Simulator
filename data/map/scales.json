@@ -1,0 +1,13 @@
+{
+  "scales": {
+    "geoDistance": 25,
+    "airportMajor": 2,
+    "airportSmall": 2,
+    "cityCore": 4,
+    "altitude": 5,
+    "buildingHeight": 3
+  },
+  "grid": { "baseCellM": 20, "patchCellM": 10, "patchMarginKm": 0.3 },
+  "box": { "south": 37.3, "north": 40.7, "west": -78.4, "east": -73.9 },
+  "warp": { "coreKm": 4, "rampKm": 8, "plateauEndKm": 80, "ringKm": 90 }
+}

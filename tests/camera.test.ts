@@ -7,6 +7,7 @@ import {
   screenToWorld,
   worldToScreen,
   zoomAt,
+  zoomLabel,
   type Camera,
 } from '../src/views/camera';
 
@@ -14,6 +15,12 @@ const view = { width: 320, height: 200 };
 const bounds = { width: 5120, height: 5120 };
 
 describe('camera', () => {
+  it('labels zoom levels from 1x, rounding while easing', () => {
+    expect(zoomLabel(0)).toBe('ZOOM 1x');
+    expect(zoomLabel(ZOOM_LEVELS.length - 1)).toBe('ZOOM 7x');
+    expect(zoomLabel(2.4)).toBe('ZOOM 3x');
+    expect(zoomLabel(2.6)).toBe('ZOOM 4x');
+  });
   it('round-trips world and screen at every zoom', () => {
     for (let zoom = 0; zoom < ZOOM_LEVELS.length; zoom++) {
       const cam: Camera = { x: 2000, y: 3000, zoom };

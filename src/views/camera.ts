@@ -1,9 +1,39 @@
 import type { Size } from '../config/display';
 
 /** World meters per internal pixel, from most zoomed out to most zoomed in. */
-export const ZOOM_LEVELS = [40, 20, 10, 5, 2.5, 1.25] as const;
+export const ZOOM_LEVELS = [40, 20, 10, 5, 2.5, 1.25, 0.5] as const;
 /** Start at 5 m per pixel: two pixels per 10 m cell. */
 export const DEFAULT_ZOOM = 3;
+/** The closest level: a 22.5 m runway is 45 px wide. The ground zoom starts here (C4B). */
+export const CLOSE_ZOOM = ZOOM_LEVELS.length - 1;
+
+/**
+ * Position between zoom levels as a number of pixels per meter that is straight on a log scale, so `zoom` may be
+ * fractional while the zoom eases. Whole numbers give exactly the level.
+ */
+export function interpolateLevels(levels: readonly number[], zoom: number): number {
+  const last = levels.length - 1;
+  const z = Math.min(last, Math.max(0, zoom));
+  const i = Math.min(last - 1, Math.floor(z));
+  const f = z - i;
+  const a = levels[i] as number;
+  const b = levels[i + 1] as number;
+  return f === 0 ? a : f === 1 ? b : a * Math.pow(b / a, f);
+}
+
+/** The fractional zoom whose meters-per-pixel is `mpp` (the inverse of `interpolateLevels` for a descending list). */
+export function zoomForLevels(levels: readonly number[], mpp: number): number {
+  const last = levels.length - 1;
+  if (mpp >= (levels[0] as number)) return 0;
+  if (mpp <= (levels[last] as number)) return last;
+  let i = 0;
+  while (i < last - 1 && mpp < (levels[i + 1] as number)) i++;
+  const a = levels[i] as number;
+  const b = levels[i + 1] as number;
+  return i + Math.log(mpp / a) / Math.log(b / a);
+}
+
+export const zoomForMpp = (mpp: number): number => zoomForLevels(ZOOM_LEVELS, mpp);
 
 /** Center in world meters; zoom is an index into ZOOM_LEVELS (higher = closer). */
 export interface Camera {
@@ -25,8 +55,14 @@ export interface Bounds {
   readonly height: number;
 }
 
+/** Meters per pixel at a zoom; a fractional zoom (mid-ease) lies between the two levels around it. */
 export function metersPerPixel(zoom: number): number {
-  return ZOOM_LEVELS[clampZoom(zoom)] as number;
+  return interpolateLevels(ZOOM_LEVELS, zoom);
+}
+
+/** On-screen zoom readout: the level number, 1x = farthest out. A fractional (easing) zoom shows the nearest level. */
+export function zoomLabel(zoom: number): string {
+  return `ZOOM ${Math.round(zoom) + 1}x`;
 }
 
 export function clampZoom(zoom: number): number {

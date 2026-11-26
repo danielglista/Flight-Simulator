@@ -1,5 +1,5 @@
 import { TERRAIN_COLORS, type Rgb } from '../config/palette';
-import { airportContains, fineSurfaceAt, type Airport, type Runway } from '../sim/world/airport';
+import { airportContains, fineSurfaceAt, OFF_AIRPORT, type Airport, type Runway } from '../sim/world/airport';
 import { Terrain } from '../sim/world/terrain';
 import { ZOOM_LEVELS } from './camera';
 import { drawText } from './overlay';
@@ -46,7 +46,9 @@ export function bakePatch(a: Airport, mpp: number): { data: Uint8ClampedArray; w
     for (let px = 0; px < width; px++) {
       const x = a.minX + (px + 0.5) * mpp;
       if (!airportContains(a, x, y)) continue;
-      const color = tinted(TERRAIN_COLORS[fineSurfaceAt(a, x, y)] as Rgb, a.fieldElevationM);
+      const code = fineSurfaceAt(a, x, y);
+      if (code === OFF_AIRPORT) continue;
+      const color = tinted(TERRAIN_COLORS[code] as Rgb, a.fieldElevationM);
       const o = (py * width + px) * 4;
       data[o] = color[0];
       data[o + 1] = color[1];
@@ -171,7 +173,14 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
         const h = (a.maxY - a.minY) / f.mpp;
         if (x0 > view.right || y0 > view.bottom || x0 + w < view.left || y0 + h < view.top) continue;
         ctx.imageSmoothingEnabled = false;
-        if (zoom >= 2) ctx.drawImage(patch(a, f.mpp), Math.round(x0), Math.round(y0));
+        if (zoom >= 2) {
+          // The patch is baked at the nearest zoom level; mid-ease it is stretched to the actual scale.
+          const levelMpp = ZOOM_LEVELS[zoom] as number;
+          const p = patch(a, levelMpp);
+          const k = levelMpp / f.mpp;
+          if (Math.abs(k - 1) < 1e-9) ctx.drawImage(p, Math.round(x0), Math.round(y0));
+          else ctx.drawImage(p, Math.round(x0), Math.round(y0), Math.round(p.width * k), Math.round(p.height * k));
+        }
         for (const rw of a.runways) drawRunway(ctx, f, rw, zoom);
         // Ident label beside the middle of the first runway.
         const rw = a.runways[0];

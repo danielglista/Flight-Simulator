@@ -37,6 +37,16 @@ export function waterColor(depthRealM: number): Rgb {
 export const SKY_BANDS: readonly string[] = ['#16345f', '#1f4a80', '#2f6aa3', '#5a93c4'];
 export const MARKER_COLOR = '#ffd34d';
 
+/** Gauge faces (D1). Placeholders until H2. */
+export const GAUGE_BG = '#05080e';
+export const GAUGE_RING = '#8fa0bd';
+export const GAUGE_TICK = '#c9d3e6';
+export const GAUGE_NUM = '#e8f0ff';
+export const GAUGE_NEEDLE = '#ffffff';
+export const GAUGE_NEEDLE_SHORT = '#ffd34d';
+export const GAUGE_WINDOW = '#000000';
+export const PANEL_LINE = '#1c2c44';
+
 /** Instrument readouts, B4. D1 replaces them. */
 export const READOUT_BG = '#0d1a2b';
 export const READOUT_LABEL = '#6b778d';
@@ -59,3 +69,35 @@ export const BUG_COLOR = '#4dd2ff';
 /** Altitude tape: backing panel, and the trend vector (where altitude will be in a few seconds). */
 export const TAPE_BACK_COLOR = 'rgba(0,0,0,0.5)';
 export const TREND_COLOR = '#ffd34d';
+/** Takeoff speeds on the airspeed dial, the next one to reach, and the call-out banner in the instruments panel (D5A). */
+export const VMARK_COLOR = '#7dffa0';
+export const VMARK_NEXT_COLOR = '#ffd34d';
+export const CALLOUT_COLOR = '#7dffa0';
+export const CALLOUT_BG = '#000000';
+export const CALLOUT_PROMPT_COLOR = '#ffffff';
+
+/** Approach guidance lines: the glide path in the side view and the center line in the top view. */
+export const GUIDE_COLOR = 'rgba(125,255,160,0.85)';
+
+/** Horizon, compass and vertical speed (D2). Placeholders until H2. */
+export const HORIZON_SKY = '#3f7fc4';
+export const HORIZON_GROUND = '#8a5a2b';
+export const HORIZON_LINE = '#ffffff';
+export const HORIZON_WINGS = '#ffd34d';
+export const PATH_MARKER_COLOR = '#7dffa0';
+
+/** Lamps and control gauges (D3). Placeholders until H2. */
+export const LAMP_OFF_BG = '#141c2b';
+export const LAMP_OFF_TEXT = '#4a5670';
+export const LAMP_GREEN = '#2fbf5a';
+export const LAMP_TEXT_DARK = '#0a0e14';
+/** Flap and gear gauge (D3). */
+export const BAR_LEVER = '#e8f0ff';
+export const BAR_ENGINE = '#4dd2ff';
+/** Power dial (D5B): engine fill, lever marker, and the gap while the engine catches up. */
+export const N1_FILL = '#1f7a45';
+export const N1_LEVER = '#ffd34d';
+export const N1_GAP = '#ffb020';
+export const N1_RED = '#ff4a3d';
+/** Top view: the route between two airports (E3). */
+export const ROUTE_COLOR = '#ff6ad5';

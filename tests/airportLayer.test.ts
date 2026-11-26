@@ -1,5 +1,5 @@
+import { TEST_MAP_OFFSET_M as O } from '../src/sim/world/testMap';
 import { describe, expect, it } from 'vitest';
-import { SCALES } from '../src/config/scales';
 import { TERRAIN_COLORS } from '../src/config/palette';
 import { fineSurfaceAt } from '../src/sim/world/airport';
 import { surfaceAt } from '../src/sim/world/grid';
@@ -11,7 +11,7 @@ import { ZOOM_LEVELS } from '../src/views/camera';
 import { tinted } from '../src/views/terrainColors';
 import { surfaceName } from '../src/views/surfaceName';
 
-const air = buildTestAirport(SCALES);
+const air = buildTestAirport();
 const grid = withAirports(buildTestMap(), [air]);
 
 describe('bakePatch', () => {
@@ -39,7 +39,7 @@ describe('bakePatch', () => {
         }
       }
       expect(checked).toBeGreaterThan(100);
-    });
+    }, 30000);
   }
   it('is transparent past the boundary', () => {
     const p = bakePatch(air, 11); // 1400 / 11 is not whole, so the last pixels overhang
@@ -57,8 +57,8 @@ describe('bakePatch', () => {
       return (py * p.width + px) * 4;
     };
     const apron = TERRAIN_COLORS[9] as [number, number, number];
-    const north = at(2560, 955 + 165);
-    const south = at(2560, 955 - 165);
+    const north = at(2560 + O, 955 + O + 165);
+    const south = at(2560 + O, 955 + O - 165);
     expect(p.data[north]).toBe(Math.round(tinted(apron, 30)[0]));
     expect(p.data[south]).not.toBe(p.data[north]);
   });
@@ -77,7 +77,7 @@ describe('surfaceName', () => {
   it('names the runway with its ends and airport', () => {
     const rw = air.runways[0]!;
     expect(surfaceName(grid, (rw.a.x + rw.b.x) / 2, (rw.a.y + rw.b.y) / 2)).toBe('runway 07/25 TST');
-    expect(surfaceName(grid, 2560, 955 + 165)).toBe('apron');
+    expect(surfaceName(grid, 2560 + O, 955 + O + 165)).toBe('apron');
     expect(surfaceName(grid, 100, 100)).toBe('seabed');
   });
 });

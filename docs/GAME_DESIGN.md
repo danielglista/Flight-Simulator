@@ -91,9 +91,12 @@ One scale cannot serve everything. At a single 1:40 scale, a 7,000 ft runway wou
 
 | Quantity | Starting scale *(tune)* | Reason |
 |---|---|---|
-| Distance between places | 1:40 | Turns hours into minutes |
-| Airports and runways | 1:2 | Leaves room to take off and land at real speeds |
-| Altitude and terrain height | 1:10 | Climbs fit in the time available at plausible angles |
+| Distance between places | 1:25 *(E1 preview: 1:20, 1:25, 1:30)* | Turns hours into minutes |
+| Major airports | 1:2 *(E2: same as small airports; not yet used by the game)* | Room for runways, taxiways and terminals, with the real shoreline kept |
+| Small airports | 1:2 | Leaves room to take off and land at real speeds |
+| City cores | 1:4 *(E1; not yet used by the game)* | Room for districts and buildings; the land around a city is squeezed to compensate |
+| Building height | 1:3 *(E1; not yet used by the game)* | Skylines read as tall |
+| Altitude and terrain height | 1:5 *(was 1:10; changed to make altitude easier to hold, see D4B_PLAN.md)* | Climbs fit in the time available at plausible angles |
 | Airspeed | 1:1 | Familiar numbers; physics stays intact |
 | Aircraft sprites | Not to scale | Readability |
 
@@ -101,9 +104,9 @@ As an illustration only, these values make a 1h30m flight such as DC to Chicago 
 
 *World* units are what the physics uses. *Displayed* units are what the player and ATC see.
 
-- **Distance:** displayed as real nautical miles (world x 40).
-- **Altitude:** displayed as real feet (world x 10).
-- **Vertical speed:** displayed in unscaled world ft/min so it reads normally. The altimeter will therefore move 10x faster than V/S suggests. Test whether this bothers players.
+- **Distance:** displayed as real nautical miles (world x 25; between places, E1).
+- **Altitude:** displayed as real feet (world x 5).
+- **Vertical speed:** displayed in unscaled world ft/min so it reads normally. The altimeter will therefore move 5x faster than V/S suggests. Test whether this bothers players.
 
 ### 4.2 Weather
 Weather affects flying, visibility and ATC, and is visible in both views.
@@ -121,7 +124,7 @@ MVP weather is chosen per flight from presets such as clear, windy, overcast and
 ### 4.3 Consequences of scale
 - **Close airports collide.** DCA and IAD, about 20 nm apart, would be only about 3,000 ft apart in world units, less than one enlarged runway. Use one airport per metro area at first.
 - **Cities and roads are symbolic.** Show landmarks and major features rather than full street grids.
-- **Slopes look about 4x steeper,** because height is compressed less than distance. This suits the side view.
+- **Slopes look about 5x steeper at 1:25,** because height (1:5) is compressed less than distance. The mountain rules in E_PLAN §5.2 soften this. This suits the side view.
 - **Longer flights scale up.** Flight time grows with distance and varies with how the player flies. Optional time acceleration can come later.
 
 ## 5. Flight mechanics
@@ -163,7 +166,9 @@ Keyboard first; gamepad later. Keys are provisional.
 | Flaps extend / retract | F / R |
 | Gear | G |
 | Brakes | Space |
-| Autopilot hold (heading and altitude) | Z |
+| Autopilot on / off: holds the heading bug and altitude bug, with speed hold (D4) | Z |
+| Speed hold on / off; speed target down / up 5 kt (Shift 1 kt) | X; comma / period |
+| Move the heading bug / altitude bug (the autopilot follows them) | [ ] / - = |
 | Quick replies | 1-4 |
 | Focus terminal / return to flying | Tab / Esc |
 | Map zoom | Mouse wheel |

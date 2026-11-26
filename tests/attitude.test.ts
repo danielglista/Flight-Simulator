@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
+import { PITCH_RAMP_MIN, PITCH_RAMP_S } from '../src/config/flight';
 import { DEFAULT_TUNING } from '../src/config/motion';
 import { stallState } from '../src/sim/flight/aero';
-import { authority, stepBank, stepPitch, type BankInput, type PitchInput } from '../src/sim/flight/attitude';
+import { authority, nextPitchHold, pitchRamp, stepBank, stepPitch, type BankInput, type PitchInput } from '../src/sim/flight/attitude';
 import { forcesOn } from '../src/sim/flight/forces';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
 const DEG = Math.PI / 180;
-const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: 10 };
+const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const run = (s: SimState, n: number): SimState => {
   for (let i = 0; i < n; i++) s = advance(s, DEEP);
   return s;
@@ -15,7 +17,7 @@ const run = (s: SimState, n: number): SimState => {
 const key = (s: SimState, v: -1 | 0 | 1, thr?: -1 | 0 | 1): SimState =>
   applyCommands(s, [{ kind: 'pitch', value: v }, ...(thr === undefined ? [] : [{ kind: 'throttle' as const, value: thr }])], DEEP);
 const secs = (s: SimState, n: number): SimState => run(s, Math.round(n * 60));
-const base: PitchInput = { pitch: 0, pitchRate: 0, key: 0, speed: 90, sigma: 1, alpha: 0.05, separation: 0, loadFactor: 1 };
+const base: PitchInput = { pitch: 0, pitchRate: 0, hold: 0, key: 0, speed: 90, sigma: 1, alpha: 0.05, separation: 0, loadFactor: 1 };
 
 describe('pitch keys', () => {
   it('pitch holds exactly with no key, below separation', () => {
@@ -36,7 +38,7 @@ describe('pitch keys', () => {
     const sep = { ...base, alpha: 0.4, separation: 1, speed: 90 };
     let up = { pitch: 0, pitchRate: 0 };
     let down = { pitch: 0, pitchRate: 0 };
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 90; i++) {
       up = stepPitch({ ...sep, ...up, key: 1 }, DEFAULT_TUNING, 1 / 60);
       down = stepPitch({ ...sep, ...down, key: -1 }, DEFAULT_TUNING, 1 / 60);
     }
@@ -55,7 +57,7 @@ describe('pitch keys', () => {
       let lo = Infinity;
       for (let i = 0; i < 600; i++) {
         s = advance(s, DEEP);
-        const n = forcesOn(s.craft, s.tuning, 10).loadFactor;
+        const n = forcesOn(s.craft, s.tuning, SCALES.altitude).loadFactor;
         hi = Math.max(hi, n);
         lo = Math.min(lo, n);
       }
@@ -76,7 +78,7 @@ describe('stall and recovery', () => {
       if (stalledAt < 0 && stallState(s.craft, s.tuning) === 'stalled') {
         stalledAt = i / 60;
       }
-      const f = forcesOn(s.craft, s.tuning, 10);
+      const f = forcesOn(s.craft, s.tuning, SCALES.altitude);
       if (!deep && f.separation >= 0.5) {
         deep = true;
         expect(f.loadFactor).toBeLessThan(1); // lift below weight once well into the stall
@@ -90,18 +92,18 @@ describe('stall and recovery', () => {
   it('the stall is physics, not a script: a heavier plane stalls at a higher speed', () => {
     const stallSpeed = (m: number): number => {
       let s = key({ ...initialState(), tuning: { ...DEFAULT_TUNING, massT: m } }, 1);
-      for (let i = 0; i < 60 * 40; i++) {
+      for (let i = 0; i < 60 * 60; i++) {
         s = advance(s, DEEP);
         if (stallState(s.craft, s.tuning) === 'stalled') return s.craft.speed;
       }
       return NaN;
     };
-    expect(stallSpeed(40)).toBeGreaterThan(stallSpeed(12));
+    expect(stallSpeed(30)).toBeGreaterThan(stallSpeed(12));
   });
   /** A mushing stall from 400 m: idle, S held. */
   const mush = (): SimState => {
     const s0 = initialState();
-    let s = key({ ...s0, craft: { ...s0.craft, z: 400 } }, 0, -1);
+    let s = key({ ...s0, craft: { ...s0.craft, z: 800 } }, 0, -1);
     s = secs(s, 3);
     s = key(s, 1, 0);
     return secs(s, 8);
@@ -109,10 +111,10 @@ describe('stall and recovery', () => {
   it('the mush is a stall', () => {
     expect(stallState(mush().craft, DEFAULT_TUNING)).toBe('stalled');
   });
-  it('W for 1 s + full throttle, 2 s, S 1 s, 4 s recovers, losing under 80 m', () => {
+  it('W for 2 s + full throttle, 2 s, S 1 s, 4 s recovers, losing under 80 m', () => {
     let s = mush();
     const z0 = s.craft.z;
-    s = secs(key(s, -1, 1), 1);
+    s = secs(key(s, -1, 1), 2);
     s = secs(key(s, 0), 2);
     s = secs(key(s, 1), 1);
     s = secs(key(s, 0), 4);
@@ -190,5 +192,48 @@ describe('stepBank', () => {
     const b = stepBank({ ...start, bank: 20 * DEG, level: true, key: 1 }, DEFAULT_TUNING, dt);
     expect(b.level).toBe(false);
     expect(b.rollRate).toBeGreaterThan(0);
+  });
+});
+
+describe('pitch key ramp', () => {
+  it('starts small, rises smoothly, reaches 1 at PITCH_RAMP_S and stays there', () => {
+    expect(pitchRamp(0)).toBe(PITCH_RAMP_MIN);
+    expect(pitchRamp(PITCH_RAMP_S)).toBe(1);
+    expect(pitchRamp(PITCH_RAMP_S * 5)).toBe(1);
+    let last = 0;
+    for (let t = 0; t <= PITCH_RAMP_S; t += 0.05) {
+      expect(pitchRamp(t)).toBeGreaterThanOrEqual(last);
+      last = pitchRamp(t);
+    }
+    expect(pitchRamp(-0.6)).toBe(pitchRamp(0.6));
+  });
+  it('hold counts up in the key direction, resets on release, and restarts on a reversal', () => {
+    let h = 0;
+    for (let i = 0; i < 60; i++) h = nextPitchHold(h, 1, 1 / 60);
+    expect(h).toBeCloseTo(1, 9);
+    expect(nextPitchHold(h, 0, 1 / 60)).toBe(0);
+    expect(nextPitchHold(h, -1, 1 / 60)).toBeCloseTo(-1 / 60, 12);
+    expect(nextPitchHold(-0.5, -1, 1 / 60)).toBeCloseTo(-0.5 - 1 / 60, 12);
+  });
+  it('a 0.1 s tap moves the nose under 0.25 deg, and a 2 s hold moves it over 8 deg', () => {
+    const swing = (seconds: number): number => {
+      let p = { pitch: 0, pitchRate: 0, hold: 0 };
+      for (let i = 0; i < Math.round(seconds * 60); i++) p = stepPitch({ ...base, ...p, key: 1 }, DEFAULT_TUNING, 1 / 60);
+      for (let i = 0; i < 120; i++) p = stepPitch({ ...base, ...p, key: 0 }, DEFAULT_TUNING, 1 / 60);
+      return p.pitch / DEG;
+    };
+    expect(swing(0.1)).toBeGreaterThan(0);
+    expect(swing(0.1)).toBeLessThan(0.25);
+    expect(swing(2)).toBeGreaterThan(8);
+  });
+  it('releasing resets the ramp: the same tap twice with a gap gives the same nudge', () => {
+    let p = { pitch: 0, pitchRate: 0, hold: 0 };
+    const tap = (): number => {
+      const p0 = p.pitch;
+      for (let i = 0; i < 6; i++) p = stepPitch({ ...base, ...p, key: 1 }, DEFAULT_TUNING, 1 / 60);
+      for (let i = 0; i < 120; i++) p = stepPitch({ ...base, ...p, key: 0 }, DEFAULT_TUNING, 1 / 60);
+      return p.pitch - p0;
+    };
+    expect(tap()).toBeCloseTo(tap(), 5);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SCALES } from '../src/config/scales';
 import { heightAt } from '../src/sim/world/grid';
 import { Terrain } from '../src/sim/world/terrain';
-import { buildTestMap, TEST_MAP_CELLS, TEST_MAP_LANDMARKS as L } from '../src/sim/world/testMap';
+import { buildTestMap, SEA_PAD_CELLS, TEST_MAP_CELLS, TEST_MAP_LANDMARKS as L } from '../src/sim/world/testMap';
 
 const map = buildTestMap();
 const n = TEST_MAP_CELLS;
@@ -40,7 +40,7 @@ describe('test map', () => {
     expect(max).toBeLessThan(1950);
     expect(map.elevation[L.peak.row * n + L.peak.col]).toBe(max);
     const h = heightAt(map, SCALES, (L.peak.col + 0.5) * 10, (L.peak.row + 0.5) * 10);
-    expect(h).toBeCloseTo(max / 10, 5);
+    expect(h).toBeCloseTo(max / SCALES.altitude, 5);
   });
   it('has water joining the mountains, the lake and the sea', () => {
     const seen = new Uint8Array(n * n);
@@ -101,8 +101,8 @@ describe('test map', () => {
     expect(map.terrain[lc]).not.toBe(Terrain.seabed); // the bed is ordinary ground
   });
   it('deepens the sea floor away from the coast', () => {
-    const coast = 256 * n + 31; // just off the west coast, row 256
-    const far = 256 * n + 5;
+    const coast = (256 + SEA_PAD_CELLS) * n + 31 + SEA_PAD_CELLS; // just off the west coast, row 256
+    const far = (256 + SEA_PAD_CELLS) * n + 5 + SEA_PAD_CELLS;
     expect(map.elevation[coast] as number).toBeLessThan(0);
     expect(map.elevation[far] as number).toBeLessThan(map.elevation[coast] as number);
   });

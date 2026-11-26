@@ -1,5 +1,6 @@
-import { runwayNumber, type Airport } from './airport';
-import { cellIndex, worldHeight, worldWidth, type WorldGrid } from './grid';
+import { FIELD_TOLERANCE_M } from '../../config/map';
+import { fineSurfaceAt, OFF_AIRPORT, runwayNumber, type Airport } from './airport';
+import { cellIndex, groundAt, waterLevelAt, worldHeight, worldWidth, type WorldGrid } from './grid';
 import { Terrain } from './terrain';
 
 const EPS = 1e-6;
@@ -10,7 +11,7 @@ function check(ok: boolean, a: Airport, what: string): void {
 
 /** Throws, naming the airport, if it cannot sit on this grid. */
 export function validateAirport(grid: WorldGrid, a: Airport, others: readonly Airport[] = []): void {
-  check(a.blend > 0, a, 'blend must be positive');
+  check(a.masked === true || a.blend > 0, a, 'blend must be positive');
   check(a.cellSize > 0 && a.cols > 0 && a.rows > 0, a, 'fine grid must have cells');
   check(a.surface.length === a.cols * a.rows, a, 'surface size does not match cols x rows');
   check(
@@ -25,7 +26,7 @@ export function validateAirport(grid: WorldGrid, a: Airport, others: readonly Ai
     'boundary is outside the map',
   );
   check(
-    2 * a.blend < a.maxX - a.minX && 2 * a.blend < a.maxY - a.minY,
+    a.masked === true || 2 * a.blend < a.maxX - a.minX && 2 * a.blend < a.maxY - a.minY,
     a,
     'blend band leaves no flat interior',
   );
@@ -35,10 +36,12 @@ export function validateAirport(grid: WorldGrid, a: Airport, others: readonly Ai
   }
 
   // Everything paved must lie on the flat interior, so surfaces and heights agree.
-  const lo = { x: a.minX + a.blend - EPS, y: a.minY + a.blend - EPS };
-  const hi = { x: a.maxX - a.blend + EPS, y: a.maxY - a.blend + EPS };
+  // A masked airport has no band: its runways must lie on its ground cells instead.
+  const band = a.masked ? 0 : a.blend;
+  const lo = { x: a.minX + band - EPS, y: a.minY + band - EPS };
+  const hi = { x: a.maxX - band + EPS, y: a.maxY - band + EPS };
   const inside = (x: number, y: number): boolean => x >= lo.x && x <= hi.x && y >= lo.y && y <= hi.y;
-  for (let r = 0; r < a.rows; r++) {
+  for (let r = 0; r < a.rows && !a.masked; r++) {
     for (let c = 0; c < a.cols; c++) {
       if (a.surface[r * a.cols + c] === Terrain.grass) continue;
       const x0 = a.minX + c * a.cellSize;
@@ -65,11 +68,26 @@ export function validateAirport(grid: WorldGrid, a: Airport, others: readonly Ai
       [rw.b.x - uy * hw, rw.b.y + ux * hw],
     ] as const) {
       check(inside(px, py), a, `${label} reaches the blend band or the boundary`);
+      // Corners are pulled in a hair so one exactly on an edge counts as on the ground.
+      const mx = (rw.a.x + rw.b.x) / 2;
+      const my = (rw.a.y + rw.b.y) / 2;
+      check(!a.masked || fineSurfaceAt(a, px + (mx - px) * 1e-3, py + (my - py) * 1e-3) !== OFF_AIRPORT, a, `${label} leaves the airport ground`);
     }
-    const first = runwayNumber(rw.heading);
-    const second = runwayNumber(rw.heading + Math.PI);
-    check(rw.names[0] === first, a, `${label}: name ${rw.names[0]} does not match heading (${first})`);
-    check(rw.names[1] === second, a, `${label}: name ${rw.names[1]} is not the reciprocal (${second})`);
+    // Names are magnetic: true heading plus the variation. L, C and R mark parallels and swap at the other end.
+    const variation = ((a.variationDeg ?? 0) * Math.PI) / 180;
+    const first = runwayNumber(rw.heading + variation);
+    const second = runwayNumber(rw.heading + variation + Math.PI);
+    const parse = (name: string) => /^(\d\d)([LCR]?)$/.exec(name);
+    const n0 = parse(rw.names[0]);
+    const n1 = parse(rw.names[1]);
+    const swapped: Record<string, string> = { L: 'R', R: 'L', C: 'C', '': '' };
+    check(n0?.[1] === first, a, `${label}: name ${rw.names[0]} does not match heading (${first})`);
+    check(n1?.[1] === second && n1[2] === swapped[n0?.[2] ?? ''], a, `${label}: name ${rw.names[1]} is not the reciprocal (${second})`);
+  }
+
+  if (a.masked) {
+    checkMaskedGround(grid, a);
+    return;
   }
 
   // Dry base ground under the whole boundary.
@@ -85,6 +103,22 @@ export function validateAirport(grid: WorldGrid, a: Airport, others: readonly Ai
         a,
         `base ground is wet at cell ${c},${r}`,
       );
+    }
+  }
+}
+
+/** Under every ground cell of a masked airport the map is dry and level with the field. */
+function checkMaskedGround(grid: WorldGrid, a: Airport): void {
+  const bare: WorldGrid = { ...grid, airports: [] };
+  const real = { altitude: 1, geoDistance: 1 }; // heights in real meters
+  for (let r = 0; r < a.rows; r++) {
+    for (let c = 0; c < a.cols; c++) {
+      if (a.surface[r * a.cols + c] === OFF_AIRPORT) continue;
+      const x = a.minX + (c + 0.5) * a.cellSize;
+      const y = a.minY + (r + 0.5) * a.cellSize;
+      check(Number.isNaN(waterLevelAt(bare, real, x, y)), a, `map is wet under the ground at ${Math.round(x)}, ${Math.round(y)}`);
+      const h = groundAt(bare, real, x, y);
+      check(Math.abs(h - a.fieldElevationM) <= FIELD_TOLERANCE_M, a, `map stands at ${h.toFixed(1)} m, not the field's ${a.fieldElevationM} m, at ${Math.round(x)}, ${Math.round(y)}`);
     }
   }
 }

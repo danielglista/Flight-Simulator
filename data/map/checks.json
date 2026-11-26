@@ -1,0 +1,128 @@
+{
+  "checks": [
+    {
+      "id": "atlantic-off-ocean-city",
+      "lat": 38.3,
+      "lon": -74.5,
+      "expect": "water"
+    },
+    {
+      "id": "delaware-bay",
+      "lat": 39.1,
+      "lon": -75.3,
+      "expect": "water"
+    },
+    {
+      "id": "chesapeake-mid-bay",
+      "lat": 38.5,
+      "lon": -76.4,
+      "expect": "water"
+    },
+    {
+      "id": "potomac-at-quantico",
+      "lat": 38.5,
+      "lon": -77.28,
+      "expect": "water"
+    },
+    {
+      "id": "annapolis",
+      "lat": 38.97,
+      "lon": -76.5,
+      "expect": "land",
+      "maxElevationM": 60
+    },
+    {
+      "id": "delmarva-inland",
+      "lat": 38.8,
+      "lon": -75.6,
+      "expect": "land",
+      "maxElevationM": 40
+    },
+    {
+      "id": "blue-ridge-north-west-of-dc",
+      "lat": 38.75,
+      "lon": -78.2,
+      "expect": "land",
+      "minElevationM": 150
+    },
+    {
+      "id": "pennsylvania-hills",
+      "lat": 40.3,
+      "lon": -77.6,
+      "expect": "land",
+      "minElevationM": 100
+    },
+    {
+      "id": "potomac-at-georgetown",
+      "lat": 38.9012,
+      "lon": -77.064,
+      "expect": "water"
+    },
+    {
+      "id": "potomac-at-memorial-bridge",
+      "lat": 38.8866,
+      "lon": -77.055,
+      "expect": "water"
+    },
+    {
+      "id": "potomac-beside-dca",
+      "lat": 38.851,
+      "lon": -77.03,
+      "expect": "water"
+    },
+    {
+      "id": "anacostia-at-navy-yard",
+      "lat": 38.87,
+      "lon": -77.004,
+      "expect": "water"
+    },
+    {
+      "id": "east-potomac-park",
+      "lat": 38.87,
+      "lon": -77.0295,
+      "expect": "land"
+    },
+    {
+      "id": "arlington",
+      "lat": 38.88,
+      "lon": -77.1,
+      "expect": "land"
+    },
+    {
+      "id": "national-mall",
+      "lat": 38.8895,
+      "lon": -77.03,
+      "expect": "land"
+    },
+    {
+      "id": "delaware-at-penn-landing",
+      "lat": 39.947,
+      "lon": -75.135,
+      "expect": "water"
+    },
+    {
+      "id": "camden",
+      "lat": 39.945,
+      "lon": -75.118,
+      "expect": "land"
+    },
+    {
+      "id": "center-city",
+      "lat": 39.9526,
+      "lon": -75.1652,
+      "expect": "land"
+    },
+    {
+      "id": "delaware-beside-phl",
+      "lat": 39.9146,
+      "lon": -75.1948,
+      "expect": "water"
+    },
+    {
+      "id": "delaware-to-the-bay",
+      "lat": 39.6185,
+      "lon": -75.3964,
+      "expect": "water"
+    }
+  ]
+}

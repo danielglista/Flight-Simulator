@@ -1,3 +1,4 @@
+import { TEST_MAP_OFFSET_M as O } from '../src/sim/world/testMap';
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../src/config/scales';
 import { createGrid, heightAt, surfaceAt } from '../src/sim/world/grid';
@@ -61,11 +62,11 @@ describe('sliceAlong', () => {
     w.elevation.set([100, 100, 100, 100]);
     w.water.set([0, 40, 0, 0]);
     const s = sliceAlong(w, SCALES, { x: 5, y: 5 }, Math.PI / 2, 30, 4);
-    expect(s.groundWorldM[1]).toBeCloseTo(10, 4);
-    expect(s.waterWorldM[1]).toBeCloseTo(14, 4);
-    expect(s.heightWorldM[1]).toBeCloseTo(14, 4);
+    expect(s.groundWorldM[1]).toBeCloseTo(100 / SCALES.altitude, 4);
+    expect(s.waterWorldM[1]).toBeCloseTo(140 / SCALES.altitude, 4);
+    expect(s.heightWorldM[1]).toBeCloseTo(140 / SCALES.altitude, 4);
     expect(Number.isNaN(s.waterWorldM[0] as number)).toBe(true);
-    expect(s.heightWorldM[0]).toBeCloseTo(10, 4);
+    expect(s.heightWorldM[0]).toBeCloseTo(100 / SCALES.altitude, 4);
   });
   it('is sea at 0 off the map', () => {
     const s = sliceAlong(g, SCALES, { x: -100, y: -100 }, Math.PI, 50, 4);
@@ -82,7 +83,7 @@ describe('sliceAlong', () => {
 
 describe('slice on the test map', () => {
   const grid = buildTestMap();
-  const start = { x: 2560, y: 2560 };
+  const start = { x: 2560 + O, y: 2560 + O };
   const at = (heading: number, length: number, samples: number) =>
     sliceAlong(grid, SCALES, start, heading, length, samples);
 
@@ -99,7 +100,7 @@ describe('slice on the test map', () => {
   it('due south reaches the level area at 3 world m', () => {
     // level area: cols 181-331, rows 70-120 -> y 700-1210, elevation 30 m real
     const s = at(Math.PI, 2560 - 1000, 2);
-    expect(s.heightWorldM[1]).toBeCloseTo(3, 1);
+    expect(s.heightWorldM[1]).toBeCloseTo(30 / SCALES.altitude, 1);
   });
   it('due west reaches the sea', () => {
     const s = at((3 * Math.PI) / 2, 2560, 2);

@@ -1,4 +1,4 @@
-import { AUTH_FULL, BANK_MAX_DEG, CL_ALPHA, GRAVITY, LEVEL_GAIN, ROLL_LAG_S, TURN_HELP_CAP_DEG, WING_AREA, AUTH_MIN, AUTH_ZERO, LOAD_FADE, LOAD_MAX, LOAD_MIN, PITCH_LAG, PITCH_MAX_CMD_DEG } from '../../config/flight';
+import { AUTH_FULL, BANK_MAX_DEG, CL_ALPHA, GRAVITY, LEVEL_GAIN, ROLL_LAG_S, TURN_HELP_CAP_DEG, WING_AREA, AUTH_MIN, AUTH_ZERO, LOAD_FADE, LOAD_MAX, LOAD_MIN, PITCH_LAG, PITCH_MAX_CMD_DEG, PITCH_RAMP_MIN, PITCH_RAMP_S } from '../../config/flight';
 import type { Tuning } from '../../config/motion';
 import type { Axis } from '../state';
 import { dynamicPressure } from './aero';
@@ -11,10 +11,27 @@ export function authority(speed: number, sigma: number): number {
   return clamp((speed * Math.sqrt(sigma) - AUTH_ZERO) / (AUTH_FULL - AUTH_ZERO), AUTH_MIN, 1);
 }
 
+/** Share of the full pitch rate a key asks for after being held this many seconds: PITCH_RAMP_MIN, rising with the square of time to 1. */
+export function pitchRamp(holdS: number): number {
+  const t = clamp(Math.abs(holdS) / PITCH_RAMP_S, 0, 1);
+  return PITCH_RAMP_MIN + (1 - PITCH_RAMP_MIN) * t * t;
+}
+
+/** Signed seconds the pitch key has been held in one direction (positive = nose up). Zero on release; reverses restart it. */
+export function nextPitchHold(hold: number, key: Axis, dt: number): number {
+  if (key === 0) return 0;
+  return Math.sign(hold) === key ? hold + key * dt : key * dt;
+}
+
 export interface PitchInput {
   readonly pitch: number;
   readonly pitchRate: number;
-  readonly key: Axis;
+  /** Signed seconds the key has been held, from `nextPitchHold`. */
+  readonly hold: number;
+  /** Commanded pitch, -1..1. Keys are -1, 0 or 1; the autopilot may send any share. */
+  readonly key: number;
+  /** The autopilot's pitch command, which skips the key ramp (D4); null when the keys decide. */
+  readonly direct?: number | null;
   readonly speed: number;
   readonly sigma: number;
   /** Angle of attack, radians, at the start of the step. */
@@ -30,18 +47,22 @@ export interface PitchInput {
  * released. Nose-up stops working in a stall and near the load limit; nose-down fades near -1 g. While
  * separated the nose drops by itself, which is the stall. Returns the new pitch and pitch rate.
  */
-export function stepPitch(i: PitchInput, tuning: Tuning, dt: number): { pitch: number; pitchRate: number } {
+export function stepPitch(i: PitchInput, tuning: Tuning, dt: number): { pitch: number; pitchRate: number; hold: number } {
+  const direct = i.direct ?? null;
+  const cmd = direct ?? i.key;
+  // The autopilot is not a held key: it has no ramp and no hold.
+  const hold = direct !== null ? 0 : nextPitchHold(i.hold, i.key as Axis, dt);
   const auth = authority(i.speed, i.sigma);
   // Separation on the positive side blocks nose-up; on the negative side it blocks nose-down.
   const sUp = i.alpha > 0 ? i.separation : 0;
   const sDown = i.alpha < 0 ? i.separation : 0;
   const fade =
-    i.key > 0
+    cmd > 0
       ? (1 - sUp) * clamp((LOAD_MAX - i.loadFactor) / LOAD_FADE, 0, 1)
-      : i.key < 0
+      : cmd < 0
         ? (1 - sDown) * clamp(i.loadFactor - LOAD_MIN, 0, 1)
         : 1;
-  const target = i.key * tuning.pitchRateDegS * DEG * auth * fade;
+  const target = cmd * tuning.pitchRateDegS * DEG * auth * fade * (direct !== null ? 1 : pitchRamp(hold));
   let pitchRate = i.pitchRate + (target - i.pitchRate) * (1 - Math.exp(-dt / PITCH_LAG));
   let pitch = i.pitch + pitchRate * dt - Math.sign(i.alpha) * i.separation * tuning.stallDropDegS * DEG * dt;
   const max = PITCH_MAX_CMD_DEG * DEG;
@@ -49,13 +70,14 @@ export function stepPitch(i: PitchInput, tuning: Tuning, dt: number): { pitch: n
     pitch = clamp(pitch, -max, max);
     pitchRate = 0;
   }
-  return { pitch, pitchRate };
+  return { pitch, pitchRate, hold };
 }
 
 export interface BankInput {
   readonly bank: number;
   readonly rollRate: number;
-  readonly key: Axis;
+  /** Roll command, -1..1: a key (-1, 0, 1) or the autopilot's share. */
+  readonly key: number;
   /** Wings-level is on: roll toward zero bank and stop there. A held key cancels it. */
   readonly level: boolean;
   readonly speed: number;

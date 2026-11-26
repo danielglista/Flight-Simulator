@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
 import { advance } from '../src/sim/step';
 import { initialState, type SimState } from '../src/sim/state';
 import { screenToWorld, worldToScreen, ZOOM_LEVELS } from '../src/views/camera';
@@ -6,7 +7,7 @@ import { edgeArrow } from '../src/views/edgeArrow';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from '../src/views/followCamera';
 import { distanceToX, planeColumn, sideMetersPerPixel, sliceWindow, SIDE_ZOOM_LEVELS, xToDistance } from '../src/views/sideCamera';
 
-const bounds = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
+const bounds = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const craft = { x: 1234.5, y: 3456.7 };
 const sizes = [
   { width: 640, height: 360 },
@@ -27,7 +28,7 @@ describe('follow camera', () => {
   });
   it('keeps the craft pixel fixed over 600 steps of turning flight', () => {
     for (const view of sizes) {
-      let s: SimState = { ...initialState(), controls: { turn: 1, throttle: 0, pitch: 0, level: false } };
+      let s: SimState = { ...initialState(), controls: { turn: 1, throttle: 0, pitch: 0, level: false, brake: false } };
       const f = initialFollow(4);
       const first = worldToScreen(cameraFor(f, s.craft), view, s.craft.x, s.craft.y);
       for (let i = 0; i < 600; i++) {
@@ -42,9 +43,10 @@ describe('follow camera', () => {
     const f = zoomed(initialFollow(3), craft, view, { x: 10, y: 10 }, 2, bounds);
     expect(f.following).toBe(true);
     expect(f.free.zoom).toBe(5);
+    const closest = ZOOM_LEVELS.length - 1;
     const p = worldToScreen(cameraFor(f, craft), view, craft.x, craft.y);
     expect(p).toEqual({ x: 320, y: 180 });
-    expect(zoomed(f, craft, view, { x: 0, y: 0 }, 9, bounds).free.zoom).toBe(5);
+    expect(zoomed(f, craft, view, { x: 0, y: 0 }, 9, bounds).free.zoom).toBe(closest);
     expect(zoomed(f, craft, view, { x: 0, y: 0 }, -9, bounds).free.zoom).toBe(0);
   });
 });

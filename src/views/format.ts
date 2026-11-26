@@ -1,4 +1,5 @@
 import { wrapHeading } from '../sim/angles';
+import { N1_IDLE_PCT } from '../config/display';
 
 /** Three digits in degrees, north as 360 (359.7 rounds to 360). */
 export function formatHeading(h: number): string {
@@ -26,17 +27,17 @@ export function formatAltitude(feet: number): string {
   return (r < 0 ? '-' : '') + withCommas(r);
 }
 
-/** Ft/min to the nearest 50, always signed except zero: `+3,050`, `-500`, `0`. */
+/** Ft/min to the nearest 10, always signed except zero: `+3,050`, `-520`, `0`. */
 export function formatVerticalSpeed(fpm: number): string {
-  const r = roundTo(fpm, 50);
+  const r = roundTo(fpm, 10);
   if (r === 0) return '0';
   return (r < 0 ? '-' : '+') + withCommas(r);
 }
 
 /** Whole degrees, signed except zero: `+5`, `0`, `-12`. */
 export function formatPitch(deg: number): string {
-  const r = roundTo(deg, 1);
-  return r === 0 ? '0' : (r < 0 ? '-' : '+') + Math.abs(r);
+  const r = roundTo(deg, 0.1);
+  return r === 0 ? '0.0' : (r < 0 ? '-' : '+') + Math.abs(r).toFixed(1);
 }
 
 /** Bank in whole degrees: `L 30`, `0`, `R 30`. */
@@ -46,7 +47,15 @@ export function formatBank(deg: number): string {
   return `${deg < 0 ? 'L' : 'R'} ${r}`;
 }
 
-/** A 0..1 fraction as a whole percent. */
-export function formatPercent(f: number): string {
-  return String(roundTo(f * 100, 1));
+/** The power reading for a lever or engine fraction (0..1): N1_IDLE_PCT at idle, 100 at full (D5B). Display only. */
+export function powerPct(fraction: number): number {
+  return Math.round(N1_IDLE_PCT + (100 - N1_IDLE_PCT) * Math.min(1, Math.max(0, fraction)));
 }
+
+/** Height above ground by the plumb line, in displayed feet like ALT: `AGL 120 ft`. */
+export function formatAgl(feet: number): string {
+  return `AGL ${formatAltitude(Math.max(0, feet))} ft`;
+}
+
+/** World m above the ground, never negative. */
+export const heightAboveGround = (z: number, groundZ: number): number => Math.max(0, z - groundZ);

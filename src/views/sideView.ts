@@ -1,5 +1,5 @@
-import { ALT_TAPE_MAX_HEIGHT_PX, ALT_TAPE_PX_PER_FT, ALT_TAPE_WIDTH_PX, ALT_TREND_S, FOREGROUND_ALPHA, FOREGROUND_DARKEN, FOREGROUND_MAX_RISE_PX, GHOST_ALPHA, SIDE_FOREGROUND, SIDE_FX, SIDE_LAYERS, SLOPE_SHADE_BODY, type SideLayer, type Size } from '../config/display';
-import { BUG_COLOR, FOREGROUND_TINT, PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TAPE_BACK_COLOR, TERRAIN_COLORS, TREND_COLOR, waterColor, type Rgb } from '../config/palette';
+import { AGL_TEXT_LIMIT_M, APPROACH_PATH_DEG, ALT_TAPE_MAX_HEIGHT_PX, ALT_TAPE_PX_PER_FT, ALT_TAPE_WIDTH_PX, ALT_TREND_S, FOREGROUND_ALPHA, FOREGROUND_DARKEN, FOREGROUND_MAX_RISE_PX, GHOST_ALPHA, SIDE_FOREGROUND, SIDE_FX, SIDE_LAYERS, SLOPE_SHADE_BODY, type SideLayer, type Size } from '../config/display';
+import { GUIDE_COLOR, BUG_COLOR, STALL_COLOR, WARN_COLOR, FOREGROUND_TINT, PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TAPE_BACK_COLOR, TERRAIN_COLORS, TREND_COLOR, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import { sliceAlong, type Slice } from '../sim/world/slice';
 import { Terrain } from '../sim/world/terrain';
@@ -7,10 +7,12 @@ import { SNOW_LINE_M } from '../sim/world/testMap'; // temporary, until the map 
 import { runwaySpan } from '../sim/world/airport';
 import { heightAt, type WorldGrid } from '../sim/world/grid';
 import { surfaceName } from './surfaceName';
+import { guideText, type ApproachGuide } from './approach';
 import { createPlaneSprites } from './sprite';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
-import { formatHeading } from './format';
+import { formatAgl, formatHeading, heightAboveGround } from './format';
+import { flapStepOf } from '../config/planeShape';
 import { bugWorldZ, climbNeededFt, formatClimb, interceptDistance, tapeY } from './altitudeBug';
 import { displayedAltitudeFt } from '../sim/units';
 import {
@@ -25,14 +27,18 @@ import {
   pathLineOffset,
   shiftLeft,
   sliceWindow,
+  verticalMetersPerPixel,
   visualWaterDepth,
   WATER_EXAGGERATION,
   WATER_MIN_PX,
   type SliceWindow,
+  wheelOffsetPx,
   xToDistance,
 } from './sideCamera';
-import type { Point } from './camera';
+import { zoomLabel, type Point } from './camera';
 import { envelope, laneOffsets, slopeShade } from './sideLayers';
+import { drawRunwayRemaining, type TakeoffHud } from './takeoffStrip';
+import type { ApNoticeText } from './autopilotText';
 
 // Colors repeat from column to column, so cache the strings by their packed value.
 const rgbCache = new Map<number, string>();
@@ -60,6 +66,12 @@ export interface SideView {
     crashed: boolean,
     /** Altitude bug, displayed feet. */
     altBugFt: number,
+    /** Takeoff HUD mode (C4B): runway left replaces the altitude bug and tape. Null otherwise. */
+    hud?: TakeoffHud | null,
+    /** Approach guidance (C5): the glide line and the LOC / HDG / GS text replace the bugs. Null otherwise. */
+    guide?: ApproachGuide | null,
+    /** Autopilot (D4): the altitude bug line is solid while it holds, and a refusal or let-go notice shows at the call-out place. */
+    ap?: { readonly on: boolean; readonly notice: ApNoticeText | null },
   ): void;
   /** Builds every sprite frame now, so none is built mid-flight. */
   warm(): void;
@@ -299,9 +311,9 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   }
 
   /** Faint plumb line from the plane down to the ground: the height above terrain. */
-  function drawPlumb(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, groundH: number, base: number): void {
+  function drawPlumb(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, groundH: number, base: number, lift: number): void {
     const x = planeColumn(view) + 0.5;
-    const planeY = planeRow(view, zoom, craft.z) + 0.5;
+    const planeY = planeRow(view, zoom, craft.z) - lift + 0.5;
     const groundY = heightToY(view, zoom, groundH, base);
     if (groundY <= planeY) return;
     ctx.strokeStyle = 'rgba(255,211,77,0.55)';
@@ -312,12 +324,16 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     ctx.lineTo(x, Math.min(groundY, view.height - 16));
     ctx.stroke();
     ctx.setLineDash([]);
+    const agl = heightAboveGround(craft.z, groundH);
+    if (!craft.onGround && agl > 0.05 && agl < AGL_TEXT_LIMIT_M) drawText(ctx, formatAgl(displayedAltitudeFt(agl, scale)), x + 8, (planeY + Math.min(groundY, view.height - 16)) / 2 + 4);
   }
 
-  function drawPlane(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, crashed: boolean): void {
+  function drawPlane(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, crashed: boolean, lift: number): void {
     const x = planeColumn(view) + 0.5;
-    const y = planeRow(view, zoom, craft.z);
-    if (crashed) sprites.drawWreck(ctx, x, y);
+    const row = planeRow(view, zoom, craft.z);
+    // The wreck sits on the ground; a plane stands on its wheels, so its sprite is lifted by `lift`.
+    const y = row - lift;
+    if (crashed) sprites.drawWreck(ctx, x, row);
     else {
       // The gap between nose and path line is the angle of attack.
       const end = pathLineOffset(craft.pathAngle, exaggeration(zoom), PATH_LINE_PX);
@@ -327,7 +343,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       ctx.moveTo(Math.floor(x), Math.floor(y) + 0.5);
       ctx.lineTo(Math.floor(x) + end.dx, Math.floor(y) + 0.5 + end.dy);
       ctx.stroke();
-      sprites.drawSide(ctx, craft.pitch, x, y);
+      sprites.drawSide(ctx, craft.pitch, x, y, craft.gear > 0.5, flapStepOf(craft.flaps));
     }
   }
 
@@ -335,7 +351,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
    * Altitude bug: a dashed line across the view at the target height, a tick where the current path reaches it,
    * and a magnified altitude tape on the right (precision the main scale cannot show), with a trend vector.
    */
-  function drawAltBug(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, bugFt: number): void {
+  function drawAltBug(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, bugFt: number, solid = false): void {
     const altFt = displayedAltitudeFt(craft.z, scale);
     const need = climbNeededFt(altFt, bugFt);
     const bugZ = bugWorldZ(bugFt, scale);
@@ -348,7 +364,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
       ctx.strokeStyle = BUG_COLOR;
       ctx.lineWidth = 1;
       ctx.globalAlpha = 0.8;
-      ctx.setLineDash([8, 5]);
+      ctx.setLineDash(solid ? [] : [8, 5]);
       ctx.beginPath();
       ctx.moveTo(0, ly);
       ctx.lineTo(tapeLeft - 4, ly);
@@ -416,6 +432,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     const ex = exaggeration(zoom);
     drawText(ctx, `vert x${ex}  water depth x${WATER_EXAGGERATION}`, view.width - 8, 16, 'right');
     drawScaleBar(ctx, sideMetersPerPixel(zoom), view.width - 180, view.height - 56);
+    drawText(ctx, zoomLabel(zoom), view.width - 180, view.height - 76);
   }
 
   function drawReadout(
@@ -448,23 +465,61 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     }
   }
 
+  const groundAtAim = (g: ApproachGuide): number => heightAt(grid, scale, g.aim.x, g.aim.y);
+
+  /** The 3 degree glide path through the aim point, as a dashed line in this view's slice, and the LOC / HDG / GS text. */
+  function drawApproach(ctx: CanvasRenderingContext2D, view: Size, zoom: number, base: number, g: ApproachGuide, aimZ: number): void {
+    const pc = planeColumn(view);
+    const mpp = sideMetersPerPixel(zoom);
+    const slope = Math.tan(APPROACH_PATH_DEG * (Math.PI / 180));
+    const at = (d: number): { x: number; y: number } => ({ x: pc + 0.5 + d / mpp, y: heightToY(view, zoom, aimZ + Math.max(0, g.aimAhead - d) * slope, base) });
+    const near = at(Math.max(0, g.aimAhead - 6000));
+    const aim = at(g.aimAhead);
+    if (g.aimAhead > 0) {
+      ctx.strokeStyle = GUIDE_COLOR;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.moveTo(near.x, near.y);
+      ctx.lineTo(aim.x, aim.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = GUIDE_COLOR;
+      ctx.fillRect(Math.round(aim.x) - 2, Math.round(aim.y) - 2, 5, 5);
+    }
+    drawText(ctx, guideText(g), Math.round(view.width / 2), 16, 'center');
+  }
+
   return {
-    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt) {
+    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt, hud = null, guide = null, ap = { on: false, notice: null }) {
       const base = baseHeight(view, zoom, craft.z);
       drawSky(ctx, view);
       const slice = drawGround(ctx, view, craft, zoom, base);
       drawRunwaySpans(ctx, view, craft, zoom, base);
       drawScale(ctx, view, zoom, base);
-      drawPlumb(ctx, view, craft, zoom, slice.heightWorldM[planeColumn(view)] as number, base);
-      drawPlane(ctx, view, craft, zoom, crashed);
+      const groundH = slice.heightWorldM[planeColumn(view)] as number;
+      const lift = crashed ? 0 : wheelOffsetPx((craft.z - groundH) / verticalMetersPerPixel(zoom));
+      drawPlumb(ctx, view, craft, zoom, groundH, base, lift);
+      drawPlane(ctx, view, craft, zoom, crashed, lift);
       const fgTops = drawForeground(ctx, view, craft, zoom, base);
       if (fgTops && foregroundCoversPlane(view, craft, zoom, fgTops)) {
         // The plane is never lost behind a ridge: a faint copy goes over the foreground.
         ctx.globalAlpha = GHOST_ALPHA;
-        drawPlane(ctx, view, craft, zoom, crashed);
+        drawPlane(ctx, view, craft, zoom, crashed, lift);
         ctx.globalAlpha = 1;
       }
-      if (!crashed) drawAltBug(ctx, view, craft, zoom, base, altBugFt);
+      if (guide) drawApproach(ctx, view, zoom, base, guide, groundAtAim(guide));
+      else if (hud) drawRunwayRemaining(ctx, view.width, hud);
+      else if (!crashed) drawAltBug(ctx, view, craft, zoom, base, altBugFt, ap.on);
+      if (ap.notice && !crashed) {
+        ctx.font = 'bold 22px ui-monospace, Consolas, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#000';
+        ctx.fillText(ap.notice.text, view.width / 2 + 1, 63);
+        ctx.fillStyle = ap.notice.kind === 'dropped' ? STALL_COLOR : WARN_COLOR;
+        ctx.fillText(ap.notice.text, view.width / 2, 62);
+      }
       drawLabels(ctx, view, craft, zoom);
       drawReadout(ctx, view, slice, sliceWindow(craft, view, zoom), zoom, cursor);
     },

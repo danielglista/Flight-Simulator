@@ -1,5 +1,6 @@
+import { PATCH_BLEND_M } from '../../config/map';
 import type { ScaleConfig } from '../../config/scales';
-import { airportContains, blendWeight, fineSurfaceAt, onRunway, type Airport, type Runway } from './airport';
+import { airportContains, blendWeight, fineSurfaceAt, OFF_AIRPORT, onRunway, type Airport, type Runway } from './airport';
 import { Terrain } from './terrain';
 
 /** Cells per chunk side. Chunks are a drawing and loading unit only. */
@@ -26,6 +27,25 @@ export interface WorldGrid {
   readonly water: Uint8Array;
   /** Airports laid over the base grid (fine surface, exact runways, flat ground). Usually few. */
   readonly airports: readonly Airport[];
+  /** Finer grids laid over parts of this one (airports, city cores). Lookups use a patch where one covers the point. */
+  readonly patches?: readonly GridPatch[];
+}
+
+/** A finer grid whose southwest corner sits at (x, y) world meters. Its own airports and patches are not used. */
+export interface GridPatch {
+  readonly id: string;
+  readonly x: number;
+  readonly y: number;
+  readonly grid: WorldGrid;
+}
+
+/** The first patch covering (x, y), or null. */
+export function patchAt(grid: WorldGrid, x: number, y: number): GridPatch | null {
+  if (!grid.patches) return null;
+  for (const p of grid.patches) {
+    if (x >= p.x && y >= p.y && x < p.x + p.grid.cols * p.grid.cellSize && y < p.y + p.grid.rows * p.grid.cellSize) return p;
+  }
+  return null;
 }
 
 export function createGrid(cols: number, rows: number, cellSize: number): WorldGrid {
@@ -40,9 +60,11 @@ export function createGrid(cols: number, rows: number, cellSize: number): WorldG
   };
 }
 
-/** The airport whose boundary contains (x, y), or null. Cheap when there are none. */
+/** The airport whose ground contains (x, y), or null: its boundary, or for a masked airport its ground cells. */
 export function airportAt(grid: WorldGrid, x: number, y: number): Airport | null {
-  for (const a of grid.airports) if (airportContains(a, x, y)) return a;
+  for (const a of grid.airports) {
+    if (airportContains(a, x, y) && !(a.masked && fineSurfaceAt(a, x, y) === OFF_AIRPORT)) return a;
+  }
   return null;
 }
 
@@ -91,6 +113,12 @@ export function surfaceAt(grid: WorldGrid, x: number, y: number): number {
     for (const rw of airport.runways) if (onRunway(rw, x, y)) return Terrain.runway;
     return fineSurfaceAt(airport, x, y);
   }
+  const patch = patchAt(grid, x, y);
+  if (patch) {
+    const c = Math.floor((x - patch.x) / patch.grid.cellSize);
+    const r = Math.floor((y - patch.y) / patch.grid.cellSize);
+    return patch.grid.terrain[r * patch.grid.cols + c] ?? Terrain.seabed;
+  }
   return grid.terrain[row * grid.cols + col] ?? Terrain.seabed;
 }
 
@@ -105,13 +133,8 @@ export function waterLevelAtCell(grid: WorldGrid, col: number, row: number): num
   return e < 0 ? 0 : NaN;
 }
 
-/**
- * Ground (solid bed) height in WORLD meters at (x, y): bilinear between cell
- * centers, the stored real elevation divided by the altitude scale. Outside the map: 0.
- */
-export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: number): number {
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
-  if (x < 0 || y < 0 || x > worldWidth(grid) || y > worldHeight(grid)) return 0;
+/** Bilinear elevation between cell centers, REAL meters, at grid-local (x, y). */
+function bilinear(grid: WorldGrid, x: number, y: number): number {
   const fx = x / grid.cellSize - 0.5;
   const fy = y / grid.cellSize - 0.5;
   const c0 = Math.floor(fx);
@@ -121,7 +144,31 @@ export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: numb
   const south = elevationAtCell(grid, c0, r0) * (1 - tx) + elevationAtCell(grid, c0 + 1, r0) * tx;
   const north =
     elevationAtCell(grid, c0, r0 + 1) * (1 - tx) + elevationAtCell(grid, c0 + 1, r0 + 1) * tx;
-  const base = (south * (1 - ty) + north * ty) / scale.altitude;
+  return south * (1 - ty) + north * ty;
+}
+
+/** Map elevation (REAL m), airports ignored: a patch where there is one, blended to the base near its edge. */
+function mapElevation(grid: WorldGrid, x: number, y: number): number {
+  const patch = patchAt(grid, x, y);
+  if (!patch) return bilinear(grid, x, y);
+  const lx = x - patch.x;
+  const ly = y - patch.y;
+  const fine = bilinear(patch.grid, lx, ly);
+  const edge = Math.min(lx, ly, patch.grid.cols * patch.grid.cellSize - lx, patch.grid.rows * patch.grid.cellSize - ly);
+  if (edge >= PATCH_BLEND_M) return fine;
+  const t = edge / PATCH_BLEND_M;
+  const coarse = bilinear(grid, x, y);
+  return coarse + (fine - coarse) * (t * t * (3 - 2 * t));
+}
+
+/**
+ * Ground (solid bed) height in WORLD meters at (x, y): bilinear between cell
+ * centers, the stored real elevation divided by the altitude scale. Outside the map: 0.
+ */
+export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: number): number {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+  if (x < 0 || y < 0 || x > worldWidth(grid) || y > worldHeight(grid)) return 0;
+  const base = mapElevation(grid, x, y) / scale.altitude;
   const airport = airportAt(grid, x, y);
   if (!airport) return base;
   // Flat at the field elevation inside the blend band, the base ground at the boundary.
@@ -137,8 +184,10 @@ export function groundAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: numb
 export function waterLevelAt(grid: WorldGrid, scale: ScaleConfig, x: number, y: number): number {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return NaN;
   if (x < 0 || y < 0 || x > worldWidth(grid) || y > worldHeight(grid)) return 0;
-  if (airportAt(grid, x, y)) return NaN; // validated dry
-  const level = waterLevelAtCell(grid, Math.floor(x / grid.cellSize), Math.floor(y / grid.cellSize));
+  if (airportAt(grid, x, y)) return NaN; // validated dry (a masked airport only where its ground is)
+  const patch = patchAt(grid, x, y);
+  const layer = patch ? patch.grid : grid;
+  const level = waterLevelAtCell(layer, Math.floor((x - (patch?.x ?? 0)) / layer.cellSize), Math.floor((y - (patch?.y ?? 0)) / layer.cellSize));
   return level / scale.altitude;
 }
 

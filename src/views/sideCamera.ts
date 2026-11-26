@@ -1,11 +1,14 @@
-import type { Size } from '../config/display';
+import { WHEEL_FADE_PX, WHEEL_PX, type Size } from '../config/display';
 import type { Craft } from '../sim/state';
+import { interpolateLevels, zoomForLevels } from './camera';
 
 /** World meters per internal pixel along the heading, from far to close. */
-export const SIDE_ZOOM_LEVELS = [10, 5, 2.5, 1.25] as const;
-/** World meters per pixel, vertical. The two closest levels share one scale (no exaggeration). */
-const VERTICAL_MPP = [2.5, 2.5, 2.5, 1.25] as const;
-export const DEFAULT_SIDE_ZOOM = 1;
+export const SIDE_ZOOM_LEVELS = [10, 5, 2.5, 1.25, 0.5] as const;
+/** World meters per pixel, vertical. The closest levels are not exaggerated: the two closest are 1:1. */
+const VERTICAL_MPP = [2.5, 2.5, 2.5, 1.25, 0.5] as const;
+export const DEFAULT_SIDE_ZOOM = 2;
+/** The closest level: 0.5 m per pixel both ways, so a 6 m flare is 12 px. The ground zoom starts here (C4B). */
+export const CLOSE_SIDE_ZOOM = SIDE_ZOOM_LEVELS.length - 1;
 /** Sea level sits this many pixels above the bottom edge (room for the readout). */
 export const SEA_ROW_FROM_BOTTOM = 48;
 /** The plane is this fraction of the width from the left. */
@@ -15,13 +18,17 @@ export function clampSideZoom(z: number): number {
   return Math.min(SIDE_ZOOM_LEVELS.length - 1, Math.max(0, Math.round(z)));
 }
 
+/** Meters per pixel along the heading. A fractional zoom (mid-ease) lies between the two levels around it. */
 export function sideMetersPerPixel(zoom: number): number {
-  return SIDE_ZOOM_LEVELS[clampSideZoom(zoom)] as number;
+  return interpolateLevels(SIDE_ZOOM_LEVELS, zoom);
 }
 
 export function verticalMetersPerPixel(zoom: number): number {
-  return VERTICAL_MPP[clampSideZoom(zoom)] as number;
+  return interpolateLevels(VERTICAL_MPP, zoom);
 }
+
+/** The fractional side zoom whose horizontal meters-per-pixel is `mpp`. */
+export const sideZoomForMpp = (mpp: number): number => zoomForLevels(SIDE_ZOOM_LEVELS, mpp);
 
 export function exaggeration(zoom: number): number {
   return sideMetersPerPixel(zoom) / verticalMetersPerPixel(zoom);
@@ -145,4 +152,12 @@ export const WATER_MIN_PX = 5;
 export function visualWaterDepth(depthWorldM: number): number {
   if (!(depthWorldM > 0)) return 0;
   return WATER_VISUAL_MAX_M * Math.tanh((depthWorldM * WATER_EXAGGERATION) / WATER_VISUAL_MAX_M);
+}
+
+/**
+ * Pixels to lift the plane sprite so its wheels, not its center, sit at its height: full on the ground, none from
+ * WHEEL_FADE_PX above it. Always falls as the plane rises, so the drawn height keeps rising with the real one.
+ */
+export function wheelOffsetPx(aglPx: number): number {
+  return WHEEL_PX * Math.max(0, 1 - Math.max(0, aglPx) / WHEEL_FADE_PX);
 }

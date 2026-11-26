@@ -27,7 +27,7 @@ const BINDINGS: Readonly<Record<string, { channel: Channel; sign: 1 | -1 }>> = {
 export interface KeyState {
   keyDown(e: KeyEventLike): void;
   keyUp(e: KeyEventLike): void;
-  /** Commands for axes that changed since the last sample, then one `level` if Space was pressed. */
+  /** Commands for axes that changed since the last sample, `brake` when Space is pressed or released, then one `level` if Space was pressed and one `gear` if G was. */
   sample(): Command[];
   /** Forgets held and latched keys. Axes that were non-zero emit 0 on the next sample. */
   clear(): void;
@@ -39,6 +39,13 @@ export function createKeyState(): KeyState {
   const emitted: Record<Channel, Axis> = { turn: 0, throttle: 0, pitch: 0 };
   // Space asks for wings level once per press, even for a tap shorter than a sample.
   let levelAsked = false;
+  // G asks for the gear lever once per press, likewise.
+  let gearAsked = false;
+  // F and R step the flap lever one notch out or in, once per press; a queue so two quick presses are two steps.
+  let flapAsks: (1 | -1)[] = [];
+  let brakeHeld = false;
+  let brakeLatched = false;
+  let brakeEmitted = false;
 
   const axis = (channel: Channel): Axis => {
     let sum = 0;
@@ -53,6 +60,16 @@ export function createKeyState(): KeyState {
       if (e.repeat || e.editable || e.ctrlKey || e.altKey || e.metaKey) return;
       if (e.code === 'Space') {
         levelAsked = true;
+        brakeHeld = true;
+        brakeLatched = true;
+        return;
+      }
+      if (e.code === 'KeyF' || e.code === 'KeyR') {
+        flapAsks.push(e.code === 'KeyF' ? 1 : -1);
+        return;
+      }
+      if (e.code === 'KeyG') {
+        gearAsked = true;
         return;
       }
       if (!(e.code in BINDINGS)) return;
@@ -61,6 +78,7 @@ export function createKeyState(): KeyState {
     },
     keyUp(e) {
       held.delete(e.code);
+      if (e.code === 'Space') brakeHeld = false;
       // macOS drops other keyups while Meta is held, so releasing it forgets everything.
       if (e.code === 'MetaLeft' || e.code === 'MetaRight') held.clear();
     },
@@ -74,14 +92,29 @@ export function createKeyState(): KeyState {
         }
       }
       latched.clear();
+      // Space is also the brake: on while held (a tap shorter than a sample still brakes for one sample).
+      const brake = brakeHeld || brakeLatched;
+      brakeLatched = false;
+      if (brake !== brakeEmitted) {
+        brakeEmitted = brake;
+        out.push({ kind: 'brake', value: brake });
+      }
       if (levelAsked) out.push({ kind: 'level' });
       levelAsked = false;
+      if (gearAsked) out.push({ kind: 'gear' });
+      gearAsked = false;
+      for (const by of flapAsks) out.push({ kind: 'flaps', by });
+      flapAsks = [];
       return out;
     },
     clear() {
       held.clear();
       latched.clear();
+      brakeHeld = false;
+      brakeLatched = false;
       levelAsked = false;
+      gearAsked = false;
+      flapAsks = [];
     },
   };
 }

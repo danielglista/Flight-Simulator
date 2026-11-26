@@ -1,0 +1,100 @@
+{
+  "cities": [
+    {
+      "id": "dc",
+      "name": "Washington DC",
+      "lat": 38.8895,
+      "lon": -77.0353,
+      "coreKm": {
+        "w": 8,
+        "h": 6
+      },
+      "hills": {
+        "amplitudeM": 60,
+        "featureKm": 2
+      }
+    },
+    {
+      "id": "phl-city",
+      "name": "Philadelphia",
+      "lat": 39.9526,
+      "lon": -75.1652,
+      "coreKm": {
+        "w": 8,
+        "h": 5
+      },
+      "hills": {
+        "amplitudeM": 20,
+        "featureKm": 3
+      }
+    }
+  ],
+  "airports": [
+    {
+      "id": "DCA",
+      "name": "Reagan National",
+      "cityId": "dc",
+      "lat": 38.8512,
+      "lon": -77.0415,
+      "size": "major",
+      "boundaryKm": {
+        "w": 1.2,
+        "h": 3.0
+      },
+      "runwayHeadingDeg": 2,
+      "elevationM": 5,
+      "stampFadeKm": 2,
+      "stampAnchorKm": {
+        "x": -0.2,
+        "y": 0
+      },
+      "footprint": [
+        {
+          "x": 0.35,
+          "y": -0.24,
+          "length": 2.4,
+          "width": 0.1,
+          "headingDeg": 2
+        },
+        {
+          "x": 0.042,
+          "y": 0.096,
+          "length": 1.41,
+          "width": 0.66,
+          "headingDeg": 2
+        }
+      ]
+    },
+    {
+      "id": "PHL",
+      "name": "Philadelphia International",
+      "cityId": "phl-city",
+      "lat": 39.9194,
+      "lon": -75.1954,
+      "size": "major",
+      "boundaryKm": {
+        "w": 3.4,
+        "h": 1.4
+      },
+      "runwayHeadingDeg": 80,
+      "elevationM": 11,
+      "footprint": [
+        {
+          "x": 0,
+          "y": -0.25,
+          "length": 3.4,
+          "width": 0.1,
+          "headingDeg": 80
+        },
+        {
+          "x": 0.178,
+          "y": 0.132,
+          "length": 2.2,
+          "width": 0.7,
+          "headingDeg": 80
+        }
+      ],
+      "stampFadeKm": 2
+    }
+  ]
+}

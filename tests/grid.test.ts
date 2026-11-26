@@ -29,11 +29,11 @@ describe('surfaceAt', () => {
 describe('heightAt', () => {
   it('is exact at cell centers and divided by the altitude scale', () => {
     const g = small();
-    expect(heightAt(g, SCALES, 5, 5)).toBe(10);
-    expect(heightAt(g, SCALES, 15, 5)).toBe(30);
+    expect(heightAt(g, SCALES, 5, 5)).toBe(100 / SCALES.altitude);
+    expect(heightAt(g, SCALES, 15, 5)).toBe(300 / SCALES.altitude);
   });
   it('is the mean halfway between two centers', () => {
-    expect(heightAt(small(), SCALES, 10, 5)).toBe(20);
+    expect(heightAt(small(), SCALES, 10, 5)).toBe(200 / SCALES.altitude);
   });
   it('is 0 outside the map and for NaN', () => {
     const g = small();
@@ -58,17 +58,17 @@ describe('heightAt', () => {
     const g = small();
     g.elevation[0] = 100; // bed, real m
     g.water[0] = 50; // 50 m of water: surface at 150 m real = 15 m world
-    expect(groundAt(g, SCALES, 5, 5)).toBe(10);
-    expect(waterLevelAt(g, SCALES, 5, 5)).toBe(15);
-    expect(heightAt(g, SCALES, 5, 5)).toBe(15);
-    expect(waterLevelAt(g, SCALES, 9.9, 5)).toBe(15); // flat across the cell
+    expect(groundAt(g, SCALES, 5, 5)).toBe(100 / SCALES.altitude);
+    expect(waterLevelAt(g, SCALES, 5, 5)).toBe(150 / SCALES.altitude);
+    expect(heightAt(g, SCALES, 5, 5)).toBe(150 / SCALES.altitude);
+    expect(waterLevelAt(g, SCALES, 9.9, 5)).toBe(150 / SCALES.altitude); // flat across the cell
     expect(Number.isNaN(waterLevelAt(g, SCALES, 15, 5))).toBe(true); // next cell is dry
-    expect(heightAt(g, SCALES, 15, 5)).toBe(30); // dry: ground
+    expect(heightAt(g, SCALES, 15, 5)).toBe(300 / SCALES.altitude); // dry: ground
   });
   it('treats ground below sea level as open sea at 0', () => {
     const g = small();
     g.elevation[0] = -200; // 20 m world below sea level
-    expect(groundAt(g, SCALES, 5, 5)).toBe(-20);
+    expect(groundAt(g, SCALES, 5, 5)).toBe(-200 / SCALES.altitude);
     expect(waterLevelAt(g, SCALES, 5, 5)).toBe(0);
     expect(heightAt(g, SCALES, 5, 5)).toBe(0);
   });

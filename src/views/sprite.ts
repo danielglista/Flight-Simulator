@@ -3,7 +3,7 @@ import {
   PITCH_FRAMES,
   PITCH_MAX_DEG,
   PITCH_STEP_DEG,
-  PLANE_SIDE,
+  sideParts,
   PLANE_TOP,
   SIDE_SPRITE_SIZE,
   TOP_FRAMES,
@@ -141,8 +141,8 @@ export interface PlaneSprites {
   drawTop(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number, tier?: number): void;
   /** Draws the plane's shadow (base size, black) at floor(x + dx), floor(y + dy), with the given alpha. */
   drawTopShadow(ctx: CanvasRenderingContext2D, heading: number, x: number, y: number, dx: number, dy: number, alpha: number): void;
-  /** Draws the side sprite, nose right, tilted to `pitch` (radians, positive = nose up), center at floor(x), floor(y). */
-  drawSide(ctx: CanvasRenderingContext2D, pitch: number, x: number, y: number): void;
+  /** Draws the side sprite, nose right, tilted to `pitch` (radians, positive = nose up), center at floor(x), floor(y). With the wheels when `gearOut`. */
+  drawSide(ctx: CanvasRenderingContext2D, pitch: number, x: number, y: number, gearOut?: boolean, flapStep?: number): void;
   /** Draws the wreck marker with its center pixel at floor(x), floor(y). Same in both views. */
   drawWreck(ctx: CanvasRenderingContext2D, x: number, y: number): void;
   /** Builds every frame now, so none is built mid-flight. */
@@ -152,6 +152,7 @@ export interface PlaneSprites {
 export function createPlaneSprites(): PlaneSprites {
   const top = new Map<number, HTMLCanvasElement>();
   const shadow = new Map<number, HTMLCanvasElement>();
+  // Side frames by pitch frame, gear state and flap step (2 x 3 variants).
   const side = new Map<number, HTMLCanvasElement>();
   let wreck: HTMLCanvasElement | null = null;
   const tierParts: ShapePart[][] = [];
@@ -175,11 +176,12 @@ export function createPlaneSprites(): PlaneSprites {
     }
     return c;
   };
-  const sideFrame = (i: number): HTMLCanvasElement => {
-    let c = side.get(i);
+  const sideFrame = (i: number, gearOut: boolean, flapStep: number): HTMLCanvasElement => {
+    const key = i * 6 + (gearOut ? 3 : 0) + flapStep;
+    let c = side.get(key);
     if (!c) {
-      c = toCanvas(rasterize(PLANE_SIDE, pitchFrameAngle(i), SIDE_SPRITE_SIZE), SIDE_SPRITE_SIZE);
-      side.set(i, c);
+      c = toCanvas(rasterize(sideParts(gearOut, flapStep), pitchFrameAngle(i), SIDE_SPRITE_SIZE), SIDE_SPRITE_SIZE);
+      side.set(key, c);
     }
     return c;
   };
@@ -200,9 +202,9 @@ export function createPlaneSprites(): PlaneSprites {
       ctx.drawImage(shadowFrame(frameIndex(heading)), Math.floor(x + dx) - h, Math.floor(y + dy) - h);
       ctx.globalAlpha = prev;
     },
-    drawSide(ctx, pitch, x, y) {
+    drawSide(ctx, pitch, x, y, gearOut = true, flapStep = 0) {
       const h = (SIDE_SPRITE_SIZE - 1) / 2;
-      ctx.drawImage(sideFrame(pitchFrameIndex(pitch)), Math.floor(x) - h, Math.floor(y) - h);
+      ctx.drawImage(sideFrame(pitchFrameIndex(pitch), gearOut, flapStep), Math.floor(x) - h, Math.floor(y) - h);
     },
     drawWreck(ctx, x, y) {
       const h = (WRECK_SIZE - 1) / 2;
@@ -213,7 +215,12 @@ export function createPlaneSprites(): PlaneSprites {
         shadowFrame(i);
         for (let t = 0; t < PLANE_SIZE_TIERS; t++) topFrame(i, t);
       }
-      for (let i = 0; i < PITCH_FRAMES; i++) sideFrame(i);
+      for (let i = 0; i < PITCH_FRAMES; i++) {
+        for (let f = 0; f < 3; f++) {
+          sideFrame(i, true, f);
+          sideFrame(i, false, f);
+        }
+      }
       wreckFrame();
     },
   };

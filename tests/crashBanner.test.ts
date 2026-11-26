@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { craft as makeCraft } from './helpers';
 import { crashMessage } from '../src/app/crashBanner';
 import { SCALES } from '../src/config/scales';
 import { displayedAltitudeFt } from '../src/sim/units';
@@ -9,8 +10,8 @@ import { buildTestAirport } from '../src/sim/world/testAirport';
 import { buildTestMap, TEST_MAP_LANDMARKS } from '../src/sim/world/testMap';
 
 describe('crashMessage', () => {
-  const grid = withAirports(buildTestMap(), [buildTestAirport(SCALES)]);
-  const craft = (x: number, y: number) => ({ x, y, z: heightAt(grid, SCALES, x, y), heading: 0, speed: 0, pathAngle: 0, pitch: 0, pitchRate: 0, bank: 0, rollRate: 0, lever: 0, spool: 0 });
+  const grid = withAirports(buildTestMap(), [buildTestAirport()]);
+  const craft = (x: number, y: number) => makeCraft({ x, y, z: heightAt(grid, SCALES, x, y) });
   it('names the mountain with the height in feet', () => {
     const p = TEST_MAP_LANDMARKS.peak;
     const c = craft((p.col + 0.5) * grid.cellSize, (p.row + 0.5) * grid.cellSize);

@@ -11,7 +11,7 @@ const DEG = Math.PI / 180;
 describe('units', () => {
   it('converts speed, altitude and vertical speed', () => {
     expect(metersPerSecondToKnots(60)).toBeCloseTo(116.63, 2);
-    expect(displayedAltitudeFt(100, SCALES)).toBeCloseTo(3280.8, 1);
+    expect(displayedAltitudeFt(200, SCALES)).toBeCloseTo(3280.8, 1);
     expect(verticalSpeedFpm({ speed: 60, pathAngle: 15 * DEG })).toBeCloseTo(3056.9, 1);
   });
   it('altitude scale changes altitude but not V/S', () => {
@@ -24,13 +24,13 @@ describe('formats', () => {
   it('rounds and adds commas', () => {
     expect(formatSpeed(116.63)).toBe('117');
     expect(formatAltitude(3280.8)).toBe('3,280');
-    expect(formatAltitude(displayedAltitudeFt(CEILING_Z, SCALES))).toBe('19,690');
-    expect(formatVerticalSpeed(3056.9)).toBe('+3,050');
-    expect(formatVerticalSpeed(-520)).toBe('-500');
+    expect(formatAltitude(displayedAltitudeFt(CEILING_Z, SCALES))).toBe('40,000');
+    expect(formatVerticalSpeed(3056.9)).toBe('+3,060');
+    expect(formatVerticalSpeed(-520)).toBe('-520');
   });
   it('small values read 0, never -0 or +0', () => {
-    expect(formatVerticalSpeed(-20)).toBe('0');
-    expect(formatVerticalSpeed(24)).toBe('0');
+    expect(formatVerticalSpeed(-4)).toBe('0');
+    expect(formatVerticalSpeed(4)).toBe('0');
     expect(formatSpeed(-0.2)).toBe('0');
     expect(formatAltitude(-3)).toBe('0');
   });
@@ -39,7 +39,7 @@ describe('formats', () => {
 describe('readoutText', () => {
   it('start state', () => {
     expect(readoutText(initialState().craft, SCALES)).toEqual({
-      spd: '167', alt: '3,280', hdg: '045', vs: '0', pit: '+5', bnk: '0', thr: '32', eng: '32', warn: '', stalled: false,
+      spd: '167', alt: '3,280', hdg: '045', vs: '0', pit: '+5.4', bnk: '0', thr: '46', eng: '46', gear: 'UP', flp: 'UP', brk: '', warn: '', stalled: false,
     });
   });
   it('a change too small to show gives the same text', () => {
@@ -49,14 +49,15 @@ describe('readoutText', () => {
   it('SPD is indicated: equal to true speed at sea level, lower aloft', () => {
     const c = { ...initialState().craft, z: 0 };
     expect(indicatedSpeed(c, SCALES)).toBe(c.speed);
-    expect(indicatedSpeed({ ...c, z: 100 }, SCALES)).toBeCloseTo(90 * Math.sqrt(0.907), 1);
+    expect(indicatedSpeed({ ...c, z: 200 }, SCALES)).toBeCloseTo(90 * Math.sqrt(0.907), 1);
   });
   it('warning text for each state, and the PIT format', () => {
     const c = initialState().craft;
     expect(readoutText(c, SCALES, 'warning')).toMatchObject({ warn: 'STALL', stalled: false });
     expect(readoutText(c, SCALES, 'stalled')).toMatchObject({ warn: 'STALL', stalled: true });
-    expect(readoutText({ ...c, pitch: -12 * DEG }, SCALES).pit).toBe('-12');
-    expect(readoutText({ ...c, pitch: 0 }, SCALES).pit).toBe('0');
+    expect(readoutText({ ...c, pitch: -12 * DEG }, SCALES).pit).toBe('-12.0');
+    expect(readoutText({ ...c, pitch: 0 }, SCALES).pit).toBe('0.0');
+    expect(readoutText({ ...c, pitch: 5.14 * DEG }, SCALES).pit).toBe('+5.1');
   });
   it('a crashed craft reads zero speed and V/S', () => {
     const c = { ...initialState().craft, speed: 0, pathAngle: -0.2 };

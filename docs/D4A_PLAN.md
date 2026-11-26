@@ -1,6 +1,6 @@
 # D4A Implementation Plan: Altitude hold (autopilot and autothrottle)
 
-**Status:** Plan only. Nothing built.
+**Status:** Superseded by [D_PLAN.md](D_PLAN.md) §6 to §7 (D4). Never built; kept as history.
 **Milestone (ARCHITECTURE.md §14):** pulls the altitude half of D4 ("Autopilot hold") forward, ahead of C4. The ID is provisional; rename it if you prefer another slot. Heading hold stays in D4 proper. D4's "only when stable" gate (`isStable`, ARCHITECTURE.md §6) is not built yet, so this step has its own small gate (§4.6).
 **Starting state:** The altitude bug exists (view only): `-` / `=` set a target in displayed feet, the side view shows a line, a path-intercept bar and a magnified tape with a 10 s trend bar (`views/altitudeBug.ts`, `views/sideView.ts`, `main.ts`). Nothing in `sim/` knows about it. Pitch (S/W) and throttle (Q/E) are held keys that command a rate and stay where released (`sim/flight/attitude.ts`, `sim/step.ts`). `stepPitch` takes `key: Axis` (-1, 0, 1). The plane is level at the start with lever 32% and pitch 5.38 deg.
 

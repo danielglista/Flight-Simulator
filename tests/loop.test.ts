@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
 import { createLoop } from '../src/app/loop';
+import { START_Z } from '../src/config/motion';
 import { createKeyState } from '../src/input/keyState';
 
-const B = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: 10 };
+const B = { width: 5120, height: 5120, heightAt: () => 0, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const DT = 1000 / 60;
 
 function make() {
@@ -89,10 +91,10 @@ describe('loop', () => {
 });
 
 describe('crash and restart in the loop', () => {
-  let ground = 110; // above the start altitude, so the first step crashes
+  let ground = START_Z + 10; // above the start altitude, so the first step crashes
   const FLAT = { ...B, heightAt: () => ground };
   function crashing() {
-    ground = 110;
+    ground = START_Z + 10;
     const keys = createKeyState();
     const loop = createLoop({
       world: FLAT,

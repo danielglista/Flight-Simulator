@@ -3,6 +3,7 @@ import {
   CLOUD_ALPHA_LOW,
   CLOUD_BASE_M,
   DEPTH_CAMERA_M,
+  DEPTH_TOP_Z,
   HAZE_MAX,
   PLANE_SIZE_HYSTERESIS,
   PLANE_SIZE_TIERS,
@@ -12,7 +13,6 @@ import {
   SHADOW_MAX_PX,
   SHADOW_PX_PER_M,
 } from '../config/display';
-import { CEILING_Z } from '../config/motion';
 import type { Point } from './camera';
 
 export function smoothstep(lo: number, hi: number, v: number): number {
@@ -50,9 +50,9 @@ export function shadowAlpha(aglM: number): number {
   return SHADOW_ALPHA * (1 - smoothstep(SHADOW_FADE_LOW_M, SHADOW_FADE_HIGH_M, aglM));
 }
 
-/** Haze over the terrain: none on the ground, HAZE_MAX at the ceiling. */
+/** Haze over the terrain: none on the ground, HAZE_MAX from DEPTH_TOP_Z up. */
 export function hazeAlpha(z: number): number {
-  return HAZE_MAX * smoothstep(0, CEILING_Z, z);
+  return HAZE_MAX * smoothstep(0, DEPTH_TOP_Z, z);
 }
 
 /** Cloud strength: CLOUD_ALPHA_LOW well under the base, CLOUD_ALPHA_HIGH well above it, smooth across 100 m around it. */
@@ -63,12 +63,12 @@ export function cloudAlpha(z: number): number {
 
 /** Altitude the plane sprite of tier `i` stands for. */
 export function tierAltitude(tier: number): number {
-  return (tier / (PLANE_SIZE_TIERS - 1)) * CEILING_Z;
+  return (tier / (PLANE_SIZE_TIERS - 1)) * DEPTH_TOP_Z;
 }
 
 /** Sprite size step for altitude `z`. The `previous` tier is kept until z is clearly past the boundary, so it does not flicker. */
 export function planeSizeTier(z: number, previous: number): number {
-  const t = (Math.min(CEILING_Z, Math.max(0, z)) / CEILING_Z) * (PLANE_SIZE_TIERS - 1);
+  const t = (Math.min(DEPTH_TOP_Z, Math.max(0, z)) / DEPTH_TOP_Z) * (PLANE_SIZE_TIERS - 1);
   const prev = Math.min(PLANE_SIZE_TIERS - 1, Math.max(0, previous));
   if (Math.abs(t - prev) < 0.5 + PLANE_SIZE_HYSTERESIS) return prev;
   return Math.round(t);

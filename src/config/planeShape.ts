@@ -15,6 +15,7 @@ export const FIN: Rgb = [232, 138, 36];
 export const LIGHT_LEFT: Rgb = [236, 36, 36];
 export const LIGHT_RIGHT: Rgb = [36, 220, 72];
 export const OUTLINE: Rgb = [8, 10, 18];
+export const WHEEL: Rgb = [92, 96, 108];
 
 /** Top view: x = right of the nose, y = forward. Listed back to front. Every point is within 10.1 px of the center. */
 export const PLANE_TOP: readonly ShapePart[] = [
@@ -28,7 +29,7 @@ export const PLANE_TOP: readonly ShapePart[] = [
 ];
 
 /** Side view: x = forward (right on screen), y = up. Nose on the right, tail fin on the left. */
-export const PLANE_SIDE: readonly ShapePart[] = [
+export const PLANE_SIDE_BODY: readonly ShapePart[] = [
   {
     color: BODY,
     points: [[20, 0.5], [17, 3], [8, 4], [-14, 3], [-20, 1], [-20, -1.5], [-12, -3.5], [8, -3.5], [17, -2]],
@@ -37,6 +38,31 @@ export const PLANE_SIDE: readonly ShapePart[] = [
   { color: FIN, points: [[-20, 1], [-18, 8], [-13, 8], [-9, 3]] },
   { color: CANOPY, points: [[12, 2.5], [9, 4], [5, 4], [5, 2.5]] },
 ];
+
+/** Wheels: main gear under the wing, nose gear forward. Their bottoms are WHEEL_PX below the center. Drawn when the gear is past half way down (C4B). */
+export const GEAR_SIDE: readonly ShapePart[] = [
+  { color: WHEEL, points: [[-4.5, -3], [-0.5, -3], [-0.5, -7], [-4.5, -7]] },
+  { color: WHEEL, points: [[11, -2], [14, -2], [14, -7], [11, -7]] },
+];
+
+/** Lowered flaps under the wing's trailing edge, by step (C6): 1 takeoff (about 15 deg), 2 landing (about 35 deg). Index 0 is none. */
+export const FLAP_SIDE: readonly (readonly ShapePart[])[] = [
+  [],
+  [{ color: WING, points: [[-6, -1], [-9, -3], [-11, -4.8], [-7.5, -3.6]] }],
+  [{ color: WING, points: [[-6, -1], [-9, -3], [-10, -7], [-6.5, -4.2]] }],
+];
+
+/** The whole side sprite with the gear down. */
+export const PLANE_SIDE: readonly ShapePart[] = [...PLANE_SIDE_BODY, ...GEAR_SIDE];
+
+/** The side sprite parts for a gear state and a flap step (0..2). */
+export const sideParts = (gearOut: boolean, flapStep: number): readonly ShapePart[] => [
+  ...(gearOut ? PLANE_SIDE : PLANE_SIDE_BODY),
+  ...(FLAP_SIDE[Math.min(2, Math.max(0, flapStep))] ?? []),
+];
+
+/** The flap step drawn for an actual flap position 0..1. */
+export const flapStepOf = (flaps: number): number => (flaps > 0.75 ? 2 : flaps > 0.25 ? 1 : 0);
 
 export const TOP_SPRITE_SIZE = 25;
 export const SIDE_SPRITE_SIZE = 45;

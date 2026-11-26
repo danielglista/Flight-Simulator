@@ -88,7 +88,7 @@ The physics uses one coordinate system: **world meters** (x east, y north, z up)
 interface ScaleConfig {
   geoDistance: number; // 40: real map distance / world distance
   airport: number;     // 2:  real airport size / world size
-  altitude: number;    // 10: real height / world height
+  altitude: number;    // 5: real height / world height
 }
 ```
 
@@ -103,7 +103,8 @@ interface ScaleConfig {
 
 **Rules**
 - Use distinct types or names for real, world and displayed values. Mixed units are the likeliest source of bugs.
-- Use one regional map projection centered on the map. A national map may need another.
+- Use one projection for the whole country: cylindrical, true at 39 N, centered on 96 W, north up everywhere (E_PLAN §4.1). It lives in `tools/map/project.ts`; sections join later without a second projection.
+- Scales are baked into the map by the generator (`data/map/scales.json`: geoDistance 1:25, airports 1:2, city cores 1:4, building height 1:3). The game loads the built map and its scales (E3); building height is not used yet (E5). Around each city a warp squeezes the land between the 1:4 core and the 1:25 surroundings.
 - Airports sit on local patches that replace compressed terrain, flatten the ground, and blend at the edges. Nearby rivers and shorelines may need hand adjustment.
 - Displayed distance applies between places. Runway length and taxi distances must use the airport scale; otherwise a runway would read as many miles long.
 - Terrain height is stored in real meters and divided by `altitude` when read.
@@ -130,7 +131,7 @@ velocity = airVelocity(V, g, h) + wind
 - **Cl** rises linearly, then falls past the stall angle; one smooth blend with a flat plate covers every angle (`sim/flight/aero.ts`). The stall is this curve plus a nose drop while separated, with no state machine and no randomness.
 - **Keys command pitch and bank rates** (rate command, attitude hold): the nose and the bank stay where released (roll follows its key through a lag). Space rolls the bank to level and stops there; nothing levels it automatically. A steep bank never rescues itself. Authority falls at low equivalent airspeed. Nose-up fades to nothing in a stall and between 2.5 and 4 g; nose-down fades toward -1 g (an arcade allowance, not a structural limit). Nose held to +/-30 deg, bank to +/-60 deg.
 - **Turn help:** automatic nose-up fed in as the bank grows, to 30 deg of bank (up to 4 deg of nose), so shallow turns hold height. Steeper turns need S, which costs energy.
-- **Soft ceiling:** near 600 m the path is turned level (the nose is lowered at no more than 20 deg/s), so no energy is added or removed.
+- **Soft ceiling:** near 2,438.4 m (40,000 ft) the path is turned level (the nose is lowered at no more than 20 deg/s), so no energy is added or removed.
 - **Ground:** rolling friction, brakes (reduced by rain), speed-dependent steering, gear loads, and a touchdown check on vertical speed, bank and runway position.
 - **Airspeed display:** indicated airspeed, derived from density. Ground speed is shown separately. Compressed altitude means climbs and descents exchange less energy than the altimeter suggests, so tune thrust and drag by feel.
 
@@ -156,7 +157,7 @@ The world is a **2D grid of cells**. Each cell stores the solid ground's elevati
 
 | Property | Starting value |
 |---|---|
-| Cell size | 10 x 10 world meters (400 x 400 real meters at 1:40) |
+| Cell size | 10 x 10 world meters (250 x 250 real meters at 1:25; the E1 map box is about 1.7 million cells) |
 | Elevation | 16-bit integer, real meters above sea level, of the SOLID ground (the bed). Negative below sea level |
 | Terrain | 8-bit code for what the ground is made of: seabed, grass, forest, farmland, desert, mountain, snow, urban, road, airport. Water is not a terrain code |
 | Water depth | 8-bit, real meters of lake or river water over the ground; 0 is none |
@@ -363,10 +364,12 @@ Each step is small, ends with something to see or try, and leaves the game runna
 ### E. Go somewhere
 | # | Step | Done when |
 |---|---|---|
-| E1 | Scale config and real coordinates | Two places sit the right distance apart |
-| E2 | Real terrain for the DCA-ORD region | Geography is recognizable |
-| E3 | Second airport and a route line | Player can fly from DCA to ORD and land |
-| E4 | Scale tuning | The trip feels snappy |
+| E1 | Scales, projection, city warp, airport placement, preview image | DC, Philly, DCA and PHL sit sensibly in a preview and a scale is picked |
+| E2 | Real coast, water and elevation, mountain rules, guardrails | The preview is recognizably the Mid-Atlantic |
+| E3 | Load the map in the game, DCA and PHL, route line | Player can fly from DCA to PHL and land |
+| E4 | Scale tuning by flying | The trip feels right; scales are fixed for now |
+| E5 | Highways, districts, buildings, obstacle collision | DC and Philly look like cities in both views, and a building can be hit |
+| E6 | Landmarks, small towns, one small airport | DC and Philly are told apart at a glance |
 
 ### F. Talk
 | # | Step | Done when |
@@ -432,4 +435,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-A1 to A4, B1 to B4, C1, C2 and C3 are built (see [C2_C3_PLAN.md](C2_C3_PLAN.md) §13). Next: C4, takeoff and ground roll. Manual flights for C1 to C3 are still owed.
+Phases A, B and C are built (C4 to C6: [C4_C5_C6_PLAN.md](C4_C5_C6_PLAN.md)). D1 to D4 (the cockpit panel, stability and the autopilot) are built ([D_PLAN.md](D_PLAN.md)); the V/S scale (`world` or `altimeter`) is still to be decided by flying, and the D1 to D4 by-eye checks are owed. Next: E, re-cut as E1 to E6 in [E_PLAN.md](E_PLAN.md) (§14 is updated in E1). Manual flights for C1 to C6 are still owed.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
 import { GRAVITY, ROLL_LAG_S } from '../src/config/flight';
-import { DEFAULT_TUNING } from '../src/config/motion';
+import { DEFAULT_TUNING, START_Z } from '../src/config/motion';
 import { stallState } from '../src/sim/flight/aero';
 import { forcesOn } from '../src/sim/flight/forces';
 import { wrapHeading } from '../src/sim/angles';
@@ -8,7 +9,7 @@ import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
 const DEG = Math.PI / 180;
-const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: 10 };
+const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const energy = (s: SimState): number => s.craft.z + (s.craft.speed * s.craft.speed) / (2 * GRAVITY);
 const key = (s: SimState, turn: -1 | 0 | 1, pitch: -1 | 0 | 1 = 0): SimState =>
   applyCommands(s, [{ kind: 'turn', value: turn }, { kind: 'pitch', value: pitch }], DEEP);
@@ -72,7 +73,7 @@ describe('roll', () => {
     expect(secs(s, 1).craft.bank).toBeGreaterThan(mid - 5 * DEG);
   });
   it('a crash zeroes the roll rate and clears wings level', () => {
-    const ground: SimWorld = { ...DEEP, heightAt: () => 110 };
+    const ground: SimWorld = { ...DEEP, heightAt: () => START_Z + 10 };
     let s = applyCommands(banked(30), [{ kind: 'level' }], ground);
     s = run(s, 5, ground);
     expect(s.crash).not.toBeNull();
@@ -108,7 +109,7 @@ describe('turn rate', () => {
 describe('energy and stall speed', () => {
   const loss = (bankDeg: number, mult = 2): number => {
     const s0 = banked(bankDeg, { speed: 120 }, { ...DEFAULT_TUNING, turnMult: mult });
-    return energy(s0) - energy(holdLevel(s0, 100, 10));
+    return energy(s0) - energy(holdLevel(s0, START_Z, 10));
   };
   it('held level for 10 s from 120 m/s, steeper banks lose more energy', () => {
     const l = [0, 30, 45, 60].map((b) => loss(b));
@@ -125,8 +126,8 @@ describe('energy and stall speed', () => {
   it('held level at start power from 90 m/s, 60 deg stalls and 30 deg does not; idle, a steeper bank stalls at a higher speed', () => {
     const outcome = (bankDeg: number, idle = false): { stalled: boolean; speed: number } => {
       let s = banked(bankDeg, { speed: idle ? 120 : 90, ...(idle ? { lever: 0, spool: 0 } : {}) });
-      for (let i = 0; i < 60 * 20; i++) {
-        const err = (100 - s.craft.z) * 0.02 - s.craft.pathAngle * 2;
+      for (let i = 0; i < 60 * 60; i++) {
+        const err = (START_Z - s.craft.z) * 0.02 - s.craft.pathAngle * 2;
         s = advance(key(s, 0, err > 0.01 ? 1 : err < -0.01 ? -1 : 0), DEEP);
         if (stallState(s.craft, s.tuning) === 'stalled') return { stalled: true, speed: s.craft.speed };
       }
@@ -143,8 +144,8 @@ describe('energy and stall speed', () => {
 
 describe('turn help and no rescue', () => {
   it('a 30 deg turn released for 10 s holds height within 3 m; without help it sinks over 10 m', () => {
-    expect(Math.abs(secs(rolledIn(30), 10).craft.z - 100)).toBeLessThan(3);
-    expect(100 - secs(rolledIn(30, { ...DEFAULT_TUNING, turnHelpDeg: 0 }), 10).craft.z).toBeGreaterThan(10);
+    expect(Math.abs(secs(rolledIn(30), 10).craft.z - START_Z)).toBeLessThan(3);
+    expect(START_Z - secs(rolledIn(30, { ...DEFAULT_TUNING, turnHelpDeg: 0 }), 10).craft.z).toBeGreaterThan(10);
   });
   it('rolling in and back out restores the pitch within 0.3 deg', () => {
     let s = secs(key(initialState(), 1), 1.5);
@@ -156,12 +157,12 @@ describe('turn help and no rescue', () => {
     expect(Math.abs(s.craft.pitch - initialState().craft.pitch)).toBeLessThan(0.3 * DEG);
   });
   it('45 deg released sinks over 15 m', () => {
-    expect(100 - secs(rolledIn(45), 10).craft.z).toBeGreaterThan(15);
+    expect(START_Z - secs(rolledIn(45), 10).craft.z).toBeGreaterThan(15);
   });
   it('60 deg released at 90 m/s for 10 s: bank still 60, height falling', () => {
     let s = secs(rolledIn(60), 10);
     expect(s.craft.bank).toBeCloseTo(60 * DEG, 9);
-    expect(s.craft.z).toBeLessThan(100);
-    expect(forcesOn(s.craft, s.tuning, 10).dHeadingDt).toBeGreaterThan(0);
+    expect(s.craft.z).toBeLessThan(START_Z);
+    expect(forcesOn(s.craft, s.tuning, SCALES.altitude).dHeadingDt).toBeGreaterThan(0);
   });
 });

@@ -14,6 +14,57 @@ export const CANVAS_PANELS: Readonly<
   instruments: { label: 'INSTRUMENTS', internal: { width: 320, height: 160 } },
 };
 
+/**
+ * Instruments panel (D1): a fixed PANEL_COLS x PANEL_ROWS block of PANEL_CELL px cells, centered in the canvas.
+ * Dials have radius DIAL_R and are redrawn only when a needle moves NEEDLE_QUANT_DEG of dial angle.
+ */
+export const PANEL_CELL = 80;
+export const PANEL_COLS = 4;
+export const PANEL_ROWS = 2;
+export const DIAL_R = 36;
+export const NEEDLE_QUANT_DEG = 0.5;
+
+/** Airspeed dial: indicated knots to degrees clockwise from the top, piecewise linear; pegged at the last angle above the last knot. */
+export const ASI_TABLE: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [60, 30],
+  [240, 240],
+  [400, 320],
+];
+/** The airspeed dial's stall arc: red up to the stall speed, amber up to this multiple of it. Hidden on the ground below ASI_ARC_MIN_KT. */
+export const ASI_AMBER_MULT = 1.2;
+export const ASI_ARC_MIN_KT = 30;
+/**
+ * Power dial (D5B). It reads N1_IDLE_PCT with no thrust and 100 at full: display only, thrust itself still starts at 0.
+ * The scale runs 0 to 100 from N1_ZERO_DEG (6 o'clock) over N1_SWEEP_DEG clockwise; red from N1_RED_PCT up (decoration, no limit is enforced).
+ */
+export const N1_IDLE_PCT = 20;
+export const N1_ZERO_DEG = 180;
+export const N1_SWEEP_DEG = 270;
+export const N1_RED_PCT = 95;
+/** Altimeter hands: displayed feet per turn of the long and short hand. */
+export const ALT_LONG_FT = 1000;
+export const ALT_SHORT_FT = 10000;
+
+/** Artificial horizon (D2): pixels per degree of pitch, and the sky or ground always left at the edge so up stays clear. */
+export const HORIZON_PX_PER_DEG = 1.5;
+export const HORIZON_MIN_PX = 4;
+/**
+ * Vertical speed dial: ft/min (as the dial's scale) to degrees away from 9 o'clock, mirrored for descent.
+ * `world` shows the readout's value; `altimeter` shows the rate the altimeter actually changes, so its dial runs ALTITUDE_SCALE times higher.
+ * A switch to decide by flying (D_PLAN section 4); the losing mode is deleted afterwards.
+ */
+export type VsMode = 'world' | 'altimeter';
+export const VS_MODE: { mode: VsMode } = { mode: 'world' };
+export const VSI_TABLE: readonly (readonly [number, number])[] = [
+  [0, 0],
+  [1000, 60],
+  [2000, 110],
+  [4000, 160],
+];
+/** The altitude bug shows on the altimeter rim only within this many displayed feet of the altitude. */
+export const ALT_BUG_RIM_FT = 500;
+
 /** Smallest supported window; below this the page scrolls instead of shrinking. */
 export const MIN_WINDOW: Size = { width: 1280, height: 720 };
 
@@ -33,22 +84,24 @@ export const TURN_LINE_TICK_S = 2;
  * Top view depth cues (C3D). One virtual camera hangs DEPTH_CAMERA_M world meters above the plane;
  * it sets how strong every cue is (exaggerated on purpose). Switches let you compare by eye.
  */
-export const DEPTH_CAMERA_M = 1500;
+export const DEPTH_CAMERA_M = 3000;
+/** Haze and plane size are at full strength from this height (world m, about 19,700 ft), well under the ceiling. */
+export const DEPTH_TOP_Z = 1200;
 export const DEPTH_FX = { shadow: true, haze: true, planeSize: true, clouds: false };
 /** Shadow: pixels of offset per world meter above ground, its cap, peak alpha, and the AGL band (world m) over which it fades out. */
-export const SHADOW_PX_PER_M = 0.4;
+export const SHADOW_PX_PER_M = 0.2;
 export const SHADOW_MAX_PX = 40;
 export const SHADOW_ALPHA = 0.35;
-export const SHADOW_FADE_LOW_M = 100;
-export const SHADOW_FADE_HIGH_M = 250;
-/** Haze: alpha of the veil over the terrain at the ceiling. */
+export const SHADOW_FADE_LOW_M = 200;
+export const SHADOW_FADE_HIGH_M = 500;
+/** Haze: alpha of the veil over the terrain at DEPTH_TOP_Z and above. */
 export const HAZE_MAX = 0.35;
 /**
  * Clouds: a static layer CLOUD_BASE_M above sea level (world m), tiled from one seamless noise tile that covers
  * CLOUD_TILE_M of world in CLOUD_TILE_PX pixels. Alpha is LOW while the plane is under the base and HIGH above it,
  * so low flight keeps a clear ground. Cloud shadows fall southeast, shifted by CLOUD_BASE_M * CLOUD_SHADOW_SKEW world m.
  */
-export const CLOUD_BASE_M = 250;
+export const CLOUD_BASE_M = 500;
 export const CLOUD_TILE_M = 3000;
 export const CLOUD_TILE_PX = 256;
 export const CLOUD_SEED = 20240611;
@@ -56,7 +109,7 @@ export const CLOUD_ALPHA_LOW = 0.25;
 export const CLOUD_ALPHA_HIGH = 0.6;
 export const CLOUD_SHADOW_ALPHA = 0.22;
 export const CLOUD_SHADOW_SKEW = 0.3;
-/** Plane sprite size steps between the ground and the ceiling, and the extra altitude fraction (of one step) needed to leave the current one. */
+/** Plane sprite size steps between the ground and DEPTH_TOP_Z, and the extra altitude fraction (of one step) needed to leave the current one. */
 export const PLANE_SIZE_TIERS = 4;
 export const PLANE_SIZE_HYSTERESIS = 0.1;
 
@@ -103,7 +156,7 @@ export const BUG_FINE_DEG = 1;
 /** Side view altitude bug: keys step it by these many displayed feet (Shift = fine), and the highest it can be set. */
 export const ALT_BUG_STEP_FT = 100;
 export const ALT_BUG_FINE_FT = 10;
-export const ALT_BUG_MAX_FT = 20000;
+export const ALT_BUG_MAX_FT = 40000;
 /** Altitude tape (right side of the side view): pixels per displayed foot, width, tallest height (px), and the trend vector's look-ahead (s). */
 export const ALT_TAPE_PX_PER_FT = 0.4;
 export const ALT_TAPE_WIDTH_PX = 62;
@@ -114,3 +167,48 @@ export const RING_MAX_RADIUS = 150;
 export const RING_MARGIN = 24;
 export const RING_TICK_DEG = 10;
 export const RING_LABEL_DEG = 30;
+
+/** Side view: the plane stands on its wheels. Its sprite is lifted this many pixels on the ground, fading to none at WHEEL_FADE_PX of height above it. */
+export const WHEEL_PX = 7;
+export const WHEEL_FADE_PX = 40;
+/** Top view: no turn line below this speed on the ground, m/s (ten seconds of it is meaningless). */
+export const TURN_LINE_MIN_SPEED = 5;
+
+/** C4B. Takeoff HUD mode: airborne under this height above ground (world m) with the gear not up; gear counts as up at or below GEAR_UP_AT. */
+export const TAKEOFF_HUD_AGL_M = 150;
+export const GEAR_UP_AT = 0.05;
+/** V-speeds update while on the ground slower than this (m/s) and are frozen once the roll starts. */
+export const VSPEED_FREEZE_MS = 2;
+/** A takeoff call-out stays on screen this long, seconds. */
+export const CALLOUT_HOLD_S = 2;
+/** A V1 within this many knots of VR gets no mark or call-out of its own: VR's call-out reads `V1 ROTATE` (D5A). */
+export const V1_MERGE_KT = 5;
+/** V1's letter on the speed dial keeps at least this many dial degrees before VR's (D5A); its tick stays at the true speed. */
+export const VMARK_LABEL_MIN_DEG = 18;
+/** Pixel text scale of the call-out banner in the instruments panel (D5A). */
+export const CALLOUT_TEXT_SCALE = 2;
+/** Call-out POSITIVE RATE needs this much height above ground (world m). */
+export const POSITIVE_RATE_AGL_M = 5;
+/** Zoom gate: ground zoom on the ground or under ENTER, air zoom above EXIT (height above ground, world m), kept between. Time constant of the zoom ease, seconds. */
+export const GROUND_ZOOM_ENTER_AGL = 20;
+export const GROUND_ZOOM_EXIT_AGL = 40;
+export const ZOOM_EASE_S = 0.8;
+/** The height-above-ground text by the plumb line shows under this height (world m, 2,000 displayed ft). */
+export const AGL_TEXT_LIMIT_M = 60;
+
+/** Approach guidance (C5): on under APPROACH_AGL_M above ground with the gear down, within APPROACH_RANGE_M before the threshold, within APPROACH_ALIGN_DEG of the runway heading and APPROACH_WIDTH_M of its line. World m and degrees. */
+export const APPROACH_AGL_M = 150;
+export const APPROACH_RANGE_M = 4000;
+export const APPROACH_ALIGN_DEG = 60;
+export const APPROACH_WIDTH_M = 2500;
+/** The guide path: its angle (deg) and the aim point past the threshold (m). Matches the Final start. */
+export const APPROACH_PATH_DEG = 3;
+export const APPROACH_AIM_M = 150;
+
+/** Autopilot (D4): keys step the speed target by this many knots (Shift = fine); a notice stays this long (s); the lamps read "captured" inside these margins. */
+export const SPD_BUG_STEP_KT = 5;
+export const SPD_BUG_FINE_KT = 1;
+export const AP_NOTICE_S = 2;
+export const AP_CAPTURE_FT = 20;
+export const AP_CAPTURE_DEG = 2;
+export const AP_CAPTURE_KT = 2;

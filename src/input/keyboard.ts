@@ -46,14 +46,19 @@ export interface KeyActions {
   readonly BracketRight: (fine: boolean) => void;
   readonly Minus: (fine: boolean) => void;
   readonly Equal: (fine: boolean) => void;
+  /** Autopilot on and off, speed hold alone, and the speed target down and up (D4). */
+  readonly KeyZ: (fine: boolean) => void;
+  readonly KeyX: (fine: boolean) => void;
+  readonly Comma: (fine: boolean) => void;
+  readonly Period: (fine: boolean) => void;
 }
 
 export type ActionCode = keyof KeyActions;
 
-const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true, BracketLeft: true, BracketRight: true, Minus: true, Equal: true };
+const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true, BracketLeft: true, BracketRight: true, Minus: true, Equal: true, KeyZ: true, KeyX: true, Comma: true, Period: true };
 
 /** Actions that repeat while the key is held. */
-const REPEATING: ReadonlySet<string> = new Set(['BracketLeft', 'BracketRight', 'Minus', 'Equal']);
+const REPEATING: ReadonlySet<string> = new Set(['BracketLeft', 'BracketRight', 'Minus', 'Equal', 'Comma', 'Period']);
 
 export interface ActionEvent {
   readonly code: string;

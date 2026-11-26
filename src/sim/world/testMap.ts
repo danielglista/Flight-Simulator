@@ -1,17 +1,23 @@
 import { createGrid, type WorldGrid } from './grid';
 import { Terrain } from './terrain';
 
-/** Map size in cells. 512 x 512 at 10 m is 5.12 km square, four 256-cell chunks. */
-export const TEST_MAP_CELLS = 512;
+/** The island is built in a 512 x 512 grid of 10 m cells (5.12 km square). */
+const ISLAND_CELLS = 512;
 export const TEST_MAP_CELL_SIZE = 10;
+/** Open sea added on every side of the island (cells), so final approaches have room. No new terrain: the edge shelf is repeated. */
+export const SEA_PAD_CELLS = 256;
+/** Map size in cells: the island plus the sea pad, four 256-cell chunks a side. */
+export const TEST_MAP_CELLS = ISLAND_CELLS + 2 * SEA_PAD_CELLS;
+/** How far the island is shifted east and north by the pad, world m. */
+export const TEST_MAP_OFFSET_M = SEA_PAD_CELLS * TEST_MAP_CELL_SIZE;
 
 interface Cell {
   readonly col: number;
   readonly row: number;
 }
 
-/** Hand-chosen places, in cell coordinates (row 0 is south). Used by tests and the start camera. */
-export const TEST_MAP_LANDMARKS = {
+/** Hand-chosen places in the island's own cell coordinates (row 0 is south), before the sea pad. */
+const ISLAND_LANDMARKS = {
   peak: { col: 375, row: 375 } as Cell,
   riverSource: { col: 350, row: 360 } as Cell,
   lakeCenter: { col: 150, row: 300 } as Cell,
@@ -19,6 +25,17 @@ export const TEST_MAP_LANDMARKS = {
   town: { colMin: 130, colMax: 165, rowMin: 120, rowMax: 145 },
   /** Constant-elevation area for the runway (about 1,500 x 500 world m). */
   level: { colMin: 181, colMax: 331, rowMin: 70, rowMax: 120, elevationM: 30 },
+} as const;
+
+/** The same places in map cell coordinates (shifted by the sea pad). Used by tests and the start camera. */
+const P = SEA_PAD_CELLS;
+export const TEST_MAP_LANDMARKS = {
+  peak: { col: ISLAND_LANDMARKS.peak.col + P, row: ISLAND_LANDMARKS.peak.row + P } as Cell,
+  riverSource: { col: ISLAND_LANDMARKS.riverSource.col + P, row: ISLAND_LANDMARKS.riverSource.row + P } as Cell,
+  lakeCenter: { col: ISLAND_LANDMARKS.lakeCenter.col + P, row: ISLAND_LANDMARKS.lakeCenter.row + P } as Cell,
+  lakeRadius: ISLAND_LANDMARKS.lakeRadius,
+  town: { colMin: ISLAND_LANDMARKS.town.colMin + P, colMax: ISLAND_LANDMARKS.town.colMax + P, rowMin: ISLAND_LANDMARKS.town.rowMin + P, rowMax: ISLAND_LANDMARKS.town.rowMax + P },
+  level: { colMin: ISLAND_LANDMARKS.level.colMin + P, colMax: ISLAND_LANDMARKS.level.colMax + P, rowMin: ISLAND_LANDMARKS.level.rowMin + P, rowMax: ISLAND_LANDMARKS.level.rowMax + P, elevationM: ISLAND_LANDMARKS.level.elevationM },
 } as const;
 
 const LAND_CENTER = 256;
@@ -77,8 +94,8 @@ function noise(c: number, r: number): number {
  * Order: coast, base land, hills and ridge, lake and river, sea floor, terrain by height,
  * level area, farmland, desert, town, road.
  */
-export function buildTestMap(): WorldGrid {
-  const n = TEST_MAP_CELLS;
+function buildIsland(): WorldGrid {
+  const n = ISLAND_CELLS;
   const grid = createGrid(n, n, TEST_MAP_CELL_SIZE);
   const { elevation, terrain, water } = grid;
   const at = (c: number, r: number): number => r * n + c;
@@ -131,16 +148,16 @@ export function buildTestMap(): WorldGrid {
   }
 
   // 3. Lake, then river carved after it so water sits below its banks.
-  const lake = TEST_MAP_LANDMARKS.lakeCenter;
+  const lake = ISLAND_LANDMARKS.lakeCenter;
   const LAKE_LEVEL_M = 25;
   const isLake = new Uint8Array(n * n);
   for (let r = lake.row - 20; r <= lake.row + 20; r++) {
     for (let c = lake.col - 20; c <= lake.col + 20; c++) {
       const d = distance(c, r, lake.col, lake.row);
-      if (inMap(c, r) && d <= TEST_MAP_LANDMARKS.lakeRadius) {
+      if (inMap(c, r) && d <= ISLAND_LANDMARKS.lakeRadius) {
         // Deepest in the middle; the water surface is flat at the lake level.
         const depth = Math.round(
-          LAKE_EDGE_DEPTH_M + (LAKE_MAX_DEPTH_M - LAKE_EDGE_DEPTH_M) * (1 - d / TEST_MAP_LANDMARKS.lakeRadius),
+          LAKE_EDGE_DEPTH_M + (LAKE_MAX_DEPTH_M - LAKE_EDGE_DEPTH_M) * (1 - d / ISLAND_LANDMARKS.lakeRadius),
         );
         elevation[at(c, r)] = LAKE_LEVEL_M - depth;
         water[at(c, r)] = depth;
@@ -198,7 +215,7 @@ export function buildTestMap(): WorldGrid {
   }
 
   // 4. Level area for the runway, blended into the land around it.
-  const lv = TEST_MAP_LANDMARKS.level;
+  const lv = ISLAND_LANDMARKS.level;
   const BLEND = 12;
   for (let r = lv.rowMin - BLEND; r <= lv.rowMax + BLEND; r++) {
     for (let c = lv.colMin - BLEND; c <= lv.colMax + BLEND; c++) {
@@ -285,7 +302,7 @@ export function buildTestMap(): WorldGrid {
   paint(270, 340, 125, 190, Terrain.farmland, open);
   paint(100, 170, 160, 215, Terrain.farmland, open);
   paint(285, 380, 200, 270, Terrain.desert, open);
-  const tw = TEST_MAP_LANDMARKS.town;
+  const tw = ISLAND_LANDMARKS.town;
   for (let r = tw.rowMin; r <= tw.rowMax; r++) {
     for (let c = tw.colMin; c <= tw.colMax; c++) {
       if (isWet(at(c, r))) continue;
@@ -297,5 +314,24 @@ export function buildTestMap(): WorldGrid {
   paint(tw.colMax, 340, 132, 133, Terrain.road);
   paint(255, 256, lv.rowMax + 1, 133, Terrain.road);
 
+  return grid;
+}
+
+/** The island set in open sea: the padding repeats the island's outermost cells, which are already deep sea floor. */
+export function buildTestMap(): WorldGrid {
+  const island = buildIsland();
+  const n = TEST_MAP_CELLS;
+  const grid = createGrid(n, n, TEST_MAP_CELL_SIZE);
+  const m = ISLAND_CELLS;
+  const clampI = (v: number): number => Math.min(m - 1, Math.max(0, v));
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const src = clampI(r - SEA_PAD_CELLS) * m + clampI(c - SEA_PAD_CELLS);
+      const inside = r >= SEA_PAD_CELLS && r < SEA_PAD_CELLS + m && c >= SEA_PAD_CELLS && c < SEA_PAD_CELLS + m;
+      grid.elevation[r * n + c] = island.elevation[src] as number;
+      grid.terrain[r * n + c] = island.terrain[src] as number;
+      grid.water[r * n + c] = inside ? (island.water[src] as number) : 0;
+    }
+  }
   return grid;
 }

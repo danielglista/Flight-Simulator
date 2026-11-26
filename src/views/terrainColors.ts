@@ -85,11 +85,7 @@ const NO_CONTOUR = new Set<number>([
   Terrain.taxiway,
 ]);
 
-/**
- * RGBA bytes for one chunk, one pixel per cell. Image row 0 is the NORTH row
- * of the chunk, so this is the one place the y flip happens for pixels.
- * Cells beyond the grid are sea.
- */
+/** RGBA bytes for one square chunk of cells; see `colorCells`. */
 export function colorChunk(
   grid: WorldGrid,
   scale: ScaleConfig,
@@ -97,11 +93,26 @@ export function colorChunk(
   chunkRow: number,
   size: number = CHUNK_CELLS,
 ): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(size * size * 4);
-  for (let y = 0; y < size; y++) {
-    const row = chunkRow * size + (size - 1 - y);
-    for (let x = 0; x < size; x++) {
-      const col = chunkCol * size + x;
+  return colorCells(grid, scale, chunkCol * size, chunkRow * size, size, size);
+}
+
+/**
+ * RGBA bytes for a `width` x `height` block of cells from (col0, row0), one pixel per cell. Image row 0 is the NORTH
+ * row of the block, so this is the one place the y flip happens for pixels. Cells beyond the grid are sea.
+ */
+export function colorCells(
+  grid: WorldGrid,
+  scale: ScaleConfig,
+  col0: number,
+  row0: number,
+  width: number,
+  height: number,
+): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    const row = row0 + (height - 1 - y);
+    for (let x = 0; x < width; x++) {
+      const col = col0 + x;
       let color: Rgb = SEA_COLOR;
       if (col < grid.cols && row < grid.rows) {
         const code = grid.terrain[row * grid.cols + col] ?? Terrain.seabed;
@@ -117,7 +128,7 @@ export function colorChunk(
           }
         }
       }
-      const o = (y * size + x) * 4;
+      const o = (y * width + x) * 4;
       out[o] = color[0];
       out[o + 1] = color[1];
       out[o + 2] = color[2];

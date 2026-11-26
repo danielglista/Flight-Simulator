@@ -1,3 +1,4 @@
+import { TEST_MAP_OFFSET_M as O } from '../src/sim/world/testMap';
 import { describe, expect, it } from 'vitest';
 import { SCALES } from '../src/config/scales';
 import {
@@ -83,12 +84,12 @@ describe('runwayNumber', () => {
 });
 
 describe('buildAirport', () => {
-  const a = buildTestAirport(SCALES);
+  const a = buildTestAirport();
   it('converts real meters to world meters about the anchor', () => {
-    expect(a.minX).toBe(1860);
-    expect(a.maxX).toBe(3260);
-    expect(a.minY).toBe(710);
-    expect(a.maxY).toBe(1200);
+    expect(a.minX).toBe(1860 + O);
+    expect(a.maxX).toBe(3260 + O);
+    expect(a.minY).toBe(710 + O);
+    expect(a.maxY).toBe(1200 + O);
     expect(a.blend).toBe(40);
     expect(a.cols).toBe(700);
     expect(a.rows).toBe(245);
@@ -103,31 +104,31 @@ describe('buildAirport', () => {
   });
   it('paints the fine grid with row 0 south', () => {
     const at = (x: number, y: number) => a.surface[Math.floor((y - a.minY) / 2) * a.cols + Math.floor((x - a.minX) / 2)];
-    expect(at(2560, 955 + 165)).toBe(Terrain.airport); // apron, north of centre
-    expect(at(2560, 955 - 165)).toBe(Terrain.grass); // same place mirrored south
-    expect(at(2560 - 300, 955)).toBe(Terrain.grass);
-    expect(at(2560, 955 + 80)).toBe(Terrain.taxiway); // apron link, (0, 160 real)
-    expect(at(2560 - 100, 955 + 11.5)).toBe(Terrain.taxiway); // on the taxiway line at real (-200, 23)
-    expect(at(2560 + 100, 955 + 70)).toBe(Terrain.grass);
+    expect(at((2560 + O), (955 + O) + 165)).toBe(Terrain.airport); // apron, north of centre
+    expect(at((2560 + O), (955 + O) - 165)).toBe(Terrain.grass); // same place mirrored south
+    expect(at((2560 + O) - 300, (955 + O))).toBe(Terrain.grass);
+    expect(at((2560 + O), (955 + O) + 80)).toBe(Terrain.taxiway); // apron link, (0, 160 real)
+    expect(at((2560 + O) - 100, (955 + O) + 11.5)).toBe(Terrain.taxiway); // on the taxiway line at real (-200, 23)
+    expect(at((2560 + O) + 100, (955 + O) + 70)).toBe(Terrain.grass);
   });
 });
 
 describe('lookup', () => {
   const map = buildTestMap();
-  const air = buildTestAirport(SCALES);
+  const air = buildTestAirport();
   const g = withAirports(map, [air]);
   const rw = air.runways[0] as Runway;
   const mid = { x: (rw.a.x + rw.b.x) / 2, y: (rw.a.y + rw.b.y) / 2 };
 
   it('puts the runway above the fine grid above the base', () => {
     expect(surfaceAt(g, mid.x, mid.y)).toBe(Terrain.runway);
-    expect(surfaceAt(g, 2560, 955 + 165)).toBe(Terrain.airport);
-    expect(surfaceAt(g, 2560 - 300, 955)).toBe(Terrain.grass);
+    expect(surfaceAt(g, (2560 + O), (955 + O) + 165)).toBe(Terrain.airport);
+    expect(surfaceAt(g, (2560 + O) - 300, (955 + O))).toBe(Terrain.grass);
     expect(runwayAt(g, mid.x, mid.y)?.runway).toBe(rw);
-    expect(runwayAt(g, 2560, 955 + 165)).toBeNull();
+    expect(runwayAt(g, (2560 + O), (955 + O) + 165)).toBeNull();
   });
   it('changes nothing outside the boundary, and with no airports', () => {
-    for (const [x, y] of [[100, 100], [2560, 1500], [1000, 2000], [1859, 955], [3261, 955]] as const) {
+    for (const [x, y] of [[100, 100], [(2560 + O), 1500 + O], [1000 + O, 2000 + O], [1859 + O, (955 + O)], [3261 + O, (955 + O)]] as const) {
       expect(surfaceAt(g, x, y)).toBe(surfaceAt(map, x, y));
       expect(heightAt(g, SCALES, x, y)).toBe(heightAt(map, SCALES, x, y));
     }
@@ -135,9 +136,9 @@ describe('lookup', () => {
     expect(map.airports).toHaveLength(0);
   });
   it('is flat and dry on the runway', () => {
-    expect(groundAt(g, SCALES, mid.x, mid.y)).toBe(3);
+    expect(groundAt(g, SCALES, mid.x, mid.y)).toBe(30 / SCALES.altitude);
     expect(Number.isNaN(waterLevelAt(g, SCALES, mid.x, mid.y))).toBe(true);
-    expect(heightAt(g, SCALES, mid.x, mid.y)).toBe(3);
+    expect(heightAt(g, SCALES, mid.x, mid.y)).toBe(30 / SCALES.altitude);
   });
   it('slices the runway: about 1,050 m of constant 3 world m', () => {
     const len = 1200;
@@ -147,7 +148,7 @@ describe('lookup', () => {
     for (let i = 0; i < n; i++) {
       if (s.surface[i] === Terrain.runway) {
         count++;
-        expect(s.heightWorldM[i]).toBeCloseTo(3, 5);
+        expect(s.heightWorldM[i]).toBeCloseTo(30 / SCALES.altitude, 5);
       }
     }
     expect(count).toBeGreaterThan(1048);
@@ -183,14 +184,14 @@ describe('blend', () => {
       runways: [{ a: { x: -100, y: 0 }, b: { x: 100, y: 0 }, width: 30, names: ['09', '27'] as [string, string] }],
       paving: [],
     };
-    return withAirports(g, [buildAirport(def, SCALES)]);
+    return withAirports(g, [buildAirport(def)]);
   }
   const g = uneven();
   const a = g.airports[0]!;
   const base = (x: number, y: number) => groundAt({ ...g, airports: [] }, SCALES, x, y);
   it('equals the base at the boundary and the field inside', () => {
     expect(groundAt(g, SCALES, a.minX, 200)).toBeCloseTo(base(a.minX, 200), 9);
-    expect(groundAt(g, SCALES, 200, 200)).toBeCloseTo(3, 9);
+    expect(groundAt(g, SCALES, 200, 200)).toBeCloseTo(30 / SCALES.altitude, 9);
     expect(blendWeight(a, 200, 200)).toBe(1);
   });
   it('is monotonic into the interior with no jumps and no NaN', () => {

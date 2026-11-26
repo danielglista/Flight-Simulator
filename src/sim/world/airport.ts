@@ -1,4 +1,3 @@
-import type { ScaleConfig } from '../../config/scales';
 import { Terrain } from './terrain';
 
 export interface Vec2 {
@@ -38,6 +37,25 @@ export interface Airport {
   /** Terrain codes, row 0 south, column 0 west. Runways are not in here. */
   readonly surface: Uint8Array;
   readonly runways: readonly Runway[];
+  readonly variationDeg?: number;
+  /**
+   * The airport covers only its ground cells; elsewhere in the boundary (`OFF_AIRPORT`) the map shows through, so a
+   * river may pass inside it. There is no blend band: the map under the ground must already be flat and dry.
+   */
+  readonly masked?: boolean;
+}
+
+/** Fine-grid code of a cell that is not part of a masked airport. */
+export const OFF_AIRPORT = 255;
+
+/** A cleared, level rectangle of a masked airport, local real meters. `length` lies along `headingDeg`. */
+export interface GroundRect {
+  readonly x: number;
+  readonly y: number;
+  readonly length: number;
+  readonly width: number;
+  /** Degrees clockwise from north. */
+  readonly headingDeg: number;
 }
 
 // ---- Authoring format: LOCAL REAL meters (x east, y north from the anchor) ----
@@ -58,6 +76,12 @@ export interface AirportDef {
   readonly name: string;
   /** WORLD meters. */
   readonly anchor: Vec2;
+  /** Real meters per world meter of this layout. Never used for altitude. */
+  readonly scale: number;
+  /** Degrees a runway name stands above its true heading (magnetic = true + this, west positive). Default 0. */
+  readonly variationDeg?: number;
+  /** When given, the airport is masked: only these rectangles are airport ground, and `boundary` must enclose them. */
+  readonly ground?: readonly GroundRect[];
   /** Local real meters, relative to the anchor. */
   readonly boundary: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
   /** Local real meters. */
@@ -124,8 +148,9 @@ export function airportContains(a: Airport, x: number, y: number): boolean {
   return x >= a.minX && x <= a.maxX && y >= a.minY && y <= a.maxY;
 }
 
-/** 0 at the boundary, 1 from `blend` inside it. Smooth, so ground has no kink. */
+/** 0 at the boundary, 1 from `blend` inside it. Smooth, so ground has no kink. A masked airport has no band. */
 export function blendWeight(a: Airport, x: number, y: number): number {
+  if (a.masked) return 1;
   const d = Math.min(x - a.minX, a.maxX - x, y - a.minY, a.maxY - y);
   const t = Math.min(1, Math.max(0, d / a.blend));
   return t * t * (3 - 2 * t);
@@ -156,8 +181,8 @@ function stripContains(a: Vec2, b: Vec2, width: number, x: number, y: number): b
 }
 
 /** Converts an authored definition (local real meters) to world meters and paints the fine grid. */
-export function buildAirport(def: AirportDef, scale: ScaleConfig): Airport {
-  const k = scale.airport;
+export function buildAirport(def: AirportDef): Airport {
+  const k = def.scale;
   const toWorld = (p: Vec2): Vec2 => ({ x: def.anchor.x + p.x / k, y: def.anchor.y + p.y / k });
   const minX = def.anchor.x + def.boundary.minX / k;
   const minY = def.anchor.y + def.boundary.minY / k;
@@ -165,7 +190,26 @@ export function buildAirport(def: AirportDef, scale: ScaleConfig): Airport {
   const maxY = def.anchor.y + def.boundary.maxY / k;
   const cols = Math.round((maxX - minX) / def.cellSize);
   const rows = Math.round((maxY - minY) / def.cellSize);
-  const surface = new Uint8Array(cols * rows).fill(Terrain.grass);
+  const surface = new Uint8Array(cols * rows).fill(def.ground ? OFF_AIRPORT : Terrain.grass);
+
+  const rects = (def.ground ?? []).map((g) => {
+    const h = (g.headingDeg * Math.PI) / 180;
+    const c = toWorld(g);
+    const ux = Math.sin(h);
+    const uy = Math.cos(h);
+    return (x: number, y: number): boolean => {
+      const dx = x - c.x;
+      const dy = y - c.y;
+      return Math.abs(dx * ux + dy * uy) <= g.length / k / 2 && Math.abs(dx * uy - dy * ux) <= g.width / k / 2;
+    };
+  });
+  for (let r = 0; r < rows && rects.length > 0; r++) {
+    const y = minY + (r + 0.5) * def.cellSize;
+    for (let c = 0; c < cols; c++) {
+      const x = minX + (c + 0.5) * def.cellSize;
+      if (rects.some((inside) => inside(x, y))) surface[r * cols + c] = Terrain.grass;
+    }
+  }
 
   for (const p of def.paving) {
     let test: (x: number, y: number) => boolean;
@@ -215,5 +259,7 @@ export function buildAirport(def: AirportDef, scale: ScaleConfig): Airport {
     rows,
     surface,
     runways,
+    ...(def.variationDeg === undefined ? {} : { variationDeg: def.variationDeg }),
+    ...(def.ground ? { masked: true } : {}),
   };
 }

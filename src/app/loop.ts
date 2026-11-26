@@ -1,6 +1,6 @@
 import type { Command } from '../sim/commands';
 import { interpolate } from '../sim/interpolate';
-import { initialState, type Craft, type SimState } from '../sim/state';
+import { initialState, type Craft, type SimState, type StartSpec } from '../sim/state';
 import { advance, applyCommands, type SimWorld } from '../sim/step';
 import { createStepper } from './stepper';
 
@@ -14,6 +14,8 @@ export interface LoopOptions {
   sampleKeys(): Command[];
   clearKeys(): void;
   startPaused?: boolean;
+  /** Where the plane starts, and where restart goes. Default: the air start. */
+  start?: StartSpec;
   /** Real seconds since the previous running frame. Not called for the first frame or the first after a resume. */
   onFrame?(elapsedS: number): void;
 }
@@ -37,7 +39,7 @@ export interface Loop {
 
 export function createLoop(o: LoopOptions): Loop {
   const stepper = createStepper();
-  let state = initialState();
+  let state = initialState(o.start);
   let prev = state;
   let alpha = 0;
   let queue: Command[] = [];

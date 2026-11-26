@@ -1,6 +1,6 @@
-import type { ScaleConfig } from '../../config/scales';
 import { buildAirport, type Airport, type AirportDef } from './airport';
 import { Terrain } from './terrain';
+import { TEST_MAP_OFFSET_M } from './testMap';
 
 /**
  * Invented airport on the test map's level area. Authored in LOCAL REAL meters
@@ -10,7 +10,8 @@ import { Terrain } from './terrain';
 export const TEST_AIRPORT_DEF: AirportDef = {
   ident: 'TST',
   name: 'Test Field',
-  anchor: { x: 2560, y: 955 },
+  anchor: { x: 2560 + TEST_MAP_OFFSET_M, y: 955 + TEST_MAP_OFFSET_M },
+  scale: 2,
   boundary: { minX: -1400, minY: -490, maxX: 1400, maxY: 490 },
   blend: 80,
   fieldElevationM: 30,
@@ -24,6 +25,6 @@ export const TEST_AIRPORT_DEF: AirportDef = {
   ],
 };
 
-export function buildTestAirport(scale: ScaleConfig): Airport {
-  return buildAirport(TEST_AIRPORT_DEF, scale);
+export function buildTestAirport(): Airport {
+  return buildAirport(TEST_AIRPORT_DEF);
 }

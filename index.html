@@ -17,6 +17,7 @@
       <section class="panel" id="panel-instruments" aria-label="Instruments">
         <canvas role="img" aria-label="Cockpit instruments"></canvas>
         <p id="readout-sr" class="sr-only"></p>
+        <p id="callout-sr" class="sr-only" aria-live="assertive"></p>
       </section>
       <section class="panel terminal" id="panel-terminal" aria-label="Comms terminal">
         <header class="terminal-header">COMMS TERMINAL</header>
@@ -31,6 +32,7 @@
         <div id="debug-panel" class="debug" aria-label="Debug panel (Backquote to hide)" hidden></div>
       </section>
     </main>
+    <div id="loading" class="loading" role="status">Loading map</div>
     <div class="banners">
       <div id="pause-banner" class="pause-banner" role="status" hidden>
         <span>PAUSED - P to resume</span>

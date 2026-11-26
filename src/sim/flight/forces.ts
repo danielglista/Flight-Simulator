@@ -2,8 +2,7 @@ import { COS_FLOOR, GRAVITY, SPEED_FLOOR, THRUST_LAPSE, WING_AREA } from '../../
 import type { Tuning } from '../../config/motion';
 import type { Craft } from '../state';
 import { aeroAt, dynamicPressure } from './aero';
-
-const DEG = Math.PI / 180;
+import { wingOf } from './wing';
 
 /** Air density relative to sea level, standard troposphere. `z` is world m; `altitudeScale` is real m per world m. */
 export function densityRatio(z: number, altitudeScale: number): number {
@@ -47,7 +46,8 @@ export function forcesOn(craft: Craft, tuning: Tuning, altitudeScale: number): F
   const m = tuning.massT * 1000;
   const q = dynamicPressure(craft.speed, sigma);
   const alpha = craft.pitch - craft.pathAngle;
-  const aero = aeroAt(alpha, tuning.stallDeg * DEG, tuning);
+  const wing = wingOf(craft, tuning);
+  const aero = aeroAt(alpha, wing.stallRad, tuning, wing.cl0, wing.extraCd0Counts);
   const t = thrust(craft.spool, tuning, sigma);
   const lift = q * WING_AREA * aero.cl;
   const drag = q * WING_AREA * aero.cd;
@@ -69,4 +69,16 @@ export function forcesOn(craft: Craft, tuning: Tuning, altitudeScale: number): F
     dPathDt: ((lift * cosB + t * Math.sin(alpha)) / m - GRAVITY * Math.cos(g)) / v,
     dHeadingDt: (tuning.turnMult * lift * Math.sin(craft.bank)) / (m * v * Math.max(Math.cos(g), COS_FLOOR)),
   };
+}
+
+/** Lever and engine for one step: the lever follows the throttle keys, the engine follows the lever with a lag. */
+export function stepEngine(
+  craft: Pick<Craft, 'lever' | 'spool'>,
+  throttle: number,
+  tuning: Tuning,
+  dt: number,
+): { lever: number; spool: number } {
+  const lever = Math.min(1, Math.max(0, craft.lever + throttle * (tuning.leverRatePctS / 100) * dt));
+  const spool = craft.spool + (lever - craft.spool) * (1 - Math.exp(-dt / tuning.spoolTauS));
+  return { lever, spool };
 }

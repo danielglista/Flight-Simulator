@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { SCALES } from '../src/config/scales';
 import { GRAVITY } from '../src/config/flight';
-import { DEFAULT_TUNING, START_LEVER, START_PITCH } from '../src/config/motion';
+import { DEFAULT_TUNING, START_LEVER, START_PITCH, START_Z } from '../src/config/motion';
 import { densityRatio, forcesOn, thrust } from '../src/sim/flight/forces';
 import { CEILING_Z } from '../src/config/motion';
 import { stallState } from '../src/sim/flight/aero';
@@ -8,7 +9,7 @@ import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
 
 const DEG = Math.PI / 180;
-const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: 10 };
+const DEEP: SimWorld = { width: 1e7, height: 1e7, heightAt: () => -1e9, altitudeScale: SCALES.altitude, groundKind: () => 'rough' as const };
 const FLAT: SimWorld = { ...DEEP, heightAt: () => 0 };
 const run = (s: SimState, n: number, w = DEEP): SimState => {
   for (let i = 0; i < n; i++) s = advance(s, w);
@@ -54,7 +55,7 @@ describe('energy', () => {
     for (const p of [1, -1, 0, 1, -1] as const) {
       for (let i = 0; i < 60; i++) {
         s = advance(hold(s, p), DEEP);
-        expect(Math.abs(forcesOn(s.craft, tuning, 10).separation)).toBe(0);
+        expect(Math.abs(forcesOn(s.craft, tuning, SCALES.altitude).separation)).toBe(0);
       }
       expect(Math.abs(energy(s) - e0)).toBeLessThan(1e-9);
     }
@@ -63,7 +64,7 @@ describe('energy', () => {
 
 /** Level-flight trim at 90 m/s and the start height, found by bisection on the forces, not read from config. */
 function solveTrim(): { pitch: number; lever: number } {
-  const probe = (pitch: number, spool: number) => forcesOn({ ...initialState().craft, pitch, spool }, DEFAULT_TUNING, 10);
+  const probe = (pitch: number, spool: number) => forcesOn({ ...initialState().craft, pitch, spool }, DEFAULT_TUNING, SCALES.altitude);
   let lever = 0.3;
   let pitch = 0.1;
   for (let k = 0; k < 40; k++) {
@@ -88,18 +89,18 @@ describe('trim and trade', () => {
     expect(Math.abs(t.pitch - START_PITCH)).toBeLessThan(1e-3);
     expect(Math.abs(t.lever - START_LEVER)).toBeLessThan(1e-3);
   });
-  it('start, hands off, flat world: holds 90 m/s and 100 m for 60 s', () => {
+  it('start, hands off, flat world: holds 90 m/s and the start height for 60 s', () => {
     const s = run(initialState(), 3600, DEEP);
     expect(Math.abs(s.craft.speed - 90)).toBeLessThan(0.5);
-    expect(Math.abs(s.craft.z - 100)).toBeLessThan(2);
+    expect(Math.abs(s.craft.z - START_Z)).toBeLessThan(2);
   });
   it('holding S loses speed and gains height; W the reverse', () => {
     const up = run(hold(initialState(), 1), 240).craft;
     const down = run(hold(initialState(), -1), 240).craft;
     expect(up.speed).toBeLessThan(90);
-    expect(up.z).toBeGreaterThan(100);
+    expect(up.z).toBeGreaterThan(START_Z);
     expect(down.speed).toBeGreaterThan(90);
-    expect(down.z).toBeLessThan(100);
+    expect(down.z).toBeLessThan(START_Z);
   });
   it('full throttle raises energy height, idle lowers it', () => {
     const e0 = energy(initialState());
@@ -156,8 +157,8 @@ describe('idle', () => {
 });
 
 describe('ceiling', () => {
-  it('held S at full throttle from 500 m: never above 600, path settles at 0, nose never jumps, not stalled later', () => {
-    let s = hold(at({ z: 500, speed: 150, lever: 1, spool: 1 }), 1);
+  it('held S at full throttle from 200 m under it: never above it, path settles at 0, nose never jumps, not stalled later', () => {
+    let s = hold(at({ z: CEILING_Z - 200, speed: 150, lever: 1, spool: 1 }), 1);
     let maxJump = 0;
     for (let i = 0; i < 60 * 40; i++) {
       const n = advance(s, DEEP);
@@ -188,7 +189,7 @@ describe('crash and restart', () => {
 describe('forcesOn', () => {
   it('dV/dt is (T cos(a) - D)/m - G sin(path); load factor is lift over weight', () => {
     const c = at({ pathAngle: 5 * DEG }).craft;
-    const f = forcesOn(c, DEFAULT_TUNING, 10);
+    const f = forcesOn(c, DEFAULT_TUNING, SCALES.altitude);
     expect(f.dVdt).toBeCloseTo((f.thrust * Math.cos(f.alpha) - f.drag) / 24000 - GRAVITY * Math.sin(5 * DEG), 12);
     expect(f.loadFactor).toBeCloseTo(f.lift / (24000 * GRAVITY), 12);
     expect(f.weight).toBeCloseTo(24000 * GRAVITY * Math.sin(5 * DEG), 6);
