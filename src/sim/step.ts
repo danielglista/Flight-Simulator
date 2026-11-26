@@ -9,6 +9,7 @@ import { densityRatio } from './flight/forces';
 import { landed, stepGround } from './flight/ground';
 import { AIR_START, AUTOPILOT_OFF, craftAt, type Autopilot, type Axis, type Craft, type FlapLever, type SimState, type StartSpec } from './state';
 import type { GroundKind } from './world/groundKind';
+import { topOf, type ObstacleFn } from './world/obstacles';
 
 /** The world as the simulation sees it: the map size and the top surface. */
 export interface SimWorld {
@@ -20,6 +21,8 @@ export interface SimWorld {
   readonly altitudeScale: number;
   /** What the wheels would roll on at a point. `rough` is always a crash. */
   groundKind(x: number, y: number): GroundKind;
+  /** Buildings to hit; absent in a world without any. */
+  readonly obstacleAt?: ObstacleFn;
 }
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -123,7 +126,7 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
         if (!crash && Number.isFinite(c.x) && Number.isFinite(c.y)) {
           const x = clamp(c.x, 0, world.width);
           const y = clamp(c.y, 0, world.height);
-          const z = Math.max(craft.z, world.heightAt(x, y) + PLACE_CLEARANCE);
+          const z = Math.max(craft.z, topOf(world.heightAt, world.obstacleAt, x, y) + PLACE_CLEARANCE);
           // From the ground the plane is also given the air start's speed and trim, or it would fall at walking speed.
           craft = craft.onGround
             ? {

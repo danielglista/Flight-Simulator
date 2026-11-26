@@ -17,6 +17,12 @@ export const Terrain = {
   airport: 9,
   runway: 10,
   taxiway: 11,
+  /** City districts (E5), painted by the map generator. `urban` stays for the test island. */
+  downtown: 12,
+  residential: 13,
+  suburb: 14,
+  industrial: 15,
+  park: 16,
 } as const;
 
 export type TerrainCode = (typeof Terrain)[keyof typeof Terrain];
@@ -34,4 +40,9 @@ export const TERRAIN_NAMES: Readonly<Record<number, string>> = {
   [Terrain.airport]: 'apron',
   [Terrain.runway]: 'runway',
   [Terrain.taxiway]: 'taxiway',
+  [Terrain.downtown]: 'downtown',
+  [Terrain.residential]: 'residential',
+  [Terrain.suburb]: 'suburb',
+  [Terrain.industrial]: 'industrial',
+  [Terrain.park]: 'park',
 };

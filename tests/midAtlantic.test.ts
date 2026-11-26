@@ -13,6 +13,7 @@ import { runwayFrame } from '../src/sim/world/airport';
 import { airportAt, groundAt, heightAt, runwayAt, surfaceAt, waterLevelAt, worldHeight, worldWidth } from '../src/sim/world/grid';
 import { groundKindAt } from '../src/sim/world/groundKind';
 import { parseMap } from '../src/sim/world/mapFile';
+import { createObstacles } from '../src/sim/world/obstacles';
 import { midAtlanticDef, midAtlanticGrid } from '../src/sim/world/midAtlantic';
 import { pickStart, startList } from '../src/sim/world/startList';
 import { Terrain } from '../src/sim/world/terrain';
@@ -27,12 +28,68 @@ const world: SimWorld = {
   heightAt: (x, y) => heightAt(grid, scale, x, y),
   altitudeScale: scale.altitude,
   groundKind: (x, y) => groundKindAt(grid, x, y),
+  obstacleAt: createObstacles(grid, scale),
 };
 const [dca, phl] = grid.airports as [(typeof grid.airports)[number], (typeof grid.airports)[number]];
 const starts = startList(grid.airports, world.heightAt, scale.altitude, DEFAULT_TUNING);
 const DEG = Math.PI / 180;
 
 describe('the built Mid-Atlantic map', () => {
+  it('has solid buildings, and none in the way of any runway or 3 degree final (E5.6)', () => {
+    const hit = world.obstacleAt!;
+    const first = grid.buildings![0]!;
+    expect(hit(first.x, first.y)).toBeCloseTo(groundAt(grid, scale, first.x, first.y) + first.height, 6);
+    for (const a of grid.airports) {
+      for (const rw of a.runways) {
+        for (const [end, other] of [[rw.a, rw.b], [rw.b, rw.a]] as const) {
+          const ux = (end.x - other.x) / rw.length;
+          const uy = (end.y - other.y) / rw.length;
+          const field = heightAt(grid, scale, end.x, end.y);
+          for (let d = -rw.length; d <= 1600; d += 4) {
+            // On the 3 degree path that aims 150 m past this threshold; over the runway itself, on the ground.
+            const z = field + Math.max(0, d + 150) * Math.tan(3 * DEG) * (d >= 0 ? 1 : 0);
+            const roof = hit(end.x + ux * d, end.y + uy * d);
+            expect(roof >= z).toBe(false);
+          }
+        }
+      }
+    }
+  });
+  it('has buildings in both cities, dry, off the airports, with Philadelphia far taller (E5.3)', () => {
+    const buildings = grid.buildings ?? [];
+    const near = (x: number, y: number) => buildings.filter((b) => Math.abs(b.x - x) < 1000 && Math.abs(b.y - y) < 750);
+    const dcCore = near(4723, 7057);
+    const phlCore = near(11194, 11778);
+    expect(dcCore.length).toBeGreaterThan(500);
+    expect(phlCore.length).toBeGreaterThan(500);
+    expect(Math.max(...dcCore.map((b) => b.height))).toBeLessThanOrEqual(15);
+    expect(Math.max(...phlCore.map((b) => b.height))).toBeGreaterThan(60);
+    const wet = buildings.filter((b) => !Number.isNaN(waterLevelAt(grid, scale, b.x, b.y)));
+    expect(wet).toEqual([]);
+    expect(buildings.filter((b) => airportAt(grid, b.x, b.y))).toEqual([]);
+  });
+  it('has highways with bridges, none of them across an airport runway (E5.2)', () => {
+    const roads = grid.roads ?? [];
+    expect(roads.some((r) => r.kind === 'major' && !r.bridge)).toBe(true);
+    expect(roads.some((r) => r.bridge)).toBe(true);
+    for (const r of roads) {
+      for (let i = 0; i < r.points.length; i += 2) {
+        const hit = runwayAt(grid, r.points[i]!, r.points[i + 1]!);
+        expect(hit).toBeNull();
+      }
+    }
+  });
+  it('has city districts around both city centers, and none under the airports (E5)', () => {
+    // City centers, world m, at the scales in data/map/scales.json.
+    expect(surfaceAt(grid, 4723, 7057)).toBe(Terrain.park); // the Mall
+    expect(surfaceAt(grid, 4723, 7200)).toBe(Terrain.downtown);
+    expect(surfaceAt(grid, 11194, 11778)).toBe(Terrain.downtown);
+    const districts: number[] = [Terrain.downtown, Terrain.residential, Terrain.suburb, Terrain.industrial, Terrain.park];
+    for (const a of grid.airports) {
+      const rw = a.runways[0]!;
+      for (let t = 0; t <= 1; t += 0.05) expect(districts).not.toContain(surfaceAt(grid, rw.a.x + (rw.b.x - rw.a.x) * t, rw.a.y + (rw.b.y - rw.a.y) * t));
+    }
+  });
   it('has DCA and PHL at their real runway names, lengths at 1:2', () => {
     expect(grid.airports.map((a) => a.ident)).toEqual(['DCA', 'PHL']);
     expect(dca.runways[0]!.names).toEqual(['01', '19']);

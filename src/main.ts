@@ -20,6 +20,7 @@ import { heightAt, worldHeight, worldWidth, type WorldGrid } from './sim/world/g
 import { parseMap } from './sim/world/mapFile';
 import { midAtlanticGrid } from './sim/world/midAtlantic';
 import { groundKindAt } from './sim/world/groundKind';
+import { createObstacles } from './sim/world/obstacles';
 import { withAirports } from './sim/world/placeAirports';
 import { buildTestAirport } from './sim/world/testAirport';
 import { buildTestMap } from './sim/world/testMap';
@@ -79,6 +80,7 @@ const world: SimWorld = {
   heightAt: (x, y) => heightAt(grid, scales, x, y),
   altitudeScale: scales.altitude,
   groundKind: (x, y) => groundKindAt(grid, x, y),
+  obstacleAt: createObstacles(grid, scales),
 };
 const runways = grid.airports.flatMap((a) => a.runways);
 // The page starts standing on the first airport's runway, engine idle. `?airport=PHL` picks another, and
@@ -318,7 +320,7 @@ const currentPanel = (): PanelState => {
   return buildPanelState(craft, scales, loop.state.tuning, {
     stall: crashed ? 'none' : stallState(craft, loop.state.tuning),
     braking: loop.state.controls.brake,
-    terr: !crashed && terrainAhead(craft, world.heightAt),
+    terr: !crashed && terrainAhead(craft, world.heightAt, false, world.obstacleAt),
     autopilot: loop.state.autopilot,
     // The HSI keeps its bug on an approach; the other views do not (D5D).
     headingBugDeg: !crashed && takeoffHud === null ? bugDeg : null,
@@ -345,7 +347,7 @@ const panels = initPanels({
   top: (ctx, size) => {
     syncFrame();
     const craft = currentCraft();
-    topView.draw(
+    const unfinished = topView.draw(
       ctx,
       size,
       shownCamera(),
@@ -361,6 +363,8 @@ const panels = initPanels({
       guide,
       routeFor(grid.airports, loop.state.start),
     );
+    // Running, the next frame comes anyway; paused, ask for one so the buildings finish sharpening.
+    if (unfinished && loop.paused) requestAnimationFrame(() => requestTop());
   },
   side: (ctx, size) => {
     syncFrame();

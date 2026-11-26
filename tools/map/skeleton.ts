@@ -1,11 +1,12 @@
 import { createGrid, type WorldGrid } from '../../src/sim/world/grid';
 import { Terrain } from '../../src/sim/world/terrain';
 import { fillRings, strokePolyline, type CellPoint } from './fill';
+import { paintDistricts } from './districts';
 import { applyReliefRules } from './mountains';
 import type { Placement } from './place';
 import { project, unproject, type PointKm } from './project';
 import type { MapField } from './stamp';
-import type { AuthoredRiver, MapBox, WaterFile } from './types';
+import type { AuthoredRiver, District, MapBox, WaterFile } from './types';
 
 export type LonLat = readonly [number, number];
 
@@ -88,6 +89,8 @@ export interface SkeletonInput {
   readonly elevationAt: (lat: number, lon: number) => number;
   /** Hand-drawn water that replaces Natural Earth inside its regions (data/map/water.json). */
   readonly water?: WaterFile;
+  /** City districts (data/map/districts.json), painted over dry land outside airport boundaries. */
+  readonly districts?: readonly District[];
 }
 
 export interface Skeleton {
@@ -412,6 +415,18 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
   }
   // Under the footprint the ground is plain grass; E3 lays the real surfaces over it.
   for (const f of flattened) for (const i of f.cells) terrain[i] = Terrain.grass;
+
+  // 7. City districts over dry land; airport property (the whole boundary, and any leveled ground) stays as it is.
+  if (input.districts?.length) {
+    const keep = new Set<number>();
+    for (const f of flattened) for (const i of f.cells) keep.add(i);
+    const onAirport = (i: number): boolean => {
+      const x = left + ((i % cols) + 0.5) * cellKm;
+      const y = bottom + (Math.floor(i / cols) + 0.5) * cellKm;
+      return placement.airports.some(({ boundary: b }) => Math.abs(x - b.cx) <= b.w / 2 && Math.abs(y - b.cy) <= b.h / 2);
+    };
+    paintDistricts(input.districts, toCells, cols, rows, (i) => land[i] === 1 && water[i] === 0 && !keep.has(i) && !onAirport(i), terrain);
+  }
 
   return { grid, cellKm, land, originKm: { x: left, y: bottom }, flattened };
 }

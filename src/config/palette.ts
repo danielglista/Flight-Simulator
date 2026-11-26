@@ -16,6 +16,11 @@ export const TERRAIN_COLORS: Readonly<Record<number, Rgb>> = {
   [Terrain.airport]: [100, 100, 112],
   [Terrain.runway]: [44, 44, 50],
   [Terrain.taxiway]: [78, 78, 86],
+  [Terrain.downtown]: [146, 142, 144],
+  [Terrain.residential]: [164, 140, 118],
+  [Terrain.suburb]: [128, 148, 100],
+  [Terrain.industrial]: [128, 118, 132],
+  [Terrain.park]: [96, 168, 80],
 };
 
 /** Water color runs from shallow to deep with depth (real meters). */
@@ -103,6 +108,49 @@ export const N1_RED = '#ff4a3d';
 export const N1_STABLE = '#7dffa0';
 /** Top view: the route between two airports (E3). */
 export const ROUTE_COLOR = '#ff6ad5';
+
+/** Highways in the top view (E5.2). */
+export const ROAD_ASPHALT_COLOR = 'rgb(46,47,52)';
+export const ROAD_EDGE_LINE_COLOR = 'rgb(226,226,222)';
+export const ROAD_CENTER_LINE_COLOR = 'rgb(238,186,40)';
+export const ROAD_MEDIAN_COLOR = 'rgb(66,100,52)';
+/** Bridges: concrete deck and piers, the dark rail along each side, and the shadow on the water. */
+export const ROAD_BRIDGE_DECK_COLOR = 'rgb(186,184,176)';
+export const ROAD_BRIDGE_RAIL_COLOR = 'rgb(72,70,66)';
+export const ROAD_BRIDGE_SHADOW_COLOR = 'rgba(0,0,0,0.35)';
 /** HSI (D5D): course arrow, deviation bar and glide diamond; and the bearing needle. */
 export const HSI_COURSE = '#5fe07f';
 export const HSI_BEARING = '#ff6ad5';
+
+/** Roofs by district style (E5.4): downtown, residential, suburb, industrial. */
+export const ROOF_COLORS: readonly (readonly Rgb[])[] = [
+  [
+    [184, 180, 172],
+    [160, 164, 170],
+    [196, 184, 164],
+    [132, 136, 146],
+  ],
+  [
+    [166, 92, 72],
+    [140, 76, 62],
+    [172, 120, 90],
+    [112, 108, 112],
+  ],
+  [
+    [104, 100, 106],
+    [150, 90, 72],
+    [128, 100, 80],
+    [186, 178, 166],
+  ],
+  [
+    [190, 196, 202],
+    [150, 160, 170],
+    [214, 212, 204],
+    [130, 140, 140],
+  ],
+];
+export const ROOF_EDGE_COLOR = 'rgba(30,28,30,0.7)';
+export const BUILDING_SHADOW_COLOR = 'rgba(0,0,0,0.38)';
+
+/** Windows on buildings in the side view (E5.5). */
+export const SIDE_WINDOW_COLOR = 'rgba(30,40,60,0.75)';

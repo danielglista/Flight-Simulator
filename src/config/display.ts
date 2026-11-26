@@ -228,3 +228,10 @@ export const AP_NOTICE_S = 2;
 export const AP_CAPTURE_FT = 20;
 export const AP_CAPTURE_DEG = 2;
 export const AP_CAPTURE_KT = 2;
+
+/** Buildings in the side view (E5.5): those this close beside the flight line show dimmed, mixed this far toward haze. */
+export const SIDE_BUILDING_BESIDE_M = 60;
+export const SIDE_BUILDING_BESIDE_HAZE = 0.45;
+/** Windows on solid buildings: up to this vertical zoom (world m per pixel), one row per floor of this height. */
+export const SIDE_BUILDING_WINDOW_MAX_MPP = 0.5;
+export const SIDE_BUILDING_FLOOR_M = 3;

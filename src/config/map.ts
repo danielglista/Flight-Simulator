@@ -13,3 +13,33 @@ export const FIELD_TOLERANCE_M = 3;
 export const ROUTE_NEAR_M = 2000;
 /** Slower than this over the ground (m/s) there is no time to go. */
 export const ROUTE_MIN_SPEED = 30;
+
+/** Highways (E5.2): drawn width in world m, the thinnest they are drawn in pixels, and where minor ones drop out. */
+export const ROAD_WIDTH_M = { major: 16, minor: 10 } as const;
+export const ROAD_MIN_PX = { major: 1.25, minor: 1 } as const;
+export const ROAD_MINOR_MAX_MPP = 10;
+/** Roads are cut into squares this big (world m) so only those near the view are drawn. */
+export const ROAD_TILE_M = 400;
+/** How far past the view a road can still show: bridge decks, piers and shadows, world m. */
+export const ROAD_REACH_M = 40;
+/** Coarsest zoom (m/px) for each level of road detail: every marking; edge lines; bridge shadows and decks. */
+export const ROAD_MARKINGS_MAX_MPP = 1.25;
+export const ROAD_LINES_MAX_MPP = 2.5;
+/** Yellow center lines only at the closest zoom: farther out they are too thin and smear into one stripe. */
+export const ROAD_YELLOW_MAX_MPP = 0.8;
+export const ROAD_BRIDGE_MAX_MPP = 10;
+/** Lane line dashes and the gap between them, world m. */
+export const ROAD_DASH_M = [6, 9] as const;
+
+/** Buildings in the top view (E5.4): not drawn coarser than this (m/px); outlines and roof shapes to this zoom. */
+export const BUILDING_MAX_MPP = 10;
+export const BUILDING_DETAIL_MAX_MPP = 1.25;
+/** Side of a baked tile, pixels, and how many are kept (256 px tiles are about 0.25 MB each). */
+export const BUILDING_TILE_PX = 256;
+export const BUILDING_CACHE_TILES = 150;
+/** Levels this zoomed-out or more are baked at load and kept; closer ones are baked as they come into view. */
+export const BUILDING_PREBAKE_MIN_MPP = 2.5;
+/** Time per frame for baking, ms. A tile that does not fit is shown from the stored zoomed-out one until later. */
+export const BUILDING_BAKE_MS = 6;
+/** Shadow length per meter of building height. */
+export const BUILDING_SHADOW_PER_M = 0.5;

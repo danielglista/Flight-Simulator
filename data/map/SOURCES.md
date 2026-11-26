@@ -10,3 +10,11 @@ Raw files live in git-ignored `tools/raw/`. Only processed output is used by the
 The ETOPO file is one 466 MB global GeoTIFF, 21600 x 10800 samples, in 256 x 256 deflate tiles. Only the six tiles at columns 23 to 25, rows 11 and 12 (about 33 to 43 N, 82 to 69 W) were fetched, by HTTP range request. Each tile's byte range comes from the TIFF's tile offset (tag 324) and byte count (tag 325) arrays in the first 256 KB of the file. The raw tile bytes were saved as they are; `tools/map/tiff.ts` decodes them.
 
 Rebuild everything with `node tools/build-map.mjs 25`.
+
+## Roads (E5.2)
+
+| File in `tools/raw/` | Source | License |
+|---|---|---|
+| `tiger/tl_2024_us_primaryroads.shp`, `.dbf` | US Census Bureau TIGER/Line 2024, primary roads, `https://www2.census.gov/geo/tiger/TIGER2024/PRIMARYROADS/tl_2024_us_primaryroads.zip` (38.3 MB zipped, 61 MB unpacked) | US government work, public domain; cite the US Census Bureau |
+
+`data/map/roads.json` chooses the roads by name.

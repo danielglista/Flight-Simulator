@@ -1,0 +1,23 @@
+{
+  "source": "tiger/tl_2024_us_primaryroads",
+  "major": {
+    "prefixes": ["I- "],
+    "names": ["Capital Beltway", "New Jersey Tpke", "Pennsylvania Tpke"]
+  },
+  "minor": {
+    "names": [
+      "US Hwy 50",
+      "US Hwy 13",
+      "Atlantic City Expy",
+      "Garden State Pkwy",
+      "N South Fwy",
+      "Baltimore Washington Pkwy",
+      "Roosevelt Blvd"
+    ]
+  },
+  "exclude": [" Hov"],
+  "densifyKm": 0.1,
+  "simplifyM": 3,
+  "mergeM": 24,
+  "bridgeStepM": 5
+}

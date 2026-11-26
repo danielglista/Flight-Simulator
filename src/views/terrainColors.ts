@@ -83,6 +83,10 @@ const NO_CONTOUR = new Set<number>([
   Terrain.airport,
   Terrain.runway,
   Terrain.taxiway,
+  Terrain.downtown,
+  Terrain.residential,
+  Terrain.suburb,
+  Terrain.industrial,
 ]);
 
 /** RGBA bytes for one square chunk of cells; see `colorCells`. */

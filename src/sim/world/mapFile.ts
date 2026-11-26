@@ -15,6 +15,30 @@ export interface MapAirport {
   readonly ground: readonly GroundRect[];
 }
 
+/** One piece of highway: all over land, or all a bridge. */
+export interface MapRoad {
+  readonly kind: 'major' | 'minor';
+  readonly bridge: boolean;
+  /** x, y, x, y ... world meters. */
+  readonly points: readonly number[];
+}
+
+/** One building: a rectangle standing on the ground at its center. */
+export interface MapBuilding {
+  /** Center, world m. */
+  readonly x: number;
+  readonly y: number;
+  /** Along the street heading, and across it, world m. */
+  readonly width: number;
+  readonly depth: number;
+  /** Degrees clockwise from north. */
+  readonly angle: number;
+  /** Roof above the ground, world m. */
+  readonly height: number;
+  /** Index of its district type (0 downtown, 1 residential, 2 suburb, 3 industrial). */
+  readonly style: number;
+}
+
 export interface GameMap {
   readonly grid: WorldGrid;
   readonly altitudeScale: number;
@@ -35,6 +59,10 @@ interface Meta {
   readonly base: LayerMeta;
   readonly patches: readonly (LayerMeta & { readonly id: string })[];
   readonly airports: readonly MapAirport[];
+  /** Absent in files built before E5.2. */
+  readonly roads?: readonly MapRoad[];
+  /** x, y, width, depth, angle, height, style each. Absent in files built before E5.3. */
+  readonly buildings?: readonly (readonly [number, number, number, number, number, number, number])[];
 }
 
 const MAGIC = 'FSMAP2';
@@ -73,5 +101,6 @@ export function parseMap(buffer: ArrayBuffer): GameMap {
     y: Math.round((p.originKm.y - meta.base.originKm.y) * 1000),
     grid: layer(p),
   }));
-  return { grid: { ...base, patches }, altitudeScale: meta.scales.altitude, geoDistance: meta.geoDistance, airports: meta.airports };
+  const buildings = (meta.buildings ?? []).map(([x, y, width, depth, angle, height, style]) => ({ x, y, width, depth, angle, height, style }));
+  return { grid: { ...base, patches, roads: meta.roads ?? [], buildings }, altitudeScale: meta.scales.altitude, geoDistance: meta.geoDistance, airports: meta.airports };
 }

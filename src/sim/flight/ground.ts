@@ -167,13 +167,14 @@ export function stepGround(state: SimState, world: SimWorld): SimState {
   const tick = state.tick + 1;
   const nextControls = controls.level ? { ...controls, level: false } : controls;
 
-  if (world.groundKind(x, y) === 'rough') {
+  const hitBuilding = (world.obstacleAt?.(x, y) ?? NaN) > z;
+  if (hitBuilding || world.groundKind(x, y) === 'rough') {
     return {
       ...state,
       tick,
       craft: { ...craft, x, y, z, heading, speed: 0, pathAngle: 0, pitch, pitchRate: 0, bank, rollRate: 0, lever: 0, spool: 0, onGround: false, gear, flaps },
       controls: nextControls,
-      crash: { tick, speed, pathAngle: 0, cause: 'overrun', sink: 0 },
+      crash: { tick, speed, pathAngle: 0, cause: hitBuilding ? 'building' : 'overrun', sink: 0 },
     };
   }
   if (liftsOff(speed, pitch, spool, tuning, sigma, liftMult, wing)) {

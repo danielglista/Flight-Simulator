@@ -126,3 +126,81 @@ export interface WaterFile {
   readonly regions: readonly WaterRegion[];
   readonly rivers: readonly AuthoredRiver[];
 }
+
+export const DISTRICT_TYPES = ['downtown', 'housing', 'industrial', 'park'] as const;
+export type DistrictType = (typeof DISTRICT_TYPES)[number];
+
+/** A city district (data/map/districts.json). Later entries paint over earlier ones. */
+export interface District {
+  readonly id: string;
+  readonly cityId: string;
+  readonly type: DistrictType;
+  /** Outline, lon and lat. */
+  readonly ring: readonly LonLatPoint[];
+  /** Housing only, and required there: how closely it is built, 1 (exurb) to 5 (rowhomes). */
+  readonly density?: Density;
+  /** Where this district differs from its type's (or level's) defaults. */
+  readonly style?: Partial<BuildingStyle & HousingLevel>;
+}
+
+export const DENSITIES = [1, 2, 3, 4, 5] as const;
+export type Density = (typeof DENSITIES)[number];
+
+/** What every built-up district says. */
+interface CommonStyle {
+  /** Share of the room left over in its lot that a building may move by: 0 straight rows, 1 anywhere in the lot. */
+  readonly nudge: number;
+  /** Lowest and highest building, REAL m. */
+  readonly heightM: readonly [number, number];
+  /** 1 spreads heights evenly; higher makes most low and a few tall. */
+  readonly heightSkew: number;
+  /** Street grid heading, degrees clockwise from north. */
+  readonly streetDeg: number;
+}
+
+/** How downtown and industrial ground is built up (lot gaps, streets and blocks are BUILDING_LAYOUT's). */
+export interface BuildingStyle extends CommonStyle {
+  /** Share of the ground under roofs, streets included in the ground. */
+  readonly coverage: number;
+  /** Shortest and longest building side, world m. */
+  readonly footprintM: readonly [number, number];
+}
+
+/** One housing density level. "Along" and "across" are relative to the street heading; lengths in world m. */
+export interface HousingLevel extends CommonStyle {
+  /** Shortest and longest building side along the street heading, and across it. */
+  readonly alongM: readonly [number, number];
+  readonly acrossM: readonly [number, number];
+  readonly lotGapM: number;
+  readonly streetM: number;
+  /** Lots along and across between streets. */
+  readonly blockLots: readonly [number, number];
+  /** Share of lots built. */
+  readonly fill: number;
+}
+
+export interface DistrictsFile {
+  /** Defaults per district type; a type without an entry (park) has no buildings. Housing has one entry per density. */
+  readonly types: {
+    readonly downtown?: BuildingStyle;
+    readonly industrial?: BuildingStyle;
+    readonly housing?: readonly HousingLevel[];
+  };
+  readonly districts: readonly District[];
+}
+
+/** Which real roads to put on the map (data/map/roads.json). Their lines come from the TIGER shapefile named by `source`. */
+export interface RoadsFile {
+  /** Path under tools/raw, without extension. */
+  readonly source: string;
+  readonly major: { readonly prefixes: readonly string[]; readonly names: readonly string[] };
+  readonly minor: { readonly names: readonly string[] };
+  /** Names containing any of these are left out. */
+  readonly exclude: readonly string[];
+  /** Real km between warped points, world m of thinning tolerance, and world m between water checks. */
+  readonly densifyKm: number;
+  readonly simplifyM: number;
+  /** A stretch running alongside one already placed, closer than this (world m), is the same road. */
+  readonly mergeM: number;
+  readonly bridgeStepM: number;
+}

@@ -37,7 +37,7 @@ export function stability(state: Pick<SimState, 'craft' | 'crash' | 'tuning'>, w
   const bank = Math.abs(craft.bank) / DEG;
   const pitch = Math.abs(craft.pitch) / DEG;
   const stalled = stallState(craft, tuning) !== 'none';
-  const terr = terrainAhead(craft, world.heightAt);
+  const terr = terrainAhead(craft, world.heightAt, false, world.obstacleAt);
   const rows: Readonly<Record<StabilityReason, readonly [boolean, boolean]>> = {
     GROUND: [false, false],
     LOW: [agl < STABLE_AGL_M || (gearOut && agl < GEAR_AGL_M), agl < DANGER_AGL_M || (gearOut && agl < GEAR_AGL_M)],

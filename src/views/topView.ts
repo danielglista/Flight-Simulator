@@ -15,6 +15,8 @@ import {
   type WorldGrid,
 } from '../sim/world/grid';
 import { createAirportLayer, type MapFrame, type Visible } from './airportLayer';
+import { createRoadLayer } from './roadLayer';
+import { createCityLayer } from './cityLayer';
 import { clampZoom, metersPerPixel, screenToWorld, worldToScreen, zoomLabel, type Camera, type Point } from './camera';
 import { edgeArrow } from './edgeArrow';
 import { cloudTile } from './cloudTile';
@@ -56,7 +58,8 @@ export interface TopView {
     guide?: ApproachGuide | null,
     /** The leg being flown (E3): a line between the two airports, and how far there is to go. */
     route?: Route | null,
-  ): void;
+    /** Returns true when building tiles are still stand-ins and another frame would sharpen them. */
+  ): boolean;
   /** Builds every chunk, airport patch and sprite frame now, so none is built mid-flight. */
   warm(): void;
 }
@@ -112,6 +115,8 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   }
 
   const airportLayer = createAirportLayer(grid.airports);
+  const roadLayer = createRoadLayer(grid.roads ?? []);
+  const cityLayer = createCityLayer(grid.buildings ?? []);
   const sprites = createPlaneSprites();
   /** Current plane size step; kept between frames for the hysteresis. */
   let planeTier = 0;
@@ -445,7 +450,9 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       ctx.rotate(-rotation);
       ctx.translate(-view.width / 2, -view.height / 2);
       const frame = drawTerrain(ctx, view, { x: camera.x, y: camera.y, zoom: camera.zoom }, area);
-      // Haze: a pale veil over the terrain only, so airports stay crisp.
+      roadLayer.draw(ctx, frame);
+      const unfinished = cityLayer.draw(ctx, frame, area);
+      // Haze: a pale veil over the terrain and roads, so airports stay crisp.
       const haze = DEPTH_FX.haze ? hazeAlpha(side.craft.z) : 0;
       if (haze > 0) {
         ctx.globalAlpha = haze;
@@ -478,11 +485,13 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
         drawText(ctx, 'FREE LOOK - C to follow', view.width / 2, 16, 'center');
         drawEdgeArrow(ctx, view, plane);
       }
+      return unfinished;
     },
     warm() {
       for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) for (let t = 0; t < 3; t++) chunkCanvas(cx, cy, t);
       for (const p of grid.patches ?? []) patchCanvas(p);
       airportLayer.warm();
+      cityLayer.warm();
       sprites.warm();
       cloudCanvas(false);
       cloudCanvas(true);

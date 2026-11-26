@@ -79,7 +79,7 @@ export interface Controls {
 }
 
 /** Why the plane crashed. `terrain` is any contact with rough ground, water or a slope. */
-export type CrashCause = 'terrain' | 'hard' | 'bank' | 'nose' | 'tail' | 'overrun' | 'gear';
+export type CrashCause = 'terrain' | 'hard' | 'bank' | 'nose' | 'tail' | 'overrun' | 'gear' | 'building';
 
 /** What the craft was doing at impact. */
 export interface Crash {

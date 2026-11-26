@@ -19,6 +19,7 @@ const CAUSE_TEXT = {
   tail: () => 'tail strike',
   overrun: () => 'ran off the end of the airfield',
   gear: () => 'landed without the gear down',
+  building: () => 'hit a building',
 } as const;
 
 /**

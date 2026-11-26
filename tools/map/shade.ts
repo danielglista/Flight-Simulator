@@ -1,3 +1,4 @@
+import type { MapBuilding, MapRoad } from '../../src/sim/world/mapFile';
 import { Terrain } from '../../src/sim/world/terrain';
 import type { Placement } from './place';
 import { Raster, type Rgb } from './raster';
@@ -12,6 +13,11 @@ const GROUND: Record<number, Rgb> = {
   [Terrain.farmland]: [200, 190, 120],
   [Terrain.mountain]: [140, 120, 100],
   [Terrain.snow]: [245, 245, 250],
+  [Terrain.downtown]: [150, 145, 150],
+  [Terrain.residential]: [185, 150, 125],
+  [Terrain.suburb]: [170, 175, 130],
+  [Terrain.industrial]: [140, 120, 150],
+  [Terrain.park]: [90, 185, 90],
 };
 
 /** Color of one cell: water by depth, land by ground type, shaded by slope (light from the northwest, like the game's shadows). */
@@ -39,8 +45,38 @@ function overlays(img: Raster, sk: Skeleton, placement: Placement, px: (x: numbe
   void sk;
 }
 
+/** Building outlines, darker the taller they are. */
+function drawBuildings(img: Raster, buildings: readonly MapBuilding[], px: (x: number) => number, py: (y: number) => number): void {
+  for (const b of buildings) {
+    const a = (b.angle * Math.PI) / 180;
+    const corners: [number, number][] = (
+      [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+      ] as const
+    ).map(([i, j]) => {
+      const u = (i * b.width) / 2;
+      const v = (j * b.depth) / 2;
+      return [px(b.x + Math.sin(a) * u + Math.cos(a) * v), py(b.y + Math.cos(a) * u - Math.sin(a) * v)];
+    });
+    const k = Math.max(20, 110 - b.height * 2);
+    img.polyline(corners, [k, k, k], true);
+  }
+}
+
+/** Roads as thin lines, bridges in white; `px` and `py` turn game-frame world meters into image pixels. */
+function drawRoads(img: Raster, roads: readonly MapRoad[], px: (x: number) => number, py: (y: number) => number): void {
+  for (const r of roads) {
+    const pts: [number, number][] = [];
+    for (let i = 0; i < r.points.length; i += 2) pts.push([px(r.points[i] as number), py(r.points[i + 1] as number)]);
+    img.polyline(pts, r.bridge ? [250, 250, 250] : r.kind === 'major' ? [60, 50, 50] : [120, 100, 90], false);
+  }
+}
+
 /** Whole map, one pixel per cell, north up. Footprints are tinted gray. */
-export function renderTerrain(sk: Skeleton, placement: Placement, altitudeScale: number): Raster {
+export function renderTerrain(sk: Skeleton, placement: Placement, altitudeScale: number, roads: readonly MapRoad[] = [], buildings: readonly MapBuilding[] = []): Raster {
   const { cols, rows } = sk.grid;
   const img = new Raster(cols, rows);
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) img.pixel(c, rows - 1 - r, cellColor(sk, c, r, altitudeScale));
@@ -51,12 +87,14 @@ export function renderTerrain(sk: Skeleton, placement: Placement, altitudeScale:
     }
   }
   const pxPerKm = 1 / sk.cellKm;
+  drawBuildings(img, buildings, (x) => x / sk.grid.cellSize, (y) => rows - y / sk.grid.cellSize);
+  drawRoads(img, roads, (x) => x / sk.grid.cellSize, (y) => rows - y / sk.grid.cellSize);
   overlays(img, sk, placement, (x) => (x - sk.originKm.x) * pxPerKm, (y) => rows - (y - sk.originKm.y) * pxPerKm, pxPerKm);
   return img;
 }
 
 /** Like renderCrop, but each pixel comes from the first skeleton that covers it: pass the patches, then the base. */
-export function renderLayered(layers: readonly Skeleton[], placement: Placement, altitudeScale: number, centerKm: { x: number; y: number }, halfKm: number, pxPerKm: number): Raster {
+export function renderLayered(layers: readonly Skeleton[], placement: Placement, altitudeScale: number, centerKm: { x: number; y: number }, halfKm: number, pxPerKm: number, roads: readonly MapRoad[] = [], roadOriginKm: { x: number; y: number } = { x: 0, y: 0 }, buildings: readonly MapBuilding[] = []): Raster {
   const size = Math.round(halfKm * 2 * pxPerKm);
   const img = new Raster(size, size);
   const footprints = layers.map((sk) => {
@@ -79,6 +117,8 @@ export function renderLayered(layers: readonly Skeleton[], placement: Placement,
     }
   }
   const base = layers[layers.length - 1] as Skeleton;
+  drawBuildings(img, buildings, (x) => (roadOriginKm.x + x / 1000 - (centerKm.x - halfKm)) * pxPerKm, (y) => (centerKm.y + halfKm - roadOriginKm.y - y / 1000) * pxPerKm);
+  drawRoads(img, roads, (x) => (roadOriginKm.x + x / 1000 - (centerKm.x - halfKm)) * pxPerKm, (y) => (centerKm.y + halfKm - roadOriginKm.y - y / 1000) * pxPerKm);
   overlays(img, base, placement, (xk) => (xk - (centerKm.x - halfKm)) * pxPerKm, (yk) => (centerKm.y + halfKm - yk) * pxPerKm, pxPerKm);
   return img;
 }

@@ -1,0 +1,46 @@
+{
+  "types": {
+    "downtown": {"coverage": 0.4, "footprintM": [20, 38], "nudge": 0, "heightM": [25, 45], "heightSkew": 1, "streetDeg": 0},
+    "housing": [
+      {"alongM": [12, 15], "acrossM": [12, 15], "lotGapM": 12, "streetM": 10, "blockLots": [4, 2], "nudge": 1, "fill": 0.2, "heightM": [6, 9], "heightSkew": 1, "streetDeg": 0},
+      {"alongM": [12, 15], "acrossM": [12, 15], "lotGapM": 12, "streetM": 10, "blockLots": [4, 2], "nudge": 0.6, "fill": 0.65, "heightM": [6, 9], "heightSkew": 1, "streetDeg": 0},
+      {"alongM": [12, 16], "acrossM": [10, 14], "lotGapM": 6, "streetM": 10, "blockLots": [4, 2], "nudge": 0.3, "fill": 0.75, "heightM": [6, 9], "heightSkew": 1, "streetDeg": 0},
+      {"alongM": [14, 22], "acrossM": [10, 12], "lotGapM": 2, "streetM": 10, "blockLots": [4, 2], "nudge": 0.15, "fill": 0.85, "heightM": [8, 15], "heightSkew": 1.5, "streetDeg": 0},
+      {"alongM": [14, 16], "acrossM": [9, 10], "lotGapM": 1, "streetM": 10, "blockLots": [2, 4], "nudge": 0, "fill": 0.95, "heightM": [8, 15], "heightSkew": 1.5, "streetDeg": 0}
+    ],
+    "industrial": {"coverage": 0.25, "footprintM": [24, 40], "nudge": 1, "heightM": [8, 15], "heightSkew": 1, "streetDeg": 0}
+  },
+  "districts": [
+    {"id": "dc-suburbs", "cityId": "dc", "type": "housing", "density": 2, "ring": [[-77.0353, 39.0156], [-76.9661, 38.9831], [-76.9054, 38.9481], [-76.9083, 38.8895], [-76.9453, 38.849], [-76.9776, 38.8115], [-77.0353, 38.7814], [-77.0988, 38.8037], [-77.1552, 38.8354], [-77.1853, 38.8895], [-77.1852, 38.9571], [-77.1103, 38.9909]], "style": {"streetDeg": 15}},
+    {"id": "dc-north", "cityId": "dc", "type": "housing", "density": 4, "ring": [[-77.06, 38.908], [-76.975, 38.908], [-76.975, 38.945], [-77.06, 38.945]]},
+    {"id": "dc-capitol-hill", "cityId": "dc", "type": "housing", "density": 5, "ring": [[-77.003, 38.878], [-76.975, 38.878], [-76.975, 38.908], [-77.003, 38.908]]},
+    {"id": "dc-anacostia", "cityId": "dc", "type": "housing", "density": 3, "ring": [[-76.995, 38.85], [-76.96, 38.85], [-76.96, 38.874], [-76.995, 38.874]], "style": {"streetDeg": 38}},
+    {"id": "dc-georgetown", "cityId": "dc", "type": "housing", "density": 4, "ring": [[-77.078, 38.903], [-77.056, 38.903], [-77.056, 38.916], [-77.078, 38.916]]},
+    {"id": "dc-arlington", "cityId": "dc", "type": "housing", "density": 3, "ring": [[-77.11, 38.862], [-77.072, 38.862], [-77.072, 38.9], [-77.11, 38.9]], "style": {"streetDeg": -12}},
+    {"id": "dc-downtown", "cityId": "dc", "type": "downtown", "ring": [[-77.052, 38.894], [-77.004, 38.893], [-77.004, 38.908], [-77.036, 38.912], [-77.052, 38.906]]},
+    {"id": "dc-southwest", "cityId": "dc", "type": "downtown", "ring": [[-77.03, 38.876], [-77.006, 38.876], [-77.006, 38.886], [-77.03, 38.886]]},
+    {"id": "dc-rosslyn", "cityId": "dc", "type": "downtown", "ring": [[-77.077, 38.889], [-77.067, 38.889], [-77.067, 38.899], [-77.077, 38.899]]},
+    {"id": "dc-crystal-city", "cityId": "dc", "type": "downtown", "ring": [[-77.06, 38.848], [-77.049, 38.848], [-77.049, 38.866], [-77.06, 38.866]]},
+    {"id": "dc-navy-yard", "cityId": "dc", "type": "industrial", "ring": [[-77.01, 38.87], [-76.985, 38.87], [-76.985, 38.878], [-77.01, 38.878]]},
+    {"id": "dc-northeast-yards", "cityId": "dc", "type": "industrial", "ring": [[-77.0, 38.908], [-76.975, 38.908], [-76.975, 38.925], [-77.0, 38.925]]},
+    {"id": "dc-mall", "cityId": "dc", "type": "park", "ring": [[-77.052, 38.8855], [-77.01, 38.8855], [-77.01, 38.8935], [-77.052, 38.8935]]},
+    {"id": "dc-capitol-grounds", "cityId": "dc", "type": "park", "ring": [[-77.014, 38.886], [-77.004, 38.886], [-77.004, 38.893], [-77.014, 38.893]]},
+    {"id": "dc-east-potomac-park", "cityId": "dc", "type": "park", "ring": [[-77.042, 38.884], [-77.032, 38.884], [-77.02, 38.862], [-77.027, 38.86]]},
+    {"id": "dc-arlington-cemetery", "cityId": "dc", "type": "park", "ring": [[-77.08, 38.87], [-77.062, 38.87], [-77.062, 38.887], [-77.08, 38.887]]},
+    {"id": "dc-rock-creek", "cityId": "dc", "type": "park", "ring": [[-77.058, 38.912], [-77.05, 38.912], [-77.037, 38.95], [-77.047, 38.95]]},
+    {"id": "dc-arboretum", "cityId": "dc", "type": "park", "ring": [[-76.975, 38.903], [-76.955, 38.903], [-76.955, 38.918], [-76.975, 38.918]]},
+    {"id": "phl-suburbs", "cityId": "phl-city", "type": "housing", "density": 2, "ring": [[-75.1652, 40.0787], [-75.0832, 40.0618], [-75.0434, 40.0067], [-75.0597, 39.9526], [-75.0536, 39.9031], [-75.1066, 39.8746], [-75.1652, 39.8715], [-75.2121, 39.8902], [-75.2667, 39.9076], [-75.3175, 39.9526], [-75.3073, 40.0157], [-75.2472, 40.0618]], "style": {"streetDeg": -6}},
+    {"id": "phl-north", "cityId": "phl-city", "type": "housing", "density": 5, "ring": [[-75.185, 39.958], [-75.115, 39.958], [-75.115, 40.0], [-75.185, 40.0]], "style": {"streetDeg": 9}},
+    {"id": "phl-south", "cityId": "phl-city", "type": "housing", "density": 5, "ring": [[-75.19, 39.915], [-75.14, 39.915], [-75.14, 39.945], [-75.19, 39.945]], "style": {"streetDeg": 9}},
+    {"id": "phl-west", "cityId": "phl-city", "type": "housing", "density": 4, "ring": [[-75.24, 39.94], [-75.19, 39.94], [-75.19, 39.972], [-75.24, 39.972]], "style": {"streetDeg": 9}},
+    {"id": "phl-camden-homes", "cityId": "phl-city", "type": "housing", "density": 4, "ring": [[-75.125, 39.915], [-75.085, 39.915], [-75.085, 39.95], [-75.125, 39.95]], "style": {"streetDeg": -8}},
+    {"id": "phl-center-city", "cityId": "phl-city", "type": "downtown", "ring": [[-75.182, 39.945], [-75.146, 39.945], [-75.146, 39.959], [-75.182, 39.959]], "style": {"streetDeg": 9, "heightM": [30, 300], "heightSkew": 3}},
+    {"id": "phl-university-city", "cityId": "phl-city", "type": "downtown", "ring": [[-75.2, 39.95], [-75.188, 39.95], [-75.188, 39.96], [-75.2, 39.96]], "style": {"streetDeg": 9}},
+    {"id": "phl-camden-center", "cityId": "phl-city", "type": "downtown", "ring": [[-75.132, 39.94], [-75.116, 39.94], [-75.116, 39.952], [-75.132, 39.952]], "style": {"streetDeg": 9}},
+    {"id": "phl-port-richmond", "cityId": "phl-city", "type": "industrial", "ring": [[-75.135, 39.963], [-75.105, 39.963], [-75.105, 39.985], [-75.135, 39.985]], "style": {"streetDeg": 9}},
+    {"id": "phl-south-port", "cityId": "phl-city", "type": "industrial", "ring": [[-75.16, 39.9], [-75.13, 39.9], [-75.13, 39.925], [-75.16, 39.925]], "style": {"streetDeg": 9}},
+    {"id": "phl-grays-ferry", "cityId": "phl-city", "type": "industrial", "ring": [[-75.215, 39.915], [-75.19, 39.915], [-75.19, 39.94], [-75.215, 39.94]], "style": {"streetDeg": 9}},
+    {"id": "phl-camden-port", "cityId": "phl-city", "type": "industrial", "ring": [[-75.132, 39.915], [-75.118, 39.915], [-75.118, 39.938], [-75.132, 39.938]], "style": {"streetDeg": 9}},
+    {"id": "phl-fairmount-park", "cityId": "phl-city", "type": "park", "ring": [[-75.186, 39.964], [-75.175, 39.966], [-75.195, 40.0], [-75.225, 40.005], [-75.215, 39.98]]}
+  ]
+}

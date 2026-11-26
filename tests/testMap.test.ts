@@ -27,10 +27,10 @@ describe('test map', () => {
       }
     }
   });
-  it('uses every terrain code except the airport ones', () => {
+  it('uses every terrain code except the airport ones and the E5 city districts', () => {
     const seen = new Set(map.terrain);
     for (const [name, code] of Object.entries(Terrain)) {
-      expect(seen.has(code), name).toBe(!['airport', 'runway', 'taxiway'].includes(name));
+      expect(seen.has(code), name).toBe(!['airport', 'runway', 'taxiway', 'downtown', 'residential', 'suburb', 'industrial', 'park'].includes(name));
     }
   });
   it('has a peak of about 1,800 m real', () => {

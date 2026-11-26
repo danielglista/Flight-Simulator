@@ -159,7 +159,7 @@ The world is a **2D grid of cells**. Each cell stores the solid ground's elevati
 |---|---|
 | Cell size | 10 x 10 world meters (250 x 250 real meters at 1:25; the E1 map box is about 1.7 million cells) |
 | Elevation | 16-bit integer, real meters above sea level, of the SOLID ground (the bed). Negative below sea level |
-| Terrain | 8-bit code for what the ground is made of: seabed, grass, forest, farmland, desert, mountain, snow, urban, road, airport. Water is not a terrain code |
+| Terrain | 8-bit code for what the ground is made of: seabed, grass, forest, farmland, desert, mountain, snow, urban, road, airport, and the city districts downtown, residential, suburb, industrial, park (E5). Water is not a terrain code |
 | Water depth | 8-bit, real meters of lake or river water over the ground; 0 is none |
 | Chunk | 256 x 256 cells; load only those nearby |
 

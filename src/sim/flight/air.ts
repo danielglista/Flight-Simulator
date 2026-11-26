@@ -87,8 +87,9 @@ export function stepAir(state: SimState, world: SimWorld, ap: ApOutput | null = 
   }
 
   const tick = state.tick + 1;
-  const hit = sweepContact(world.heightAt, craft, { x, y, z });
-  if (hit) {
+  const contact = sweepContact(world.heightAt, craft, { x, y, z }, world.obstacleAt);
+  if (contact) {
+    const { building, ...hit } = contact;
     const kind = world.groundKind(hit.x, hit.y);
     let sink = Math.max(0, -speed * Math.sin(pathAngle));
     // A skip (touchdown, liftoff, touchdown within SKIP_S) keeps the larger sink, so it cannot hide a hard arrival.
@@ -102,7 +103,8 @@ export function stepAir(state: SimState, world: SimWorld, ap: ApOutput | null = 
     ) {
       sink = Math.max(sink, prevTd.sink);
     }
-    const cause = touchdownCheck({ rough: kind === 'rough', gearLocked: gearLocked({ gear }), sink, bank, pitch }, tuning);
+    // A building is never a landing, whatever the ground around it is.
+    const cause = building ? 'building' : touchdownCheck({ rough: kind === 'rough', gearLocked: gearLocked({ gear }), sink, bank, pitch }, tuning);
     const clearedControls = nextControls.level ? { ...nextControls, level: false } : nextControls;
     if (cause === null && kind !== 'rough') {
       return {

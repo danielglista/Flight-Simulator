@@ -1,4 +1,4 @@
-import { DEFAULT_GRID, type GridSettings } from './types';
+import { DEFAULT_GRID, DENSITIES, DISTRICT_TYPES, type BuildingStyle, type Density, type District, type DistrictsFile, type DistrictType, type GridSettings, type HousingLevel, type RoadsFile } from './types';
 import type { Airport, AuthoredRiver, City, FootprintRect, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
 import type { WarpShape } from './warp';
 
@@ -215,4 +215,114 @@ export function validateWater(data: unknown): WaterFile {
     return wi === undefined ? { id: rid, tidal: o['tidal'], points } : { id: rid, tidal: o['tidal'], widthIn: wi, points };
   });
   return { minWidthM, regions, rivers };
+}
+
+type Settings = BuildingStyle & HousingLevel;
+const COMMON_KEYS = ['nudge', 'heightM', 'heightSkew', 'streetDeg'] as const;
+const STYLE_KEYS = ['coverage', 'footprintM', ...COMMON_KEYS] as const;
+const LEVEL_KEYS = ['alongM', 'acrossM', 'lotGapM', 'streetM', 'blockLots', 'fill', ...COMMON_KEYS] as const;
+
+/** The building settings present in `o`, each checked; only those in `allowed` may appear. */
+function buildingSettings(o: Obj, path: string, allowed: readonly (keyof Settings)[]): Partial<Settings> {
+  const range = (key: string): [number, number] => {
+    const v = o[key];
+    if (!Array.isArray(v) || v.length !== 2 || !v.every((n) => typeof n === 'number' && Number.isFinite(n) && n > 0) || (v[0] as number) > (v[1] as number)) {
+      throw new MapDataError(`${path}.${key}: expected [low, high], both positive`);
+    }
+    return v as [number, number];
+  };
+  const blocks = (key: string): [number, number] => {
+    const v = o[key];
+    if (!Array.isArray(v) || v.length !== 2 || !v.every((n) => Number.isInteger(n) && (n as number) > 0)) {
+      throw new MapDataError(`${path}.${key}: expected [along, across], whole numbers of lots`);
+    }
+    return v as [number, number];
+  };
+  const out: { -readonly [K in keyof Settings]?: Settings[K] } = {};
+  for (const name of Object.keys(o)) {
+    const key = name as keyof Settings;
+    if (!allowed.includes(key)) throw new MapDataError(`${path}.${key}: unknown building setting`);
+    if (key === 'coverage') out.coverage = num(o, key, path, { min: 0, max: 0.7 });
+    else if (key === 'footprintM' || key === 'alongM' || key === 'acrossM' || key === 'heightM') out[key] = range(key);
+    else if (key === 'blockLots') out.blockLots = blocks(key);
+    else if (key === 'nudge' || key === 'fill') out[key] = num(o, key, path, { min: 0, max: 1 });
+    else if (key === 'lotGapM' || key === 'streetM') out[key] = num(o, key, path, { min: 0 });
+    else if (key === 'heightSkew') out.heightSkew = num(o, key, path, { positive: true });
+    else out.streetDeg = num(o, key, path, { min: -180, max: 360 });
+  }
+  return out;
+}
+
+/** Every setting in `keys`, none missing. */
+function fullSettings(raw: unknown, path: string, keys: readonly (keyof Settings)[]): Partial<Settings> {
+  const out = buildingSettings(obj(raw, path), path, keys);
+  for (const key of keys) {
+    if (out[key] === undefined) throw new MapDataError(`${path}.${key}: missing`);
+  }
+  return out;
+}
+
+function typeDefaults(raw: unknown): DistrictsFile['types'] {
+  const types: { -readonly [K in keyof DistrictsFile['types']]: DistrictsFile['types'][K] } = {};
+  for (const [name, value] of Object.entries(obj(raw, 'districts.types'))) {
+    const path = `districts.types.${name}`;
+    if (name === 'downtown' || name === 'industrial') types[name] = fullSettings(value, path, STYLE_KEYS) as BuildingStyle;
+    else if (name === 'housing') {
+      if (!Array.isArray(value) || value.length !== DENSITIES.length) throw new MapDataError(`${path}: expected ${DENSITIES.length} density levels`);
+      types.housing = value.map((level: unknown, i: number) => fullSettings(level, `${path}[${i}]`, LEVEL_KEYS) as HousingLevel);
+    } else throw new MapDataError(`${path}: unknown district type`);
+  }
+  return types;
+}
+
+export function validateDistricts(data: unknown, cityIds: readonly string[]): DistrictsFile {
+  const rd = obj(data, 'districts')['districts'];
+  if (!Array.isArray(rd)) throw new MapDataError('districts.districts: expected a list');
+  const types = typeDefaults(obj(data, 'districts')['types'] ?? {});
+  const ids = new Set<string>();
+  const districts: District[] = rd.map((raw: unknown, i: number) => {
+    const p = `districts.districts[${i}]`;
+    const o = obj(raw, p);
+    const id = str(o, 'id', p);
+    if (ids.has(id)) throw new MapDataError(`${p}.id: duplicate id "${id}"`);
+    ids.add(id);
+    const cityId = str(o, 'cityId', p);
+    if (!cityIds.includes(cityId)) throw new MapDataError(`${p}.cityId: unknown city "${cityId}" (district ${id})`);
+    const type = str(o, 'type', p) as DistrictType;
+    if (!DISTRICT_TYPES.includes(type)) throw new MapDataError(`${p}.type: expected one of ${DISTRICT_TYPES.join(', ')} (district ${id})`);
+    const ring = o['ring'];
+    if (!Array.isArray(ring) || ring.length < 3) throw new MapDataError(`${p}.ring: expected at least 3 points (district ${id})`);
+    let district: District = { id, cityId, type, ring: ring.map((q: unknown, k: number) => lonLat(q, `${p}.ring[${k}] (district ${id})`, 2) as unknown as LonLatPoint) };
+    const density = o['density'] as Density | undefined;
+    if (type === 'housing') {
+      if (density === undefined || !DENSITIES.includes(density)) throw new MapDataError(`${p}.density: expected a whole number from 1 to ${DENSITIES.length} (district ${id})`);
+      district = { ...district, density };
+    } else if (density !== undefined) throw new MapDataError(`${p}.density: only housing has a density (district ${id})`);
+    if (o['style'] === undefined) return district;
+    const path = `${p}.style (district ${id})`;
+    const allowed = type === 'housing' ? LEVEL_KEYS : type === 'park' ? [] : STYLE_KEYS;
+    return { ...district, style: buildingSettings(obj(o['style'], path), path, allowed) };
+  });
+  return { types, districts };
+}
+
+export function validateRoads(data: unknown): RoadsFile {
+  const root = obj(data, 'roads');
+  const list = (o: Obj, key: string, path: string): string[] => {
+    const v = o[key];
+    if (!Array.isArray(v) || !v.every((s) => typeof s === 'string' && s !== '')) throw new MapDataError(`${path}.${key}: expected a list of strings`);
+    return v as string[];
+  };
+  const major = obj(root['major'], 'roads.major');
+  const minor = obj(root['minor'], 'roads.minor');
+  return {
+    source: str(root, 'source', 'roads'),
+    major: { prefixes: list(major, 'prefixes', 'roads.major'), names: list(major, 'names', 'roads.major') },
+    minor: { names: list(minor, 'names', 'roads.minor') },
+    exclude: list(root, 'exclude', 'roads'),
+    densifyKm: num(root, 'densifyKm', 'roads', { positive: true }),
+    simplifyM: num(root, 'simplifyM', 'roads', { min: 0 }),
+    mergeM: num(root, 'mergeM', 'roads', { min: 0 }),
+    bridgeStepM: num(root, 'bridgeStepM', 'roads', { positive: true }),
+  };
 }
