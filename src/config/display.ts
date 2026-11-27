@@ -103,7 +103,7 @@ export const HAZE_MAX = 0.35;
 /**
  * Clouds: a static layer CLOUD_BASE_M above sea level (world m), tiled from one seamless noise tile that covers
  * CLOUD_TILE_M of world in CLOUD_TILE_PX pixels. Alpha is LOW while the plane is under the base and HIGH above it,
- * so low flight keeps a clear ground. Cloud shadows fall southeast, shifted by CLOUD_BASE_M * CLOUD_SHADOW_SKEW world m.
+ * so low flight keeps a clear ground. Cloud shadows fall away from the sun, shifted by CLOUD_BASE_M * CLOUD_SHADOW_SKEW world m.
  */
 export const CLOUD_BASE_M = 500;
 export const CLOUD_TILE_M = 3000;

@@ -13,7 +13,9 @@ import {
   SHADOW_MAX_PX,
   SHADOW_PX_PER_M,
 } from '../config/display';
+import type { Sun } from '../config/sun';
 import type { Point } from './camera';
+import { shadowAlong } from './sunLight';
 
 export function smoothstep(lo: number, hi: number, v: number): number {
   const t = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
@@ -34,15 +36,16 @@ export function agl(z: number, groundZ: number): number {
 }
 
 /**
- * Where the shadow sits relative to the plane, in screen pixels. The light is northwest, so the shadow
- * falls southeast in the world; `rotation` (camera heading, radians clockwise) turns it with the map.
+ * Where the shadow sits relative to the plane, in screen pixels. It falls away from the sun in the world;
+ * `rotation` (camera heading, radians clockwise) turns it with the map. Its length shows height only.
  */
-export function shadowOffsetPx(aglM: number, rotation: number): Point {
+export function shadowOffsetPx(aglM: number, rotation: number, sun: Sun): Point {
   const len = Math.min(SHADOW_MAX_PX, SHADOW_PX_PER_M * Math.max(0, aglM));
-  const k = Math.SQRT1_2; // world (+1 east, -1 north) is screen (+1, +1) before rotation
+  const [east, north] = shadowAlong(sun, len);
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
-  return { x: len * k * (cos + sin), y: len * k * (cos - sin) };
+  // With north up, screen x is east and screen y is south.
+  return { x: east * cos - north * sin, y: -east * sin - north * cos };
 }
 
 /** Full strength low down, gone above SHADOW_FADE_HIGH_M. */

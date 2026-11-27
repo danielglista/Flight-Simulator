@@ -20,7 +20,7 @@ const GROUND: Record<number, Rgb> = {
   [Terrain.park]: [90, 185, 90],
 };
 
-/** Color of one cell: water by depth, land by ground type, shaded by slope (light from the northwest, like the game's shadows). */
+/** Color of one cell: water by depth, land by ground type, shaded by slope (light from the northwest, like the game's terrain hillshade; its sun for buildings is elsewhere). */
 function cellColor(sk: Skeleton, c: number, r: number, altitudeScale: number): Rgb {
   const { cols, rows, elevation, terrain, water, cellSize } = sk.grid;
   const i = r * cols + c;

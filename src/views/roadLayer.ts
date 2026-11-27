@@ -1,4 +1,4 @@
-import { ROAD_BRIDGE_MAX_MPP, ROAD_DASH_M, ROAD_LINES_MAX_MPP, ROAD_MARKINGS_MAX_MPP, ROAD_MINOR_MAX_MPP, ROAD_MIN_PX, ROAD_REACH_M, ROAD_TILE_M, ROAD_WIDTH_M, ROAD_YELLOW_MAX_MPP } from '../config/map';
+import { BRIDGE_SHADOW_M, ROAD_BRIDGE_MAX_MPP, ROAD_DASH_M, ROAD_LINES_MAX_MPP, ROAD_MARKINGS_MAX_MPP, ROAD_MINOR_MAX_MPP, ROAD_MIN_PX, ROAD_REACH_M, ROAD_TILE_M, ROAD_WIDTH_M, ROAD_YELLOW_MAX_MPP } from '../config/map';
 import {
   ROAD_ASPHALT_COLOR,
   ROAD_BRIDGE_DECK_COLOR,
@@ -8,8 +8,10 @@ import {
   ROAD_EDGE_LINE_COLOR,
   ROAD_MEDIAN_COLOR,
 } from '../config/palette';
+import type { Sun } from '../config/sun';
 import type { MapRoad } from '../sim/world/mapFile';
 import type { MapFrame } from './airportLayer';
+import { shadowAlong } from './sunLight';
 
 type Kind = MapRoad['kind'];
 
@@ -29,7 +31,7 @@ export interface RoadStroke {
   /** World m. */
   readonly width: number;
   readonly dash?: readonly number[];
-  /** Offset on the ground, world m east and south (a bridge's shadow). */
+  /** Distance the stroke lies from the road, away from the sun, world m (a bridge's shadow). */
   readonly shift?: number;
 }
 
@@ -69,7 +71,7 @@ export function bridgeStrokes(kind: Kind, mpp: number): RoadStroke[] {
   const rail = Math.max(0.8, mpp);
   const deck = width + 2 * Math.max(1.5, mpp);
   return [
-    { color: ROAD_BRIDGE_SHADOW_COLOR, width: deck, shift: 5 },
+    { color: ROAD_BRIDGE_SHADOW_COLOR, width: deck, shift: BRIDGE_SHADOW_M },
     { color: ROAD_BRIDGE_DECK_COLOR, width: deck + 7, dash: [4, 28] },
     { color: ROAD_BRIDGE_RAIL_COLOR, width: deck + 2 * rail },
     { color: ROAD_BRIDGE_DECK_COLOR, width: deck },
@@ -135,7 +137,7 @@ function viewArea(ctx: CanvasRenderingContext2D): Area {
 
 export interface RoadLayer {
   /** Draws the highways in view, in the frame the terrain was drawn in (north up; the caller has rotated). */
-  draw(ctx: CanvasRenderingContext2D, f: MapFrame): void;
+  draw(ctx: CanvasRenderingContext2D, f: MapFrame, sun: Sun): void;
 }
 
 export function createRoadLayer(roads: readonly MapRoad[]): RoadLayer {
@@ -170,33 +172,33 @@ export function createRoadLayer(roads: readonly MapRoad[]): RoadLayer {
     return p;
   }
 
-  function stroke(ctx: CanvasRenderingContext2D, s: RoadStroke, p: Path2D, cap: CanvasLineCap): void {
+  function stroke(ctx: CanvasRenderingContext2D, s: RoadStroke, p: Path2D, cap: CanvasLineCap, sun: Sun): void {
     ctx.strokeStyle = s.color;
     ctx.lineWidth = s.width;
     ctx.lineCap = s.dash ? 'butt' : cap;
     ctx.setLineDash(s.dash ? [...s.dash] : []);
-    // World y points north, so south is negative.
-    if (s.shift) ctx.translate(s.shift, -s.shift);
+    const [east, north] = shadowAlong(sun, s.shift ?? 0);
+    ctx.translate(east, north);
     ctx.stroke(p);
-    if (s.shift) ctx.translate(-s.shift, s.shift);
+    ctx.translate(-east, -north);
   }
 
   /**
    * All roads of one level (ground, or bridges) together. Each step of the markings is done for every road before the
    * next, so roads that meet merge instead of painting their borders across each other.
    */
-  function drawLevel(ctx: CanvasRenderingContext2D, mpp: number, bridge: boolean): void {
+  function drawLevel(ctx: CanvasRenderingContext2D, mpp: number, bridge: boolean, sun: Sun): void {
     const kinds = (['minor', 'major'] as const).filter((k) => roadShown(k, mpp));
     for (const kind of kinds) {
-      if (bridge) for (const s of bridgeStrokes(kind, mpp)) stroke(ctx, s, path(kind, true), 'butt');
+      if (bridge) for (const s of bridgeStrokes(kind, mpp)) stroke(ctx, s, path(kind, true), 'butt', sun);
     }
     for (const kind of kinds) {
-      for (const s of roadStrokes(kind, mpp)) stroke(ctx, s, path(kind, bridge), bridge ? 'butt' : 'round');
+      for (const s of roadStrokes(kind, mpp)) stroke(ctx, s, path(kind, bridge), bridge ? 'butt' : 'round', sun);
     }
   }
 
   return {
-    draw(ctx, f) {
+    draw(ctx, f, sun) {
       if (roads.length === 0) return;
       ctx.save();
       ctx.translate(f.ox, f.oy + f.mapHeight / f.mpp);
@@ -204,8 +206,8 @@ export function createRoadLayer(roads: readonly MapRoad[]): RoadLayer {
       // Round joints cost more to draw and cannot be seen once zoomed out.
       ctx.lineJoin = f.mpp <= ROAD_LINES_MAX_MPP ? 'round' : 'bevel';
       show(tilesFor(viewArea(ctx), ROAD_TILE_M, ROAD_REACH_M));
-      drawLevel(ctx, f.mpp, false);
-      drawLevel(ctx, f.mpp, true);
+      drawLevel(ctx, f.mpp, false, sun);
+      drawLevel(ctx, f.mpp, true, sun);
       ctx.restore();
     },
   };

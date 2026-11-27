@@ -1,8 +1,10 @@
-import { BUILDING_BAKE_MS, BUILDING_CACHE_TILES, BUILDING_DETAIL_MAX_MPP, BUILDING_MAX_MPP, BUILDING_PREBAKE_MIN_MPP, BUILDING_SHADOW_PER_M, BUILDING_TILE_PX } from '../config/map';
+import { BUILDING_BAKE_MS, BUILDING_CACHE_TILES, BUILDING_DETAIL_MAX_MPP, BUILDING_MAX_MPP, BUILDING_PREBAKE_MIN_MPP, BUILDING_TILE_PX } from '../config/map';
 import { BUILDING_SHADOW_COLOR, ROOF_COLORS, ROOF_EDGE_COLOR, type Rgb } from '../config/palette';
+import { ROOF_AWAY_LIGHT, type Sun } from '../config/sun';
 import type { MapBuilding } from '../sim/world/mapFile';
 import type { MapFrame, Visible } from './airportLayer';
 import { ZOOM_LEVELS } from './camera';
+import { shadowVector, towardSun } from './sunLight';
 
 type P = readonly [number, number];
 
@@ -47,11 +49,23 @@ export function hull(points: readonly P[]): P[] {
   return [...half(sorted), ...half([...sorted].reverse())];
 }
 
-/** The ground a building shades: its footprint swept toward the southeast, farther the taller it is. */
-export function shadowShape(b: MapBuilding): P[] {
-  const reach = b.height * BUILDING_SHADOW_PER_M;
+/** The ground a building shades: its footprint swept away from the sun, farther the taller it is. */
+export function shadowShape(b: MapBuilding, sun: Sun): P[] {
+  const [east, north] = shadowVector(sun, b.height);
   const corners = roofCorners(b);
-  return hull([...corners, ...corners.map(([x, y]): P => [x + reach * Math.SQRT1_2, y - reach * Math.SQRT1_2])]);
+  return hull([...corners, ...corners.map(([x, y]): P => [x + east, y + north])]);
+}
+
+/** The half of a pitched roof that faces away from the sun. The ridge runs along the building's width. */
+export function shadedHalf(b: MapBuilding, sun: Sun): P[] {
+  const [sw, se, ne, nw] = roofCorners(b);
+  const [east, north] = towardSun(sun);
+  // The outward direction of the (nw, ne) half.
+  const a = (b.angle * Math.PI) / 180;
+  const away = Math.cos(a) * east - Math.sin(a) * north <= 0;
+  const left = between(sw, nw);
+  const right = between(se, ne);
+  return away ? [left, right, ne, nw] : [sw, se, right, left];
 }
 
 /** A roof color for the building's district style, the same one every time for one building. */
@@ -81,10 +95,10 @@ export function visibleTiles(f: MapFrame, view: Visible, tileM: number): TileRan
 }
 
 /** For each tile of side `tileM`, the buildings whose roof or shadow reaches into it, lowest first. */
-export function buildingsByTile(buildings: readonly MapBuilding[], tileM: number): Map<string, MapBuilding[]> {
+export function buildingsByTile(buildings: readonly MapBuilding[], tileM: number, sun: Sun): Map<string, MapBuilding[]> {
   const tiles = new Map<string, MapBuilding[]>();
   for (const b of [...buildings].sort((p, q) => p.height - q.height)) {
-    const shape = shadowShape(b);
+    const shape = shadowShape(b, sun);
     const xs = shape.map((p) => p[0]);
     const ys = shape.map((p) => p[1]);
     for (let i = Math.floor(Math.min(...xs) / tileM); i <= Math.floor(Math.max(...xs) / tileM); i++) {
@@ -109,10 +123,10 @@ function trace(ctx: CanvasRenderingContext2D, points: readonly P[]): void {
 const between = (a: P, b: P): P => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
 /** Shadows first, all as one shape so they do not darken where they overlap, then the roofs. World coordinates. */
-function paint(ctx: CanvasRenderingContext2D, buildings: readonly MapBuilding[], mpp: number): void {
+function paint(ctx: CanvasRenderingContext2D, buildings: readonly MapBuilding[], mpp: number, sun: Sun): void {
   ctx.fillStyle = BUILDING_SHADOW_COLOR;
   ctx.beginPath();
-  for (const b of buildings) trace(ctx, shadowShape(b));
+  for (const b of buildings) trace(ctx, shadowShape(b, sun));
   ctx.fill();
 
   const detail = mpp <= BUILDING_DETAIL_MAX_MPP;
@@ -124,12 +138,10 @@ function paint(ctx: CanvasRenderingContext2D, buildings: readonly MapBuilding[],
     trace(ctx, corners);
     ctx.fill();
     if (!detail) continue;
-    const [sw, se, ne, nw] = corners;
     if (GABLED.has(b.style)) {
-      // A ridge along the width: the half facing away from the northwest light is darker.
-      ctx.fillStyle = rgb(color, 0.72);
+      ctx.fillStyle = rgb(color, 1 - sun.strength * (1 - ROOF_AWAY_LIGHT));
       ctx.beginPath();
-      trace(ctx, [between(sw, nw), between(se, ne), ne, nw]);
+      trace(ctx, shadedHalf(b, sun));
       ctx.fill();
     } else {
       // A flat roof: a rim, and a plant room on the larger ones.
@@ -163,9 +175,9 @@ export interface CityLayer {
    * Draws the buildings under `view` in the frame the terrain was drawn in (north up; the caller has rotated).
    * True when some tiles are still stand-ins, so another frame would sharpen them.
    */
-  draw(ctx: CanvasRenderingContext2D, f: MapFrame, view: Visible): boolean;
+  draw(ctx: CanvasRenderingContext2D, f: MapFrame, view: Visible, sun: Sun): boolean;
   /** Bakes the zoomed-out tiles, which hold the most buildings each, so they are not built mid-flight. */
-  warm(): void;
+  warm(sun: Sun): void;
 }
 
 export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
@@ -173,17 +185,26 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
   const members = new Map<number, Map<string, MapBuilding[]>>();
   const kept = new Map<string, HTMLCanvasElement>();
   const recent = new Map<string, HTMLCanvasElement>();
+  // The sun everything above was made for. Another one starts over (E8.2 will repaint tiles gradually instead).
+  let bakedFor: Sun | null = null;
+  function useSun(sun: Sun): void {
+    if (sun === bakedFor) return;
+    bakedFor = sun;
+    members.clear();
+    kept.clear();
+    recent.clear();
+  }
 
-  function membersAt(level: number): Map<string, MapBuilding[]> {
+  function membersAt(level: number, sun: Sun): Map<string, MapBuilding[]> {
     let m = members.get(level);
     if (!m) {
-      m = buildingsByTile(buildings, level * BUILDING_TILE_PX);
+      m = buildingsByTile(buildings, level * BUILDING_TILE_PX, sun);
       members.set(level, m);
     }
     return m;
   }
 
-  function bake(level: number, i: number, j: number, list: readonly MapBuilding[]): HTMLCanvasElement {
+  function bake(level: number, i: number, j: number, list: readonly MapBuilding[], sun: Sun): HTMLCanvasElement {
     const canvas = document.createElement('canvas');
     canvas.width = BUILDING_TILE_PX;
     canvas.height = BUILDING_TILE_PX;
@@ -191,13 +212,13 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
     if (!ctx) throw new Error('2D canvas is not supported');
     const side = level * BUILDING_TILE_PX;
     ctx.setTransform(1 / level, 0, 0, -1 / level, (-i * side) / level, ((j + 1) * side) / level);
-    paint(ctx, list, level);
+    paint(ctx, list, level, sun);
     return canvas;
   }
 
   /** The tile's canvas; null where there are no buildings; undefined where it is not baked and `mayBake` is false. */
-  function tile(level: number, i: number, j: number, mayBake: boolean): HTMLCanvasElement | null | undefined {
-    const list = membersAt(level).get(`${i},${j}`);
+  function tile(level: number, i: number, j: number, sun: Sun, mayBake: boolean): HTMLCanvasElement | null | undefined {
+    const list = membersAt(level, sun).get(`${i},${j}`);
     if (!list) return null;
     const key = `${level},${i},${j}`;
     const keep = level >= BUILDING_PREBAKE_MIN_MPP;
@@ -207,7 +228,7 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
       if (!keep) cache.delete(key); // move to the fresh end
     } else {
       if (!mayBake) return undefined;
-      canvas = bake(level, i, j, list);
+      canvas = bake(level, i, j, list, sun);
       while (!keep && recent.size >= BUILDING_CACHE_TILES) recent.delete(recent.keys().next().value as string);
     }
     cache.set(key, canvas);
@@ -215,12 +236,12 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
   }
 
   /** Stands in for a close tile with the same ground cut out of the stored zoomed-out one, stretched. */
-  function drawStandIn(ctx: CanvasRenderingContext2D, level: number, i: number, j: number, x: number, y: number, w: number, h: number): void {
+  function drawStandIn(ctx: CanvasRenderingContext2D, level: number, i: number, j: number, sun: Sun, x: number, y: number, w: number, h: number): void {
     const fine = level * BUILDING_TILE_PX;
     const coarse = BUILDING_PREBAKE_MIN_MPP * BUILDING_TILE_PX;
     const cx = withinCoarse(i, fine, coarse);
     const cy = withinCoarse(j, fine, coarse);
-    const canvas = tile(BUILDING_PREBAKE_MIN_MPP, cx.index, cy.index, true);
+    const canvas = tile(BUILDING_PREBAKE_MIN_MPP, cx.index, cy.index, sun, true);
     if (!canvas) return;
     const size = fine / BUILDING_PREBAKE_MIN_MPP;
     // Image rows run south, world y north.
@@ -228,7 +249,8 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
   }
 
   return {
-    draw(ctx, f, view) {
+    draw(ctx, f, view, sun) {
+      useSun(sun);
       const level = buildingLevel(f.mpp);
       if (level === null || buildings.length === 0) return false;
       const side = level * BUILDING_TILE_PX;
@@ -240,7 +262,7 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
       let pending = false;
       for (let j = r.j0; j <= r.j1; j++) {
         for (let i = r.i0; i <= r.i1; i++) {
-          const canvas = tile(level, i, j, performance.now() - started < BUILDING_BAKE_MS);
+          const canvas = tile(level, i, j, sun, performance.now() - started < BUILDING_BAKE_MS);
           if (canvas === null) continue;
           const x = left(i);
           const y = top(j);
@@ -249,21 +271,22 @@ export function createCityLayer(buildings: readonly MapBuilding[]): CityLayer {
           if (canvas) ctx.drawImage(canvas, x, y, w, h);
           else {
             pending = true;
-            drawStandIn(ctx, level, i, j, x, y, w, h);
+            drawStandIn(ctx, level, i, j, sun, x, y, w, h);
           }
         }
       }
       return pending;
     },
-    warm() {
+    warm(sun) {
+      useSun(sun);
       for (const level of ZOOM_LEVELS) {
         if (level > BUILDING_MAX_MPP) continue;
         // Sorting the buildings into tiles is worth doing now at every level; baking only the kept ones.
-        const keys = membersAt(level).keys();
+        const keys = membersAt(level, sun).keys();
         if (level < BUILDING_PREBAKE_MIN_MPP) continue;
         for (const key of keys) {
           const [i, j] = key.split(',').map(Number) as [number, number];
-          tile(level, i, j, true);
+          tile(level, i, j, sun, true);
         }
       }
     },

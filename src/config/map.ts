@@ -41,8 +41,8 @@ export const BUILDING_CACHE_TILES = 150;
 export const BUILDING_PREBAKE_MIN_MPP = 2.5;
 /** Time per frame for baking, ms. A tile that does not fit is shown from the stored zoomed-out one until later. */
 export const BUILDING_BAKE_MS = 6;
-/** Shadow length per meter of building height. */
-export const BUILDING_SHADOW_PER_M = 0.5;
+/** How far a bridge's shadow lies from its deck, world m. */
+export const BRIDGE_SHADOW_M = 5 * Math.SQRT2;
 /** How solid what the plane flies under is drawn over it in the top view (E6). */
 export const LANDMARK_OVERHEAD_ALPHA = 0.6;
 

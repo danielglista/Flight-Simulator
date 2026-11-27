@@ -4,6 +4,7 @@ import type { Size } from '../config/display';
 import { CENTERLINE_END_PX, CENTERLINE_TICK_PX, CLOUD_BASE_M, CLOUD_SEED, CLOUD_SHADOW_ALPHA, CLOUD_ALPHA_HIGH, CLOUD_SHADOW_SKEW, CLOUD_TILE_M, CLOUD_TILE_PX, DEPTH_FX, RING_LABEL_DEG, RING_MARGIN, RING_MAX_RADIUS, RING_TICK_DEG, TURN_LINE_MAX_S, TURN_LINE_MIN_SPEED, TURN_LINE_TICK_S } from '../config/display';
 import { BUG_COLOR, HAZE_COLOR, MARKER_COLOR, RING_COLOR, ROUTE_COLOR, SEA_COLOR, TURN_LINE_COLOR } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
+import type { Sun } from '../config/sun';
 import {
   CHUNK_CELLS,
   groundAt,
@@ -23,6 +24,7 @@ import { edgeArrow } from './edgeArrow';
 import { cloudTile } from './cloudTile';
 import { agl, cloudAlpha, hazeAlpha, heightScale, planeSizeTier, shadowAlpha, shadowOffsetPx } from './depth';
 import { createPlaneSprites } from './sprite';
+import { shadowAlong } from './sunLight';
 import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
@@ -53,6 +55,8 @@ export interface TopView {
     following: boolean,
     /** Heading bug, degrees clockwise from magnetic north. Drawn on the compass ring while following. */
     bugDeg: number,
+    /** Where the light comes from (E8): shadows and lit faces. */
+    sun: Sun,
     /** Approach guidance (C5): the runway center line is drawn out from the threshold. */
     guide?: ApproachGuide | null,
     /** The leg being flown (E3): a line between the two airports, and how far there is to go. */
@@ -64,7 +68,7 @@ export interface TopView {
     /** Returns true when building tiles are still stand-ins and another frame would sharpen them. */
   ): boolean;
   /** Builds every chunk, airport patch and sprite frame now, so none is built mid-flight. */
-  warm(): void;
+  warm(sun: Sun): void;
 }
 
 function toCanvas(data: Uint8ClampedArray, width: number, height: number = width): HTMLCanvasElement {
@@ -208,14 +212,15 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   }
 
   /**
-   * Cloud shadows on the ground (scale 1, shifted southeast) and the clouds themselves, which are scaled about the view
+   * Cloud shadows on the ground (scale 1, shifted away from the sun) and the clouds themselves, which are scaled about the view
    * center by their height so they slide past the ground as you climb. Both fade with the plane's altitude (cloudAlpha).
    */
-  function drawClouds(ctx: CanvasRenderingContext2D, view: Size, frame: MapFrame, area: Visible, z: number): void {
+  function drawClouds(ctx: CanvasRenderingContext2D, view: Size, frame: MapFrame, area: Visible, z: number, sun: Sun): void {
     const strength = cloudAlpha(z);
     const shadowPx = (CLOUD_BASE_M * CLOUD_SHADOW_SKEW) / frame.mpp;
     ctx.globalAlpha = CLOUD_SHADOW_ALPHA * (strength / CLOUD_ALPHA_HIGH);
-    tileClouds(ctx, frame, area, cloudCanvas(true), { x: shadowPx * Math.SQRT1_2, y: shadowPx * Math.SQRT1_2 });
+    const [east, north] = shadowAlong(sun, shadowPx);
+    tileClouds(ctx, frame, area, cloudCanvas(true), { x: east, y: -north });
 
     const s = heightScale(CLOUD_BASE_M, z);
     const cx = view.width / 2;
@@ -456,7 +461,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   }
 
   return {
-    draw(ctx, view, camera, cursor, side, following, bugDeg, guide = null, route = null, selected = null, variationDeg = 0) {
+    draw(ctx, view, camera, cursor, side, following, bugDeg, sun, guide = null, route = null, selected = null, variationDeg = 0) {
       // Terrain and airports are drawn north-up, then turned about the view center so the
       // camera's heading points up.
       const rotation = camera.rotation ?? 0;
@@ -466,9 +471,9 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       ctx.rotate(-rotation);
       ctx.translate(-view.width / 2, -view.height / 2);
       const frame = drawTerrain(ctx, view, { x: camera.x, y: camera.y, zoom: camera.zoom }, area);
-      roadLayer.draw(ctx, frame);
-      const unfinished = cityLayer.draw(ctx, frame, area);
-      landmarkLayer.draw(ctx, frame, area);
+      roadLayer.draw(ctx, frame, sun);
+      const unfinished = cityLayer.draw(ctx, frame, area, sun);
+      landmarkLayer.draw(ctx, frame, area, sun);
       // Haze: a pale veil over the terrain and roads, so airports stay crisp.
       const haze = DEPTH_FX.haze ? hazeAlpha(side.craft.z) : 0;
       if (haze > 0) {
@@ -478,7 +483,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
         ctx.globalAlpha = 1;
       }
       airportLayer.draw(ctx, { ...frame, rotation }, clampZoom(camera.zoom), area);
-      if (DEPTH_FX.clouds) drawClouds(ctx, view, frame, area, side.craft.z);
+      if (DEPTH_FX.clouds) drawClouds(ctx, view, frame, area, side.craft.z, sun);
       ctx.restore();
       const plane = planePixel(view, camera, side.craft);
       const showBug = topBugShown(following, side.crashed, side.craft.onGround);
@@ -491,7 +496,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       const spriteHeading = side.craft.heading - rotation;
       if (!side.crashed && DEPTH_FX.shadow) {
         const height = agl(side.craft.z, heightAt(grid, scale, side.craft.x, side.craft.y));
-        const off = shadowOffsetPx(height, rotation);
+        const off = shadowOffsetPx(height, rotation, sun);
         sprites.drawTopShadow(ctx, spriteHeading, plane.x, plane.y, off.x, off.y, shadowAlpha(height));
       }
       if (!side.crashed && !(side.craft.onGround && side.craft.speed < TURN_LINE_MIN_SPEED)) drawTurnLine(ctx, view, camera, side, plane, showBug ? bugDeg - variationDeg : null);
@@ -504,7 +509,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
         ctx.translate(view.width / 2, view.height / 2);
         ctx.rotate(-rotation);
         ctx.translate(-view.width / 2, -view.height / 2);
-        landmarkLayer.drawOverhead(ctx, frame, side.craft);
+        landmarkLayer.drawOverhead(ctx, frame, side.craft, sun);
         ctx.restore();
       }
       drawOverlays(ctx, view, camera, cursor);
@@ -514,11 +519,11 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       }
       return unfinished;
     },
-    warm() {
+    warm(sun) {
       for (let cy = 0; cy < ny; cy++) for (let cx = 0; cx < nx; cx++) for (let t = 0; t < 3; t++) chunkCanvas(cx, cy, t);
       for (const p of grid.patches ?? []) patchCanvas(p);
       airportLayer.warm();
-      cityLayer.warm();
+      cityLayer.warm(sun);
       sprites.warm();
       cloudCanvas(false);
       cloudCanvas(true);

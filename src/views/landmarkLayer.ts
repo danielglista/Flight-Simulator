@@ -1,33 +1,29 @@
-import { BUILDING_DETAIL_MAX_MPP, BUILDING_MAX_MPP, BUILDING_SHADOW_PER_M, LANDMARK_OVERHEAD_ALPHA } from '../config/map';
+import { BUILDING_DETAIL_MAX_MPP, BUILDING_MAX_MPP, LANDMARK_OVERHEAD_ALPHA } from '../config/map';
 import { BUILDING_SHADOW_COLOR, LANDMARK_COLORS, LANDMARK_FLAG_COLOR, LANDMARK_POLE_COLOR, ROOF_EDGE_COLOR, type Rgb } from '../config/palette';
+import type { Sun } from '../config/sun';
 import type { LandmarkSolid, MapLandmark } from '../sim/world/mapFile';
 import { boxOf, landmarkCircle, solidCorners, solidTopAt, type Box } from '../sim/world/obstacles';
 import type { MapFrame } from './airportLayer';
 import type { Area } from './roadLayer';
 import { hull } from './cityLayer';
+import { faceLight, shadowVector, towardSun } from './sunLight';
 
 type P = readonly [number, number];
 
 export const landmarkColor = (material: string): Rgb => LANDMARK_COLORS[material] ?? [255, 0, 255];
 
-/** How brightly the northwest light falls on the south, east, north and west slopes. */
-const SLOPE_LIGHT = [0.78, 0.68, 1.08, 0.96] as const;
-
 /**
  * What a solid shows from straight above: its sloping faces (south, east, north, west before turning), each with how
- * brightly the northwest light falls on it, and its top. A solid with upright sides has faces of no size.
+ * brightly the sun falls on it, and its top. A solid with upright sides has faces of no size.
  */
-export function solidFaces(s: LandmarkSolid): { readonly faces: readonly { readonly points: readonly P[]; readonly light: number }[]; readonly top: readonly P[] } {
+export function solidFaces(s: LandmarkSolid, sun: Sun): { readonly faces: readonly { readonly points: readonly P[]; readonly light: number }[]; readonly top: readonly P[] } {
   const base = solidCorners(s, s.width, s.depth);
   const top = solidCorners(s, s.topWidth, s.topDepth);
   const turn = ((s.turn ?? 0) * Math.PI) / 180;
-  const [south, east, north, west] = SLOPE_LIGHT;
   const faces = base.map((_, i) => {
     // The face's compass bearing: south, east, north and west, carried round by the turn.
     const bearing = Math.PI - (i * Math.PI) / 2 + turn;
-    const nx = Math.sin(bearing);
-    const ny = Math.cos(bearing);
-    const light = (ny > 0 ? north : south) * ny * ny + (nx > 0 ? east : west) * nx * nx;
+    const light = faceLight(sun, Math.sin(bearing), Math.cos(bearing));
     return { points: [base[i] as P, base[(i + 1) % 4] as P, top[(i + 1) % 4] as P, top[i] as P], light };
   });
   return { faces, top };
@@ -48,13 +44,13 @@ export function outline(s: LandmarkSolid): P[] {
 }
 
 /**
- * The ground a solid shades: its bottom and top outlines, each pushed southeast by its height above `floor` (the level
- * the shadow falls on), as one shape.
+ * The ground a solid shades: its bottom and top outlines, each pushed away from the sun by its height above `floor` (the
+ * level the shadow falls on), as one shape.
  */
-export function solidShadow(s: LandmarkSolid, floor = 0): P[] {
+export function solidShadow(s: LandmarkSolid, sun: Sun, floor = 0): P[] {
   const cast = (points: readonly P[], height: number): P[] => {
-    const reach = (height - floor) * BUILDING_SHADOW_PER_M * Math.SQRT1_2;
-    return points.map(([x, y]): P => [x + reach, y - reach]);
+    const [east, north] = shadowVector(sun, height - floor);
+    return points.map(([x, y]): P => [x + east, y + north]);
   };
   if (s.shape === 'prism') return hull([...cast(outline(s), s.bottom), ...cast(outline(s), s.top)]);
   if (s.shape === 'dome') {
@@ -88,8 +84,8 @@ function fill(ctx: CanvasRenderingContext2D, points: readonly P[], color: string
   ctx.fill();
 }
 
-/** A drum or dome from above: a dome brightens toward a point northwest of its crown; a drum is a rim and a flat top. */
-function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number): void {
+/** A drum or dome from above: a dome brightens toward a point on the sunward side of its crown; a drum is a rim and a flat top. */
+function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number, sun: Sun): void {
   const color = landmarkColor(s.material);
   const r = s.width / 2;
   const disc = (x: number, y: number, radius: number, k: number): void => {
@@ -100,9 +96,11 @@ function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number
   };
   if (s.shape === 'dome') {
     const steps = 5;
+    const [east, north] = towardSun(sun);
     for (let i = 0; i < steps; i++) {
       const t = i / steps;
-      disc(s.x - r * 0.3 * t, s.y + r * 0.3 * t, r * (1 - t), 0.78 + 0.34 * t);
+      const shift = r * 0.3 * Math.SQRT2 * t;
+      disc(s.x + east * shift, s.y + north * shift, r * (1 - t), 1 + sun.strength * (0.78 + 0.34 * t - 1));
     }
   } else {
     disc(s.x, s.y, r, 0.84);
@@ -144,15 +142,15 @@ function paintDecor(ctx: CanvasRenderingContext2D, l: MapLandmark): void {
   }
 }
 
-function paintPosts(ctx: CanvasRenderingContext2D, posts: NonNullable<MapLandmark['posts']>, mpp: number): void {
-  const reach = posts.height * BUILDING_SHADOW_PER_M * Math.SQRT1_2;
+function paintPosts(ctx: CanvasRenderingContext2D, posts: NonNullable<MapLandmark['posts']>, mpp: number, sun: Sun): void {
+  const [east, north] = shadowVector(sun, posts.height);
   const points = postPoints(posts);
   ctx.strokeStyle = BUILDING_SHADOW_COLOR;
   ctx.lineWidth = mpp;
   ctx.beginPath();
   for (const [x, y] of points) {
     ctx.moveTo(x, y);
-    ctx.lineTo(x + reach, y - reach);
+    ctx.lineTo(x + east, y + north);
   }
   ctx.stroke();
   const dot = Math.max(mpp, 0.5);
@@ -165,7 +163,7 @@ function paintPosts(ctx: CanvasRenderingContext2D, posts: NonNullable<MapLandmar
 }
 
 /** One solid from above. */
-function paintSolid(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number): void {
+function paintSolid(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number, sun: Sun): void {
   const outlined = (points: readonly P[]): void => {
     if (mpp > BUILDING_DETAIL_MAX_MPP) return;
     ctx.strokeStyle = ROOF_EDGE_COLOR;
@@ -181,11 +179,11 @@ function paintSolid(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number
     return;
   }
   if (s.shape) {
-    paintRound(ctx, s, mpp);
+    paintRound(ctx, s, mpp, sun);
     return;
   }
   const color = landmarkColor(s.material);
-  const { faces, top } = solidFaces(s);
+  const { faces, top } = solidFaces(s, sun);
   for (const face of faces) fill(ctx, face.points, rgb(color, face.light));
   fill(ctx, top, rgb(landmarkColor(s.cap ?? s.material)));
   outlined(solidCorners(s, s.width, s.depth));
@@ -229,27 +227,32 @@ export const boxesMeet = (a: Box, b: Box): boolean => a.minX <= b.maxX && a.maxX
 
 export interface LandmarkLayer {
   /** Draws the landmarks in the frame the terrain was drawn in (north up; the caller has rotated), those in `area`. */
-  draw(ctx: CanvasRenderingContext2D, f: MapFrame, area: Area): void;
+  draw(ctx: CanvasRenderingContext2D, f: MapFrame, area: Area, sun: Sun): void;
   /** Draws over the plane, faintly enough to keep it in sight, what it is flying under. */
-  drawOverhead(ctx: CanvasRenderingContext2D, f: MapFrame, plane: { readonly x: number; readonly y: number; readonly z: number }): void;
+  drawOverhead(ctx: CanvasRenderingContext2D, f: MapFrame, plane: { readonly x: number; readonly y: number; readonly z: number }, sun: Sun): void;
 }
 
 /** Landmarks from above (E6). There are few, so they are drawn each frame rather than baked into tiles. */
 export function createLandmarkLayer(landmarks: readonly MapLandmark[], groundOf: (x: number, y: number) => number): LandmarkLayer {
-  // Everything that does not depend on the camera is worked out once.
-  const prepared = landmarks.map((l) => {
+  // Everything that does not depend on the camera is worked out once for each sun.
+  const prepare = (sun: Sun) => landmarks.map((l) => {
     const solids = [...l.solids].sort((a, b) => a.top - b.top);
     // A hill first, so what stands on it shades its top.
     const hill = solids.filter((s) => s.base);
     const standing = solids.filter((s) => !s.base);
     const floor = Math.max(0, ...hill.map((s) => s.top));
-    const hillShadows = hill.map((s) => solidShadow(s));
-    const standingShadows = standing.map((s) => solidShadow(s, s.bottom >= floor ? floor : 0));
+    const hillShadows = hill.map((s) => solidShadow(s, sun));
+    const standingShadows = standing.map((s) => solidShadow(s, sun, s.bottom >= floor ? floor : 0));
     // What it covers on the map, shadows included.
     const { x, y, radius } = landmarkCircle(l);
     const box = boxOf([x - radius, y - radius, x + radius, y + radius, ...[...hillShadows, ...standingShadows].flat(2)]);
     return { l, hill, standing, hillShadows, standingShadows, box };
   });
+  let made: { readonly sun: Sun; readonly list: ReturnType<typeof prepare> } | null = null;
+  const preparedFor = (sun: Sun): ReturnType<typeof prepare> => {
+    if (made?.sun !== sun) made = { sun, list: prepare(sun) };
+    return made.list;
+  };
   const grounds = landmarks.map((l) => groundOf(l.x, l.y));
   /** From here on, world meters with y north. */
   const toWorld = (ctx: CanvasRenderingContext2D, f: MapFrame): void => {
@@ -257,11 +260,11 @@ export function createLandmarkLayer(landmarks: readonly MapLandmark[], groundOf:
     ctx.scale(1 / f.mpp, -1 / f.mpp);
   };
   return {
-    draw(ctx, f, area) {
+    draw(ctx, f, area, sun) {
       const seen = worldBox(f, area);
       ctx.save();
       toWorld(ctx, f);
-      for (const { l, hill, standing, hillShadows, standingShadows, box } of prepared) {
+      for (const { l, hill, standing, hillShadows, standingShadows, box } of preparedFor(sun)) {
         if (!boxesMeet(box, seen)) continue;
         if (f.mpp <= BUILDING_MAX_MPP) paintDecor(ctx, l);
         // Shadows as one shape, so they do not darken where they overlap. The long shadow shows at every zoom.
@@ -272,21 +275,21 @@ export function createLandmarkLayer(landmarks: readonly MapLandmark[], groundOf:
           ctx.fill();
         };
         shade(hillShadows);
-        for (const s of hill) paintSolid(ctx, s, f.mpp);
+        for (const s of hill) paintSolid(ctx, s, f.mpp, sun);
         shade(standingShadows);
-        if (l.posts && f.mpp <= BUILDING_DETAIL_MAX_MPP) paintPosts(ctx, l.posts, f.mpp);
-        for (const s of standing) paintSolid(ctx, s, f.mpp);
+        if (l.posts && f.mpp <= BUILDING_DETAIL_MAX_MPP) paintPosts(ctx, l.posts, f.mpp, sun);
+        for (const s of standing) paintSolid(ctx, s, f.mpp, sun);
         if (l.wires && f.mpp <= BUILDING_MAX_MPP) paintWires(ctx, l.wires, f.mpp);
       }
       ctx.restore();
     },
-    drawOverhead(ctx, f, plane) {
+    drawOverhead(ctx, f, plane, sun) {
       ctx.save();
       toWorld(ctx, f);
       ctx.globalAlpha = LANDMARK_OVERHEAD_ALPHA;
-      prepared.forEach(({ l, box }, n) => {
+      preparedFor(sun).forEach(({ l, box }, n) => {
         if (!boxesMeet(box, { minX: plane.x, maxX: plane.x, minY: plane.y, maxY: plane.y })) return;
-        for (const s of overheadSolids(l, plane.x, plane.y, plane.z - (grounds[n] as number))) paintSolid(ctx, s, f.mpp);
+        for (const s of overheadSolids(l, plane.x, plane.y, plane.z - (grounds[n] as number))) paintSolid(ctx, s, f.mpp, sun);
       });
       ctx.restore();
     },

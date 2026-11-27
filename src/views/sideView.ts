@@ -1,6 +1,7 @@
 import { AGL_TEXT_LIMIT_M, APPROACH_PATH_DEG, ALT_TAPE_MAX_HEIGHT_PX, ALT_TAPE_PX_PER_FT, ALT_TAPE_WIDTH_PX, ALT_TREND_S, FOREGROUND_ALPHA, FOREGROUND_DARKEN, FOREGROUND_MAX_RISE_PX, GHOST_ALPHA, SIDE_FOREGROUND, SIDE_FX, SIDE_LAYERS, SLOPE_SHADE_BODY, type SideLayer, type Size } from '../config/display';
 import { GUIDE_COLOR, BUG_COLOR, STALL_COLOR, WARN_COLOR, FOREGROUND_TINT, PATH_LINE_COLOR, SEA_COLOR, SKY_BANDS, TAPE_BACK_COLOR, TERRAIN_COLORS, TREND_COLOR, waterColor, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
+import type { Sun } from '../config/sun';
 import { sliceAlong, type Slice } from '../sim/world/slice';
 import { Terrain } from '../sim/world/terrain';
 import { SNOW_LINE_M } from '../sim/world/testMap'; // temporary, until the map carries its own snow line
@@ -68,6 +69,8 @@ export interface SideView {
     crashed: boolean,
     /** Altitude bug, displayed feet. */
     altBugFt: number,
+    /** Where the light comes from (E8): the lit faces of landmarks. */
+    sun: Sun,
     /** Takeoff HUD mode (C4B): runway left replaces the altitude bug and tape. Null otherwise. */
     hud?: TakeoffHud | null,
     /** Approach guidance (C5): the glide line and the LOC / HDG / GS text replace the bugs. Null otherwise. */
@@ -249,19 +252,19 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     return false;
   }
 
-  function drawGround(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number) {
+  function drawGround(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, sun: Sun) {
     for (const layer of SIDE_LAYERS) {
       drawProfile(ctx, view, zoom, layerSlice(craft, view, zoom, layer), layer.haze, base);
       sideBuildings.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR);
-      sideLandmarks.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR);
+      sideLandmarks.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR, sun);
     }
     sideBuildings.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR);
-    sideLandmarks.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR);
+    sideLandmarks.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR, sun);
     const w = sliceWindow(craft, view, zoom);
     const main = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
     drawProfile(ctx, view, zoom, main, 0, base);
     sideBuildings.drawCrossed(ctx, view, craft, zoom, base);
-    sideLandmarks.drawCrossed(ctx, view, craft, zoom, base);
+    sideLandmarks.drawCrossed(ctx, view, craft, zoom, base, sun);
     return main;
   }
 
@@ -505,10 +508,10 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   }
 
   return {
-    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt, hud = null, guide = null, ap = { on: false, notice: null }, variationDeg = 0) {
+    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt, sun, hud = null, guide = null, ap = { on: false, notice: null }, variationDeg = 0) {
       const base = baseHeight(view, zoom, craft.z);
       drawSky(ctx, view);
-      const slice = drawGround(ctx, view, craft, zoom, base);
+      const slice = drawGround(ctx, view, craft, zoom, base, sun);
       drawRunwaySpans(ctx, view, craft, zoom, base);
       drawScale(ctx, view, zoom, base);
       const groundH = slice.heightWorldM[planeColumn(view)] as number;

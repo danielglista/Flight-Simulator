@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLOUD_ALPHA_HIGH, CLOUD_ALPHA_LOW, CLOUD_BASE_M, DEPTH_CAMERA_M, HAZE_MAX, PLANE_SIZE_TIERS, SHADOW_ALPHA, SHADOW_FADE_HIGH_M, SHADOW_FADE_LOW_M, SHADOW_MAX_PX } from '../src/config/display';
 import { CEILING_Z } from '../src/config/motion';
 import { agl, cloudAlpha, hazeAlpha, heightScale, planeSizeTier, shadowAlpha, shadowOffsetPx, tierAltitude } from '../src/views/depth';
+import { FIXED_SUN } from '../src/config/sun';
 
 describe('heightScale', () => {
   it('is 1 at sea level and grows with height', () => {
@@ -30,22 +31,27 @@ describe('agl', () => {
 
 describe('shadowOffsetPx', () => {
   it('is zero on the ground and capped high up', () => {
-    expect(shadowOffsetPx(0, 0)).toEqual({ x: 0, y: 0 });
-    const far = shadowOffsetPx(1e5, 0);
+    expect(Math.hypot(shadowOffsetPx(0, 0, FIXED_SUN).x, shadowOffsetPx(0, 0, FIXED_SUN).y)).toBe(0);
+    const far = shadowOffsetPx(1e5, 0, FIXED_SUN);
     expect(Math.hypot(far.x, far.y)).toBeCloseTo(SHADOW_MAX_PX, 9);
   });
-  it('falls right and down with north up', () => {
-    const o = shadowOffsetPx(50, 0);
-    expect(o.x).toBeGreaterThan(0);
-    expect(o.y).toBeGreaterThan(0);
-  });
-  it('falls up and right with east up (rotation 90 degrees)', () => {
-    const o = shadowOffsetPx(50, Math.PI / 2);
+  it('falls right and up with north up', () => {
+    const o = shadowOffsetPx(50, 0, FIXED_SUN);
     expect(o.x).toBeGreaterThan(0);
     expect(o.y).toBeLessThan(0);
   });
+  it('falls left and up with east up (rotation 90 degrees)', () => {
+    const o = shadowOffsetPx(50, Math.PI / 2, FIXED_SUN);
+    expect(o.x).toBeLessThan(0);
+    expect(o.y).toBeLessThan(0);
+  });
+  it('follows the sun', () => {
+    const o = shadowOffsetPx(50, 0, { ...FIXED_SUN, azimuth: Math.PI / 2 });
+    expect(o.x).toBeLessThan(0);
+    expect(o.y).toBeCloseTo(0, 9);
+  });
   it('has the same length at any rotation', () => {
-    const len = (r: number) => Math.hypot(shadowOffsetPx(60, r).x, shadowOffsetPx(60, r).y);
+    const len = (r: number) => Math.hypot(shadowOffsetPx(60, r, FIXED_SUN).x, shadowOffsetPx(60, r, FIXED_SUN).y);
     for (const r of [0.3, 1, 2, 4, 5.5]) expect(len(r)).toBeCloseTo(len(0), 9);
   });
 });

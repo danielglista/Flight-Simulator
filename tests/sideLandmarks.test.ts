@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { FIXED_SUN, type Sun } from '../src/config/sun';
 import type { LandmarkSolid } from '../src/sim/world/mapFile';
-import { faceLight, paintOrder, roundLight, sideFaces, silhouette, farthestFirst, inSlice } from '../src/views/sideLandmarks';
+import { faceLight } from '../src/views/sunLight';
+import { paintOrder, roundLight, sideFaces, silhouette, farthestFirst, inSlice } from '../src/views/sideLandmarks';
 
 const s: LandmarkSolid = { x: 0, y: 100, width: 10, depth: 4, topWidth: 6, topDepth: 2, bottom: 0, top: 40, material: 'marble-upper' };
+const from = (deg: number): Sun => ({ ...FIXED_SUN, azimuth: (deg * Math.PI) / 180 });
 
 describe('landmark outline from the side', () => {
   it('takes the extent across the line of flight, at bottom and top', () => {
@@ -24,14 +27,15 @@ describe('landmark faces from the side', () => {
   const deg = (d: number) => (d * Math.PI) / 180;
   it('shows one face square on, and a different one from each side', () => {
     // Heading east looks north, at the south face; and so on round.
-    const lights = [90, 0, 270, 180].map((h) => sideFaces(square, 0, 0, deg(h)));
+    // A sun off the diagonals, so no two faces are lit alike.
+    const lights = [90, 0, 270, 180].map((h) => sideFaces(square, 0, 0, deg(h), from(200)));
     for (const faces of lights) expect(faces).toHaveLength(1);
     expect(new Set(lights.map((f) => f[0]!.light)).size).toBe(4);
     expect(lights[0]![0]!.base).toEqual([-5, 5].map((v) => expect.closeTo(v, 6)));
     expect(lights[0]![0]!.top).toEqual([-3, 3].map((v) => expect.closeTo(v, 6)));
   });
   it('shows two faces at an angle, meeting at the corner, which moves with the heading', () => {
-    const at = (h: number) => sideFaces(square, 0, 0, deg(h)).sort((a, b) => a.base[0] - b.base[0]);
+    const at = (h: number) => sideFaces(square, 0, 0, deg(h), FIXED_SUN).sort((a, b) => a.base[0] - b.base[0]);
     for (const h of [20, 45, 70]) {
       const [left, right] = at(h);
       expect(at(h)).toHaveLength(2);
@@ -44,10 +48,12 @@ describe('landmark faces from the side', () => {
 });
 
 describe('round walls and painting order', () => {
-  it('lights a round wall from the northwest, whichever way you look', () => {
+  it('lights a round wall from the southwest, whichever way you look', () => {
     // Heading east looks north: west is on screen left. Heading west looks south: west is on screen right.
-    expect(roundLight(-0.8, Math.PI / 2)).toBeGreaterThan(roundLight(0.8, Math.PI / 2));
-    expect(roundLight(0.8, (3 * Math.PI) / 2)).toBeGreaterThan(roundLight(-0.8, (3 * Math.PI) / 2));
+    expect(roundLight(-0.8, Math.PI / 2, FIXED_SUN)).toBeGreaterThan(roundLight(0.8, Math.PI / 2, FIXED_SUN));
+    expect(roundLight(0.8, (3 * Math.PI) / 2, FIXED_SUN)).toBeGreaterThan(roundLight(-0.8, (3 * Math.PI) / 2, FIXED_SUN));
+    // And from the other side with the sun in the east.
+    expect(roundLight(0.8, Math.PI / 2, from(90))).toBeGreaterThan(roundLight(-0.8, Math.PI / 2, from(90)));
   });
   it('is as wide from every side', () => {
     const drum: LandmarkSolid = { ...s, width: 10, depth: 10, shape: 'drum' };
@@ -62,15 +68,20 @@ describe('round walls and painting order', () => {
 });
 
 describe('angled walls from the side', () => {
-  it('lights the four compass faces as a rectangle does, and between them in between', () => {
-    expect(faceLight(0, 1)).toBeGreaterThan(faceLight(1, 0));
-    const mid = faceLight(Math.SQRT1_2, Math.SQRT1_2);
-    expect(mid).toBeCloseTo((faceLight(0, 1) + faceLight(1, 0)) / 2, 6);
+  it('lights an angled wall by the way it faces', () => {
+    // A triangle whose one wall seen heading east (looking north) faces southeast.
+    const wedge: LandmarkSolid = { ...s, shape: 'prism', points: [0, 0, 10, 10, 0, 10] };
+    const walls = sideFaces(wedge, 0, 0, Math.PI / 2, from(180));
+    expect(walls).toHaveLength(1);
+    const lit = walls[0]!.light;
+    expect(lit).toBeCloseTo(faceLight(from(180), Math.SQRT1_2, -Math.SQRT1_2), 6);
+    expect(lit).toBeGreaterThan(faceLight(from(180), 1, 0));
+    expect(lit).toBeLessThan(faceLight(from(180), 0, -1));
   });
   it('shows only the walls of a prism turned toward the viewer', () => {
     const square: LandmarkSolid = { ...s, x: 5, y: 5, width: 10, depth: 10, shape: 'prism', points: [0, 0, 10, 0, 10, 10, 0, 10] };
-    expect(sideFaces(square, 0, 0, Math.PI / 2)).toHaveLength(1);
-    expect(sideFaces(square, 0, 0, Math.PI / 4)).toHaveLength(2);
+    expect(sideFaces(square, 0, 0, Math.PI / 2, FIXED_SUN)).toHaveLength(1);
+    expect(sideFaces(square, 0, 0, Math.PI / 4, FIXED_SUN)).toHaveLength(2);
     expect(silhouette(square, 0, 0, Math.PI / 2).base[0]).toBeCloseTo(0, 6);
     expect(silhouette(square, 0, 0, Math.PI / 2).base[1]).toBeCloseTo(10, 6);
   });

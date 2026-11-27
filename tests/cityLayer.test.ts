@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ROOF_COLORS } from '../src/config/palette';
+import { FIXED_SUN, type Sun } from '../src/config/sun';
 import type { MapBuilding } from '../src/sim/world/mapFile';
-import { buildingLevel, buildingsByTile, hull, roofColor, roofCorners, shadowShape, visibleTiles, withinCoarse } from '../src/views/cityLayer';
+import { buildingLevel, buildingsByTile, hull, roofColor, roofCorners, shadedHalf, shadowShape, visibleTiles, withinCoarse } from '../src/views/cityLayer';
 
 const b: MapBuilding = { x: 100, y: 100, width: 20, depth: 10, angle: 0, height: 20, style: 1 };
+const from = (deg: number): Sun => ({ ...FIXED_SUN, azimuth: (deg * Math.PI) / 180 });
+const mean = (v: number[]) => v.reduce((a, n) => a + n, 0) / v.length;
 
 describe('building layer', () => {
   it('uses the nearest zoom level, and nothing past 10 m per pixel', () => {
@@ -19,13 +22,29 @@ describe('building layer', () => {
     expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(20, 6); // heading north
     expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(10, 6);
   });
-  it('casts a shadow southeast, longer for a taller building', () => {
-    const east = (h: number) => Math.max(...shadowShape({ ...b, height: h }).map((p) => p[0]));
-    const south = Math.min(...shadowShape(b).map((p) => p[1]));
+  it('casts a shadow northeast, longer for a taller building', () => {
+    const east = (h: number) => Math.max(...shadowShape({ ...b, height: h }, FIXED_SUN).map((p) => p[0]));
+    const north = Math.max(...shadowShape(b, FIXED_SUN).map((p) => p[1]));
     expect(east(20)).toBeGreaterThan(105);
-    expect(south).toBeLessThan(90);
+    expect(north).toBeGreaterThan(110);
+    expect(Math.min(...shadowShape(b, FIXED_SUN).map((p) => p[0]))).toBeCloseTo(95, 6);
     expect(east(80)).toBeGreaterThan(east(20));
     expect(hull([[0, 0], [2, 0], [2, 2], [0, 2], [1, 1]])).toHaveLength(4);
+  });
+  it('turns the shadow with the sun', () => {
+    const xs = (deg: number) => shadowShape(b, from(deg)).map((p) => p[0]);
+    expect(Math.max(...xs(270))).toBeCloseTo(115, 6);
+    expect(Math.min(...xs(90))).toBeCloseTo(85, 6);
+  });
+  it('darkens the half of a pitched roof that faces away from the sun, whichever way the building is turned', () => {
+    // Ridge north-south at angle 0 or 180: the halves face east and west.
+    const x = (angle: number, deg: number) => mean(shadedHalf({ ...b, angle }, from(deg)).map((p) => p[0]));
+    for (const angle of [0, 180]) {
+      expect(x(angle, 270)).toBeGreaterThan(100);
+      expect(x(angle, 90)).toBeLessThan(100);
+    }
+    // Ridge east-west: the halves face north and south.
+    expect(mean(shadedHalf({ ...b, angle: 90 }, FIXED_SUN).map((p) => p[1]))).toBeGreaterThan(100);
   });
   it('gives one building one color from its style', () => {
     expect(roofColor(b)).toEqual(roofColor({ ...b }));
@@ -42,8 +61,8 @@ describe('building layer', () => {
   });
   it('puts a building in every tile its roof or shadow reaches, lowest first', () => {
     const tall = { ...b, x: 125, height: 80 };
-    const tiles = buildingsByTile([tall, b], 128);
-    expect([...tiles.keys()].sort()).toEqual(['0,0', '1,0']);
+    const tiles = buildingsByTile([tall, b], 128, FIXED_SUN);
+    expect([...tiles.keys()].sort()).toEqual(['0,0', '0,1', '1,0', '1,1']); // the tall one's shadow reaches east and north
     expect(tiles.get('0,0')!.map((x) => x.height)).toEqual([20, 80]);
   });
 });

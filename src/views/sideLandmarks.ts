@@ -1,6 +1,7 @@
 import { SIDE_BUILDING_BESIDE_M, SIDE_LANDMARK_BEHIND_M, SIDE_LANDMARK_HAZE, SIDE_LANDMARK_POST_MAX_MPP, type Size } from '../config/display';
 import { LANDMARK_FLAG_COLOR, LANDMARK_POLE_COLOR, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
+import { ROUND_SHADING, type Sun } from '../config/sun';
 import type { Craft } from '../sim/state';
 import { heightAt, type WorldGrid } from '../sim/world/grid';
 import type { LandmarkSolid, MapLandmark } from '../sim/world/mapFile';
@@ -8,6 +9,7 @@ import { landmarkCircle, solidCorners, solidTopAt } from '../sim/world/obstacles
 import { landmarkColor, postPoints } from './landmarkLayer';
 import { heightToY, sliceWindow, verticalMetersPerPixel, type SliceWindow } from './sideCamera';
 import { lineSpan } from './sideBuildings';
+import { faceLight } from './sunLight';
 
 /** A solid's outline seen across a line: extents along it at the bottom and top, and how far its middle is to the LEFT. */
 export function silhouette(s: LandmarkSolid, ox: number, oy: number, heading: number): { readonly base: readonly [number, number]; readonly top: readonly [number, number]; readonly left: number } {
@@ -31,15 +33,6 @@ export function silhouette(s: LandmarkSolid, ox: number, oy: number, heading: nu
   return { base: [along - base, along + base], top: [along - top, along + top], left: -(s.x - ox) * dy + (s.y - oy) * dx };
 }
 
-/** How brightly the northwest light falls on the south, east, north and west faces. */
-const FACE_LIGHT = [0.84, 0.7, 1.08, 0.98] as const;
-
-/** The same light for a wall facing any way: it gives the four values above for the four compass faces. */
-export function faceLight(nx: number, ny: number): number {
-  const [south, east, north, west] = FACE_LIGHT;
-  return (ny > 0 ? north : south) * ny * ny + (nx > 0 ? east : west) * nx * nx;
-}
-
 /** One face of a solid as seen from the side: where its bottom and top edges start and end along the line of flight. */
 export interface SideFace {
   readonly base: readonly [number, number];
@@ -51,7 +44,7 @@ export interface SideFace {
  * The faces turned toward the viewer, who looks to the left of the heading: one when square on, otherwise two. Each
  * keeps its own light, so circling a solid shows its faces come round.
  */
-export function sideFaces(s: LandmarkSolid, ox: number, oy: number, heading: number): SideFace[] {
+export function sideFaces(s: LandmarkSolid, ox: number, oy: number, heading: number, sun: Sun): SideFace[] {
   const dx = Math.sin(heading);
   const dy = Math.cos(heading);
   const along = (x: number, y: number): number => (x - ox) * dx + (y - oy) * dy;
@@ -66,7 +59,7 @@ export function sideFaces(s: LandmarkSolid, ox: number, oy: number, heading: num
       const ny = -(bx - ax) / length;
       if (-nx * dy + ny * dx >= -1e-6) continue;
       const span: [number, number] = [Math.min(along(ax, ay), along(bx, by)), Math.max(along(ax, ay), along(bx, by))];
-      walls.push({ base: span, top: span, light: faceLight(nx, ny) });
+      walls.push({ base: span, top: span, light: faceLight(sun, nx, ny) });
     }
     return walls;
   }
@@ -86,7 +79,7 @@ export function sideFaces(s: LandmarkSolid, ox: number, oy: number, heading: num
       const b = along(...(points[(i + 1) % 4] as readonly [number, number]));
       return [Math.min(a, b), Math.max(a, b)];
     };
-    out.push({ base: span(base), top: span(top), light: faceLight(nx, ny) });
+    out.push({ base: span(base), top: span(top), light: faceLight(sun, nx, ny) });
   }
   return out;
 }
@@ -96,14 +89,14 @@ const ROUND_STRIPS = 7;
 
 /**
  * Light on a round wall at `across` (-1 to 1 along the line of flight) seen from the right of `heading`: the same
- * northwest sun as the flat faces, so a dome's bright side comes round as you circle it.
+ * sun as the flat faces, so a dome's bright side comes round as you circle it.
  */
-export function roundLight(across: number, heading: number): number {
+export function roundLight(across: number, heading: number, sun: Sun): number {
   const toward = Math.sqrt(Math.max(0, 1 - across * across));
   // The wall's compass normal: part along the line of flight, part back toward the viewer on the right.
   const east = Math.sin(heading) * across + Math.cos(heading) * toward;
   const north = Math.cos(heading) * across - Math.sin(heading) * toward;
-  return 0.92 + 0.2 * (north - east) * Math.SQRT1_2;
+  return faceLight(sun, east, north, ROUND_SHADING);
 }
 
 /** Order for painting: what stands on the ground farthest first, then what stands on top of it, lowest first. */
@@ -135,11 +128,11 @@ export function inSlice(c: { readonly x: number; readonly y: number; readonly ra
 
 export interface SideLandmarks {
   /** Landmarks in a parallax layer's band, hazed. */
-  drawSkyline(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, layer: { readonly nearM: number; readonly farM: number; readonly haze: number; readonly k: number }, haze: Rgb): void;
+  drawSkyline(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, layer: { readonly nearM: number; readonly farM: number; readonly haze: number; readonly k: number }, haze: Rgb, sun: Sun): void;
   /** Whole outlines of those near the flight line, a little pale. Draw BEFORE the main terrain, which hides their feet. */
-  drawBeside(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, haze: Rgb): void;
+  drawBeside(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, haze: Rgb, sun: Sun): void;
   /** The cut the flight line makes through them, solid: what is drawn here can be hit. Draw over the main terrain. */
-  drawCrossed(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number): void;
+  drawCrossed(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, sun: Sun): void;
 }
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -171,13 +164,13 @@ export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLa
   }
 
   /** A drum or dome between screen rows `yb` and `yt`, in upright strips of its outline. */
-  function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, center: number, mpp: number, heading: number, yb: number, yt: number, color: Rgb, footPx: number | null): void {
+  function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, center: number, mpp: number, heading: number, yb: number, yt: number, color: Rgb, footPx: number | null, sun: Sun): void {
     const r = s.width / 2 / mpp;
     const topR = s.topWidth / 2 / mpp;
     for (let i = 0; i < ROUND_STRIPS; i++) {
       const a = (i / ROUND_STRIPS) * 2 - 1;
       const b = ((i + 1) / ROUND_STRIPS) * 2 - 1;
-      ctx.fillStyle = rgb(color, roundLight((a + b) / 2, heading));
+      ctx.fillStyle = rgb(color, roundLight((a + b) / 2, heading, sun));
       ctx.beginPath();
       if (s.shape === 'dome') {
         ctx.moveTo(center + a * r, yb);
@@ -216,18 +209,18 @@ export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLa
   }
 
   /** One whole solid, walls and columns. */
-  function paintSolid(ctx: CanvasRenderingContext2D, s: LandmarkSolid, w: SliceWindow, yb: number, yt: number, color: Rgb, footPx: number | null): void {
+  function paintSolid(ctx: CanvasRenderingContext2D, s: LandmarkSolid, w: SliceWindow, yb: number, yt: number, color: Rgb, footPx: number | null, sun: Sun): void {
     const mpp = metersPerColumn(w);
     const center = ((s.x - w.origin.x) * Math.sin(w.heading) + (s.y - w.origin.y) * Math.cos(w.heading)) / mpp;
     const round = s.shape === 'drum' || s.shape === 'dome';
-    const faces = round ? [] : sideFaces(s, w.origin.x, w.origin.y, w.heading);
-    if (round) paintRound(ctx, s, center, mpp, w.heading, yb, yt, color, footPx);
+    const faces = round ? [] : sideFaces(s, w.origin.x, w.origin.y, w.heading, sun);
+    if (round) paintRound(ctx, s, center, mpp, w.heading, yb, yt, color, footPx, sun);
     else paintFaces(ctx, faces, mpp, yb, yt, color, footPx);
     paintColumns(ctx, s, faces, center, mpp, yb, yt, color);
   }
 
   /** Every solid whose middle is between `lo` and `hi` to the left of the line. */
-  function outlines(ctx: CanvasRenderingContext2D, view: Size, zoom: number, base: number, w: SliceWindow, lo: number, hi: number, haze: Rgb, amount: number, footPx: number | null): void {
+  function outlines(ctx: CanvasRenderingContext2D, view: Size, zoom: number, base: number, w: SliceWindow, lo: number, hi: number, haze: Rgb, amount: number, footPx: number | null, sun: Sun): void {
     const mpp = metersPerColumn(w);
     // Farthest first, so a nearer tower covers one behind it.
     for (const l of farthestFirst(near(view, w, lo, hi), w)) {
@@ -239,7 +232,7 @@ export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLa
         const yb = heightToY(view, zoom, l.ground + s.bottom, base);
         const yt = heightToY(view, zoom, l.ground + s.top, base);
         // A solid standing on the ground runs on down, to meet terrain drawn after it.
-        paintSolid(ctx, s, w, yb, yt, mix(landmarkColor(s.material), haze, amount), s.bottom === 0 ? footPx : null);
+        paintSolid(ctx, s, w, yb, yt, mix(landmarkColor(s.material), haze, amount), s.bottom === 0 ? footPx : null, sun);
       }
     }
   }
@@ -292,18 +285,18 @@ export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLa
   }
 
   return {
-    drawSkyline(ctx, view, craft, zoom, base, layer, haze) {
-      outlines(ctx, view, zoom, base, sliceWindow(craft, view, zoom, layer.k), layer.nearM, layer.farM, haze, layer.haze, null);
+    drawSkyline(ctx, view, craft, zoom, base, layer, haze, sun) {
+      outlines(ctx, view, zoom, base, sliceWindow(craft, view, zoom, layer.k), layer.nearM, layer.farM, haze, layer.haze, null, sun);
     },
-    drawBeside(ctx, view, craft, zoom, base, haze) {
+    drawBeside(ctx, view, craft, zoom, base, haze, sun) {
       const w = sliceWindow(craft, view, zoom);
-      outlines(ctx, view, zoom, base, w, -SIDE_BUILDING_BESIDE_M, SIDE_LANDMARK_BEHIND_M, haze, SIDE_LANDMARK_HAZE, view.height);
+      outlines(ctx, view, zoom, base, w, -SIDE_BUILDING_BESIDE_M, SIDE_LANDMARK_BEHIND_M, haze, SIDE_LANDMARK_HAZE, view.height, sun);
       for (const l of near(view, w, -SIDE_BUILDING_BESIDE_M, SIDE_LANDMARK_BEHIND_M)) {
         posts(ctx, view, zoom, base, w, l);
         wires(ctx, view, zoom, base, w, l, haze);
       }
     },
-    drawCrossed(ctx, view, craft, zoom, base) {
+    drawCrossed(ctx, view, craft, zoom, base, sun) {
       const w = sliceWindow(craft, view, zoom);
       const mpp = metersPerColumn(w);
       const dx = Math.sin(w.heading);
@@ -333,7 +326,7 @@ export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLa
           // Underneath, so no column is left bare where a face is narrower than a pixel.
           ctx.fillStyle = rgb(color);
           ctx.fillRect(first, 0, last - first + 1, view.height);
-          paintSolid(ctx, s, w, yb, Math.round(heightToY(view, zoom, l.ground + s.top, base)), color, null);
+          paintSolid(ctx, s, w, yb, Math.round(heightToY(view, zoom, l.ground + s.top, base)), color, null, sun);
           ctx.restore();
           ctx.fillStyle = rgb(color, 0.5);
           for (const c of columns) if (yb > c.top) ctx.fillRect(c.x, c.top, 1, 1);

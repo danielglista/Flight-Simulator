@@ -1,24 +1,32 @@
 import { describe, expect, it } from 'vitest';
+import { FIXED_SUN, type Sun } from '../src/config/sun';
 import type { LandmarkSolid } from '../src/sim/world/mapFile';
 import { landmarkColor, postPoints, solidFaces, solidShadow, overheadSolids, boxesMeet, worldBox } from '../src/views/landmarkLayer';
 
 const s: LandmarkSolid = { x: 0, y: 0, width: 10, depth: 10, topWidth: 6, topDepth: 6, bottom: 0, top: 40, material: 'marble-upper' };
+const from = (deg: number): Sun => ({ ...FIXED_SUN, azimuth: (deg * Math.PI) / 180 });
 
 describe('landmarks from above', () => {
-  it('shows four faces, lit from the northwest, around the top', () => {
-    const { faces, top } = solidFaces(s);
+  it('shows four faces, lit from the southwest, around the top', () => {
+    const { faces, top } = solidFaces(s, FIXED_SUN);
     expect(top).toEqual([[-3, -3], [3, -3], [3, 3], [-3, 3]]);
     const [south, east, north, west] = faces.map((f) => f.light);
-    expect(north!).toBeGreaterThan(south!);
+    expect(south!).toBeGreaterThan(north!);
     expect(west!).toBeGreaterThan(east!);
     expect(faces[0]!.points).toEqual([[-5, -5], [5, -5], [3, -3], [-3, -3]]);
   });
-  it('casts a shadow to the southeast, longer for a taller solid', () => {
-    const reach = (top: number) => Math.max(...solidShadow({ ...s, top }).map(([x]) => x));
+  it('casts a shadow to the northeast, longer for a taller solid', () => {
+    const reach = (top: number) => Math.max(...solidShadow({ ...s, top }, FIXED_SUN).map(([x]) => x));
     expect(reach(40)).toBeGreaterThan(15);
     expect(reach(80)).toBeGreaterThan(reach(40));
-    expect(Math.min(...solidShadow(s).map(([x]) => x))).toBeCloseTo(-5, 6);
-    expect(Math.min(...solidShadow(s).map(([, y]) => y))).toBeLessThan(-15);
+    expect(Math.min(...solidShadow(s, FIXED_SUN).map(([x]) => x))).toBeCloseTo(-5, 6);
+    expect(Math.max(...solidShadow(s, FIXED_SUN).map(([, y]) => y))).toBeGreaterThan(15);
+  });
+  it('turns the lit faces and the shadow with the sun', () => {
+    const [south, east, north, west] = solidFaces(s, from(90)).faces.map((f) => f.light);
+    expect(east!).toBeGreaterThan(west!);
+    expect(south!).toBeCloseTo(north!, 6);
+    expect(Math.min(...solidShadow(s, from(90)).map(([x]) => x))).toBeLessThan(-15);
   });
   it('spaces the flag poles around their circle, and marks an unknown material', () => {
     const poles = postPoints({ x: 10, y: 20, radius: 15, count: 4, height: 3 });

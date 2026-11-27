@@ -33,6 +33,7 @@ import { NO_CALLOUTS, calloutSentence, gearPrompt, remainingOnAny, stepCallouts,
 import type { VSpeeds } from './sim/flight/vspeeds';
 import { speedMarks } from './views/gauges/airspeed';
 import { createSideView } from './views/sideView';
+import { FIXED_SUN } from './config/sun';
 import { bestApproach, type ApproachGuide } from './views/approach';
 import { routeFor } from './views/route';
 import { magneticVariation } from './views/magnetic';
@@ -373,7 +374,7 @@ const currentPanel = (): PanelState => {
   });
 };
 
-topView.warm();
+topView.warm(FIXED_SUN);
 sideView.warm();
 
 const panels = initPanels({
@@ -399,6 +400,7 @@ const panels = initPanels({
       },
       follow.following,
       bugDeg,
+      FIXED_SUN,
       guide,
       routeFor(grid.airports, loop.state.start),
       runwayEnd(grid.airports, runwayMenu?.selected ?? null),
@@ -411,7 +413,7 @@ const panels = initPanels({
     syncFrame();
     const changed = size.width !== sideSize.width || size.height !== sideSize.height;
     sideSize = { width: size.width, height: size.height };
-    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, takeoffHud, guide, { on: loop.state.autopilot.alt, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) }, variationAt(currentCraft()));
+    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, FIXED_SUN, takeoffHud, guide, { on: loop.state.autopilot.alt, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) }, variationAt(currentCraft()));
     // The top view marks exactly what this panel shows, so it follows our size.
     // Redraw only on a change, so the two panels cannot trigger each other forever.
     if (changed || !sideSized) {
