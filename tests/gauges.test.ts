@@ -379,7 +379,7 @@ describe('autopilot on the panel (D4)', () => {
   const air = craft({ z: 200, speed: 90, heading: 90 * DEG });
   const ft = displayedAltitudeFt(200, SCALES);
   const ias0 = 90 * Math.sqrt(densityRatio(200, SCALES.altitude));
-  const ap = (patch: Partial<Autopilot> = {}): Autopilot => ({ on: true, spd: true, headingTarget: 90 * DEG, targetZ: 200, targetIas: ias0, notice: null, ...patch });
+  const ap = (patch: Partial<Autopilot> = {}): Autopilot => ({ hdg: true, alt: true, spd: true, headingTarget: 90 * DEG, targetZ: 200, targetIas: ias0, notice: null, ...patch });
   const lights = (a: Autopilot, c = air) => buildPanelState(c, SCALES, DEFAULT_TUNING, { ...input, autopilot: a }).lights;
 
   it('all four lamps are dark with the autopilot off', () => {
@@ -398,7 +398,7 @@ describe('autopilot on the panel (D4)', () => {
     expect(lights(ap())).toMatchObject({ spd: 'green' });
     expect(lights(ap({ targetIas: ias0 + 5 }))).toMatchObject({ spd: 'amber' }); // 5 m/s is about 10 kt
     expect(lights(ap({ targetIas: 30 }))).toMatchObject({ spd: 'amber' });
-    expect(lights(ap({ on: false }))).toMatchObject({ ap: false, hdg: 'off', alt: 'off', spd: 'green' });
+    expect(lights(ap({ hdg: false, alt: false }))).toMatchObject({ ap: true, hdg: 'off', alt: 'off', spd: 'green' });
   });
 
   it('the speed bug shows only while speed hold is on, and everything is dark after a crash', () => {
@@ -425,7 +425,7 @@ describe('autopilot notices', () => {
   });
   it('the screen-reader sentence names the state and the notice', () => {
     expect(apSentence(AUTOPILOT_OFF, 0)).toBe('');
-    expect(apSentence({ ...AUTOPILOT_OFF, on: true, spd: true }, 0)).toBe(', autopilot on, speed hold on');
+    expect(apSentence({ ...AUTOPILOT_OFF, hdg: true, alt: true, spd: true }, 0)).toBe(', heading hold on, altitude hold on, speed hold on');
     expect(apSentence({ ...AUTOPILOT_OFF, notice: notice('dropped', 'TERRAIN') }, 110)).toBe(', autopilot off: terrain');
   });
 });

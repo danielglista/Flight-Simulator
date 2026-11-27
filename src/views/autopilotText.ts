@@ -29,6 +29,6 @@ export function apNoticeText(notice: ApNotice | null, tick: number): ApNoticeTex
 /** The autopilot's part of the screen-reader sentence (empty when nothing is on and no notice shows). */
 export function apSentence(ap: Autopilot, tick: number): string {
   const notice = apNoticeText(ap.notice, tick);
-  const parts = [ap.on ? 'autopilot on' : '', ap.spd ? 'speed hold on' : '', notice ? notice.text.toLowerCase().replace('ap off', 'autopilot off').replace('ap refused', 'autopilot refused') : ''].filter(Boolean);
+  const parts = [ap.hdg ? 'heading hold on' : '', ap.alt ? 'altitude hold on' : '', ap.spd ? 'speed hold on' : '', notice ? notice.text.toLowerCase().replace('ap off', 'autopilot off').replace('ap refused', 'autopilot refused') : ''].filter(Boolean);
   return parts.length ? `, ${parts.join(', ')}` : '';
 }

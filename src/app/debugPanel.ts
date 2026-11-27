@@ -173,7 +173,7 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
       `energy    ${(c.z + (c.speed * c.speed) / (2 * GRAVITY)).toFixed(1)} m (z + V2/2g)`,
       `brakes    ${s.controls.brake ? 'held' : 'off'}${c.onGround ? (spoilersOut(c.lever) ? ', spoilers out' : '') : ''}, limit ${s.tuning.touchdownSinkMs.toFixed(1)} m/s sink`,
       `touchdown ${s.touchdown ? `${s.touchdown.sink.toFixed(1)} m/s sink, ${s.touchdown.speed.toFixed(1)} m/s, bank ${(s.touchdown.bank * DEG).toFixed(1)} deg, pitch ${(s.touchdown.pitch * DEG).toFixed(1)} deg, ${s.touchdown.kind}` : 'none'}`,
-      `autopilot ${s.autopilot.on ? 'HDG+ALT on' : 'off'}, speed hold ${s.autopilot.spd ? 'on' : 'off'}; targets ${((s.autopilot.headingTarget * 180) / Math.PI).toFixed(0)} deg, ${(s.autopilot.targetZ).toFixed(0)} m z, ${s.autopilot.targetIas.toFixed(1)} m/s ias`,
+      `autopilot HDG ${s.autopilot.hdg ? 'on' : 'off'}, ALT ${s.autopilot.alt ? 'on' : 'off'}, SPD ${s.autopilot.spd ? 'on' : 'off'}; targets ${((s.autopilot.headingTarget * 180) / Math.PI).toFixed(0)} deg, ${(s.autopilot.targetZ).toFixed(0)} m z, ${s.autopilot.targetIas.toFixed(1)} m/s ias`,
       `stability ${s.stableTicks} settled steps${s.autopilot.notice ? `, last notice ${s.autopilot.notice.kind} ${s.autopilot.notice.reason} at tick ${s.autopilot.notice.tick}` : ''}`,
       `controls  turn ${s.controls.turn}, throttle ${s.controls.throttle}, pitch ${s.controls.pitch}, wings level ${s.controls.level ? 'on' : 'off'}`,
     ];

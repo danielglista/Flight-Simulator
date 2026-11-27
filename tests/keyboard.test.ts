@@ -49,9 +49,9 @@ describe('heading bug keys', () => {
 });
 
 describe('autopilot keys (D4)', () => {
-  it('Z, X, comma and period are one-shot actions; comma and period repeat', () => {
+  it('Z, comma and period are one-shot actions; comma and period repeat', () => {
     expect(actionFor({ code: 'KeyZ' })).toBe('KeyZ');
-    expect(actionFor({ code: 'KeyX' })).toBe('KeyX');
+    expect(actionFor({ code: 'KeyX' })).toBeNull();
     expect(actionFor({ code: 'KeyZ', repeat: true })).toBeNull();
     expect(actionFor({ code: 'Comma', repeat: true })).toBe('Comma');
     expect(actionFor({ code: 'Period', repeat: true })).toBe('Period');

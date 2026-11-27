@@ -7,7 +7,7 @@ import { autopilotOutput } from './flight/autopilot';
 import { stability } from './flight/stability';
 import { densityRatio } from './flight/forces';
 import { landed, stepGround } from './flight/ground';
-import { AIR_START, AUTOPILOT_OFF, craftAt, type Autopilot, type Axis, type Craft, type FlapLever, type SimState, type StartSpec } from './state';
+import { AIR_START, AUTOPILOT_OFF, apActive, craftAt, type Autopilot, type Axis, type Craft, type FlapLever, type SimState, type StartSpec } from './state';
 import type { GroundKind } from './world/groundKind';
 import { topOf, type ObstacleFn } from './world/obstacles';
 
@@ -46,11 +46,14 @@ function cleanStart(s: StartSpec, world: SimWorld): StartSpec | null {
   };
 }
 
-const withOn = (a: Autopilot, on: boolean): Autopilot => (a.on === on ? a : { ...a, on });
-const withSpd = (a: Autopilot, spd: boolean): Autopilot => (a.spd === spd ? a : { ...a, spd });
+type ApModes = Partial<Pick<Autopilot, 'hdg' | 'alt' | 'spd'>>;
+/** The same autopilot when nothing changes. */
+const withModes = (a: Autopilot, m: ApModes): Autopilot =>
+  (m.hdg ?? a.hdg) === a.hdg && (m.alt ?? a.alt) === a.alt && (m.spd ?? a.spd) === a.spd ? a : { ...a, ...m };
+const ALL_OFF: ApModes = { hdg: false, alt: false, spd: false };
 const currentIas = (craft: Craft, world: SimWorld): number => clamp(craft.speed * Math.sqrt(densityRatio(craft.z, world.altitudeScale)), AP_IAS_MIN, AP_IAS_MAX);
 /** Everything off, targets and the notice cleared; a crash, restart, start, place or pointer rotate does this. */
-const autopilotCleared = (a: Autopilot): Autopilot => (a === AUTOPILOT_OFF || (!a.on && !a.spd && a.notice === null) ? a : AUTOPILOT_OFF);
+const autopilotCleared = (a: Autopilot): Autopilot => (a === AUTOPILOT_OFF || (!apActive(a) && a.notice === null) ? a : AUTOPILOT_OFF);
 
 const startCraft = (s: StartSpec, world: SimWorld): Craft => craftAt(s, world.heightAt(s.x, s.y));
 
@@ -65,19 +68,19 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
         const v = toAxis(c.value);
         if (v !== null) {
           controls = { ...controls, [c.kind]: v, ...(c.kind === 'turn' && v !== 0 ? { level: false } : {}) };
-          // The player's hand overrides: a stick key drops heading and altitude together, the throttle drops speed hold.
-          if (v !== 0) autopilot = c.kind === 'throttle' ? withSpd(autopilot, false) : withOn(autopilot, false);
+          // The player's hand overrides only its own mode: roll drops heading, pitch altitude, throttle speed.
+          if (v !== 0) autopilot = withModes(autopilot, c.kind === 'turn' ? { hdg: false } : c.kind === 'pitch' ? { alt: false } : { spd: false });
         }
         break;
       }
       case 'level':
         // Ignored on the ground, where there is no bank to level.
         if (!controls.level && !craft.onGround) controls = { ...controls, level: true };
-        autopilot = withOn(autopilot, false);
+        autopilot = withModes(autopilot, { hdg: false });
         break;
       case 'autopilot': {
         if (!c.on) {
-          autopilot = withOn(withSpd(autopilot, false), false);
+          autopilot = withModes(autopilot, ALL_OFF);
         } else if (Number.isFinite(c.heading) && Number.isFinite(c.z)) {
           const s = stability({ craft, crash, tuning }, world);
           const keyHeld = controls.turn !== 0 || controls.pitch !== 0 || controls.throttle !== 0 || controls.level;
@@ -86,7 +89,8 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
           else {
             autopilot = {
               ...autopilot,
-              on: true,
+              hdg: true,
+              alt: true,
               spd: true,
               headingTarget: wrapHeading(c.heading),
               targetZ: clamp(c.z, 0, CEILING_Z),
@@ -97,14 +101,25 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
         }
         break;
       }
-      case 'autothrottle':
-        if (!c.on) autopilot = withSpd(autopilot, false);
-        else if (!craft.onGround && !crash && !autopilot.spd) autopilot = { ...autopilot, spd: true, targetIas: currentIas(craft, world) };
+      case 'apMode': {
+        if (!c.on) {
+          autopilot = withModes(autopilot, { [c.mode]: false });
+        } else if (c.mode === 'spd') {
+          if (!craft.onGround && !crash && !autopilot.spd) autopilot = { ...autopilot, spd: true, targetIas: currentIas(craft, world) };
+        } else if (!autopilot[c.mode] && (c.mode === 'alt' || Number.isFinite(c.heading))) {
+          const s = stability({ craft, crash, tuning }, world);
+          const keyHeld = c.mode === 'hdg' ? controls.turn !== 0 || controls.level : controls.pitch !== 0;
+          const reason = s.reason ?? (keyHeld ? 'controls' : stableTicks < STABLE_TICKS ? 'UNSETTLED' : null);
+          if (reason) autopilot = { ...autopilot, notice: { tick: state.tick, kind: 'refused', reason } };
+          else if (c.mode === 'alt') autopilot = { ...autopilot, alt: true, targetZ: clamp(craft.z, 0, CEILING_Z), notice: null };
+          else autopilot = { ...autopilot, hdg: true, headingTarget: wrapHeading(c.heading as number), notice: null };
+        }
         break;
+      }
       case 'apTarget': {
         let next = autopilot;
-        if (next.on && c.heading !== undefined && Number.isFinite(c.heading)) next = { ...next, headingTarget: wrapHeading(c.heading) };
-        if (next.on && c.z !== undefined && Number.isFinite(c.z)) next = { ...next, targetZ: clamp(c.z, 0, CEILING_Z) };
+        if (next.hdg && c.heading !== undefined && Number.isFinite(c.heading)) next = { ...next, headingTarget: wrapHeading(c.heading) };
+        if (next.alt && c.z !== undefined && Number.isFinite(c.z)) next = { ...next, targetZ: clamp(c.z, 0, CEILING_Z) };
         if (next.spd && c.ias !== undefined && Number.isFinite(c.ias)) next = { ...next, targetIas: clamp(c.ias, AP_IAS_MIN, AP_IAS_MAX) };
         autopilot = next;
         break;
@@ -213,23 +228,23 @@ export function advance(state: SimState, world: SimWorld): SimState {
   const s = judge(state, world);
   const ap = s.autopilot;
   if (s.craft.onGround) return stepGround(s, world);
-  const out = ap.on || ap.spd ? autopilotOutput(s.craft, ap, s.tuning, world.altitudeScale) : null;
+  const out = apActive(ap) ? autopilotOutput(s.craft, ap, s.tuning, world.altitudeScale) : null;
   const next = stepAir(s, world, out);
   // A crash or touchdown ends it, with no notice: the player knows.
-  if ((next.crash || next.craft.onGround) && (next.autopilot.on || next.autopilot.spd)) return { ...next, autopilot: AUTOPILOT_OFF, stableTicks: 0 };
+  if ((next.crash || next.craft.onGround) && apActive(next.autopilot)) return { ...next, autopilot: AUTOPILOT_OFF, stableTicks: 0 };
   return next;
 }
 
 /** Counts the settled steps and lets go on danger. Returns the same state when nothing changed. */
 function judge(state: SimState, world: SimWorld): SimState {
   const ap = state.autopilot;
-  if (state.craft.onGround && !ap.on && !ap.spd && state.stableTicks === 0) return state;
+  if (state.craft.onGround && !apActive(ap) && state.stableTicks === 0) return state;
   const st = stability(state, world);
   const stableTicks = st.stable ? state.stableTicks + 1 : 0;
-  const dropped = st.danger && (ap.on || ap.spd);
+  const dropped = st.danger && apActive(ap);
   if (!dropped && stableTicks === state.stableTicks) return state;
   const autopilot: Autopilot = dropped
-    ? { ...ap, on: false, spd: false, notice: { tick: state.tick, kind: 'dropped', reason: st.dangerReason ?? 'GROUND' } }
+    ? { ...ap, ...ALL_OFF, notice: { tick: state.tick, kind: 'dropped', reason: st.dangerReason ?? 'GROUND' } }
     : ap;
   return { ...state, autopilot, stableTicks };
 }

@@ -28,7 +28,7 @@ interface Result {
 function fly(s0: SimState, hdg: number, ft: number, secs: number, world: SimWorld = flat): Result {
   const from = altFt(s0);
   let s = engage(s0, hdg, ft, world);
-  expect(s.autopilot.on).toBe(true);
+  expect(s.autopilot).toMatchObject({ hdg: true, alt: true });
   let settle = Infinity;
   let overshoot = 0;
   let spdErr = 0;
@@ -39,7 +39,7 @@ function fly(s0: SimState, hdg: number, ft: number, secs: number, world: SimWorl
     overshoot = Math.max(overshoot, ft > from ? e : -e);
     spdErr = Math.max(spdErr, Math.abs(ias(st) - st.autopilot.targetIas));
     if (stallState(st.craft, st.tuning) !== 'none') warned = true;
-    if (!st.autopilot.on) throw new Error(`dropped at ${i / 60} s: ${JSON.stringify(st.autopilot.notice)}`);
+    if (!st.autopilot.alt) throw new Error(`dropped at ${i / 60} s: ${JSON.stringify(st.autopilot.notice)}`);
   });
   return { settle, overshoot, spdErr, warned, end: s };
 }
@@ -93,14 +93,14 @@ describe('headingError', () => {
 describe('autopilotOutput', () => {
   it('is null for every axis that is off', () => {
     const c = craft({ z: 200, speed: 90, pitch: 0.09 });
-    expect(autopilotOutput(c, { on: false, spd: false, headingTarget: 0, targetZ: 0, targetIas: 0 }, DEFAULT_TUNING, 5)).toEqual({ pitch: null, roll: null, throttle: null });
-    const spdOnly = autopilotOutput(c, { on: false, spd: true, headingTarget: 0, targetZ: 0, targetIas: 100 }, DEFAULT_TUNING, 5);
+    expect(autopilotOutput(c, { hdg: false, alt: false, spd: false, headingTarget: 0, targetZ: 0, targetIas: 0 }, DEFAULT_TUNING, 5)).toEqual({ pitch: null, roll: null, throttle: null });
+    const spdOnly = autopilotOutput(c, { hdg: false, alt: false, spd: true, headingTarget: 0, targetZ: 0, targetIas: 100 }, DEFAULT_TUNING, 5);
     expect(spdOnly.pitch).toBeNull();
     expect(spdOnly.throttle).toBeGreaterThan(0);
   });
   it('every output stays in -1..1', () => {
     const c = craft({ z: 200, speed: 90, pitch: 0.09, bank: 1 });
-    const o = autopilotOutput(c, { on: true, spd: true, headingTarget: 3, targetZ: 0, targetIas: 150 }, DEFAULT_TUNING, 5);
+    const o = autopilotOutput(c, { hdg: true, alt: true, spd: true, headingTarget: 3, targetZ: 0, targetIas: 150 }, DEFAULT_TUNING, 5);
     for (const v of [o.pitch, o.roll, o.throttle]) expect(Math.abs(v ?? 0)).toBeLessThanOrEqual(1);
   });
 });
@@ -156,7 +156,7 @@ describe('closed loop (through the real advance)', () => {
     });
     expect(worst).toBeLessThan(10);
     expect(Math.max(...levers) - Math.min(...levers)).toBeLessThan(0.01);
-    expect(s.autopilot.on).toBe(true);
+    expect(s.autopilot).toMatchObject({ hdg: true, alt: true });
   });
 
   it('is deterministic: the same commands twice give the same state', () => {
@@ -171,7 +171,7 @@ describe('closed loop (through the real advance)', () => {
     for (let sec = 0; sec < 600; sec += 20) {
       s = send(s, [{ kind: 'apTarget', heading: rnd() * 2 * Math.PI, z: ftToZ(a0 - 1000 + rnd() * 3000) }]);
       s = steps(s, 20 * 60, flat, (st, i) => {
-        if (st.autopilot.notice || !st.autopilot.on) throw new Error(`dropped at ${sec + i / 60} s: ${JSON.stringify(st.autopilot.notice)}`);
+        if (st.autopilot.notice || !st.autopilot.alt) throw new Error(`dropped at ${sec + i / 60} s: ${JSON.stringify(st.autopilot.notice)}`);
       });
     }
   }, 60000);
@@ -183,7 +183,7 @@ describe('autopilot commands', () => {
 
   it('engages: heading and altitude hold, speed hold on at the current speed', () => {
     const s = eng(base);
-    expect(s.autopilot).toMatchObject({ on: true, spd: true, notice: null });
+    expect(s.autopilot).toMatchObject({ hdg: true, alt: true, spd: true, notice: null });
     expect(s.autopilot.targetIas).toBeCloseTo(ias(base), 6);
     expect(s.autopilot.headingTarget).toBeCloseTo(45 * DEG, 9);
   });
@@ -192,9 +192,9 @@ describe('autopilot commands', () => {
     const s0 = initialState();
     const at = (n: number) => steps(s0, n);
     expect(at(STABLE_TICKS).stableTicks).toBe(STABLE_TICKS);
-    expect(eng(at(STABLE_TICKS)).autopilot.on).toBe(true);
+    expect(eng(at(STABLE_TICKS)).autopilot.alt).toBe(true);
     const refused = eng(at(STABLE_TICKS - 1));
-    expect(refused.autopilot).toMatchObject({ on: false, notice: { kind: 'refused', reason: 'UNSETTLED' } });
+    expect(refused.autopilot).toMatchObject({ hdg: false, alt: false, notice: { kind: 'refused', reason: 'UNSETTLED' } });
   });
 
   it('is refused with the reason of each stability row', () => {
@@ -207,50 +207,76 @@ describe('autopilot commands', () => {
 
   it('is refused with a key held, and with non-finite targets (silently)', () => {
     const held = send(base, [{ kind: 'pitch', value: 1 }]);
-    expect(eng(held).autopilot).toMatchObject({ on: false, notice: { reason: 'controls' } });
+    expect(eng(held).autopilot).toMatchObject({ hdg: false, alt: false, notice: { reason: 'controls' } });
     const bad = send(base, [{ kind: 'autopilot', on: true, heading: NaN, z: 100 }]);
-    expect(bad.autopilot.on).toBe(false);
+    expect(bad.autopilot.alt).toBe(false);
     expect(bad.autopilot.notice).toBeNull();
   });
 
   it('a command that changes only the autopilot is not lost', () => {
     expect(eng(base)).not.toBe(base);
-    expect(send(eng(base), [{ kind: 'autopilot', on: false }]).autopilot.on).toBe(false);
+    expect(send(eng(base), [{ kind: 'autopilot', on: false }]).autopilot.alt).toBe(false);
   });
 
-  it('overrides: stick keys drop heading and altitude, speed hold stays', () => {
-    for (const cmd of [{ kind: 'turn', value: 1 }, { kind: 'turn', value: -1 }, { kind: 'pitch', value: 1 }, { kind: 'pitch', value: -1 }, { kind: 'level' }] as const) {
-      const s = send(eng(base), [cmd]);
-      expect(s.autopilot, cmd.kind).toMatchObject({ on: false, spd: true, notice: null });
+  it('overrides: each key drops only its own mode', () => {
+    for (const cmd of [{ kind: 'turn', value: 1 }, { kind: 'turn', value: -1 }, { kind: 'level' }] as const) {
+      expect(send(eng(base), [cmd]).autopilot, cmd.kind).toMatchObject({ hdg: false, alt: true, spd: true, notice: null });
     }
-  });
-
-  it('overrides: throttle keys drop speed hold, the autopilot stays', () => {
     for (const value of [1, -1] as const) {
-      expect(send(eng(base), [{ kind: 'throttle', value }]).autopilot).toMatchObject({ on: true, spd: false });
+      expect(send(eng(base), [{ kind: 'pitch', value }]).autopilot).toMatchObject({ hdg: true, alt: false, spd: true });
+      expect(send(eng(base), [{ kind: 'throttle', value }]).autopilot).toMatchObject({ hdg: true, alt: true, spd: false });
     }
-    expect(send(eng(base), [{ kind: 'throttle', value: 0 }]).autopilot).toMatchObject({ on: true, spd: true });
-    expect(send(eng(base), [{ kind: 'turn', value: 0 }]).autopilot.on).toBe(true);
+    expect(send(eng(base), [{ kind: 'turn', value: 0 }, { kind: 'pitch', value: 0 }, { kind: 'throttle', value: 0 }]).autopilot).toMatchObject({ hdg: true, alt: true, spd: true });
   });
 
-  it('off turns everything off; autothrottle works alone', () => {
-    expect(send(eng(base), [{ kind: 'autopilot', on: false }]).autopilot).toMatchObject({ on: false, spd: false });
-    const s = send(base, [{ kind: 'autothrottle', on: true }]);
-    expect(s.autopilot).toMatchObject({ on: false, spd: true });
+  it('off turns everything off; speed hold works alone', () => {
+    expect(send(eng(base), [{ kind: 'autopilot', on: false }]).autopilot).toMatchObject({ hdg: false, alt: false, spd: false });
+    const s = send(base, [{ kind: 'apMode', mode: 'spd', on: true }]);
+    expect(s.autopilot).toMatchObject({ hdg: false, alt: false, spd: true });
     expect(s.autopilot.targetIas).toBeCloseTo(ias(base), 6);
-    expect(send(s, [{ kind: 'autothrottle', on: false }]).autopilot.spd).toBe(false);
-    expect(send({ ...base, craft: { ...base.craft, onGround: true } }, [{ kind: 'autothrottle', on: true }]).autopilot.spd).toBe(false);
+    expect(send(s, [{ kind: 'apMode', mode: 'spd', on: false }]).autopilot.spd).toBe(false);
+    expect(send({ ...base, craft: { ...base.craft, onGround: true } }, [{ kind: 'apMode', mode: 'spd', on: true }]).autopilot.spd).toBe(false);
+  });
+
+  it('altitude hold alone keeps the present altitude through a hand-flown turn', () => {
+    let s = send(base, [{ kind: 'apMode', mode: 'alt', on: true }]);
+    expect(s.autopilot).toMatchObject({ hdg: false, alt: true, spd: false, notice: null });
+    expect(s.autopilot.targetZ).toBeCloseTo(base.craft.z, 9);
+    const heading = s.craft.heading;
+    s = send(s, [{ kind: 'turn', value: 1 }]);
+    s = steps(s, 90);
+    s = send(s, [{ kind: 'turn', value: 0 }]);
+    s = steps(s, 60 * 8);
+    expect(s.autopilot.alt).toBe(true);
+    expect(headingError(heading, s.craft.heading)).toBeGreaterThan(20 * DEG);
+    expect(Math.abs(altFt(s) - altFt(base))).toBeLessThan(60);
+  });
+
+  it('heading hold alone leaves pitch and throttle to the keys', () => {
+    const s = send(base, [{ kind: 'apMode', mode: 'hdg', on: true, heading: 90 * DEG }]);
+    expect(s.autopilot).toMatchObject({ hdg: true, alt: false, spd: false });
+    expect(s.autopilot.headingTarget).toBeCloseTo(90 * DEG, 9);
+    expect(autopilotOutput(s.craft, s.autopilot, s.tuning, 5)).toMatchObject({ pitch: null, throttle: null });
+    expect(send(base, [{ kind: 'apMode', mode: 'hdg', on: true }]).autopilot).toEqual(base.autopilot);
+  });
+
+  it('a single mode is refused for its own held key only', () => {
+    const pitching = send(base, [{ kind: 'pitch', value: 1 }]);
+    expect(send(pitching, [{ kind: 'apMode', mode: 'alt', on: true }]).autopilot).toMatchObject({ alt: false, notice: { reason: 'controls' } });
+    const turning = send(base, [{ kind: 'turn', value: 1 }]);
+    expect(send(turning, [{ kind: 'apMode', mode: 'alt', on: true }]).autopilot.alt).toBe(true);
+    expect(send(turning, [{ kind: 'apMode', mode: 'hdg', on: true, heading: 1 }]).autopilot).toMatchObject({ hdg: false, notice: { reason: 'controls' } });
   });
 
   it('crash, restart, start, place and rotate clear everything', () => {
     for (const cmd of [{ kind: 'place', x: 1000, y: 1000 }, { kind: 'rotate', by: 0.1 }, { kind: 'start', spec: { ...(base.start as StartSpec) } }] as const) {
       const s = send(eng(base), [cmd]);
-      expect(s.autopilot, cmd.kind).toMatchObject({ on: false, spd: false });
+      expect(s.autopilot, cmd.kind).toMatchObject({ hdg: false, alt: false, spd: false });
       expect(s.stableTicks).toBe(0);
     }
     const crashed = steps(eng({ ...base, craft: { ...base.craft, z: 40, pathAngle: -0.5 } }), 600);
     expect(crashed.crash).not.toBeNull();
-    expect(crashed.autopilot).toMatchObject({ on: false, spd: false });
+    expect(crashed.autopilot).toMatchObject({ hdg: false, alt: false, spd: false });
   });
 
   it('apTarget: wraps the heading, clamps z and speed, is ignored for a mode that is off', () => {
@@ -274,28 +300,30 @@ describe('danger drops', () => {
     const cliff: SimWorld = { ...flat, heightAt: (x) => (x > 6000 ? 400 : 0) };
     let s = settled({ x: 4500, y: 0, heading: Math.PI / 2, z: 150 }, cliff);
     s = engage(s, 90, 1000, cliff);
-    expect(s.autopilot.on).toBe(true);
+    expect(s.autopilot).toMatchObject({ hdg: true, alt: true });
     let dropTick = -1;
     s = steps(s, 60 * 40, cliff, (st) => {
-      if (dropTick < 0 && !st.autopilot.on) dropTick = st.tick;
+      if (dropTick < 0 && !st.autopilot.alt) dropTick = st.tick;
     });
     expect(dropTick).toBeGreaterThan(0);
     expect(s.autopilot.notice).toMatchObject({ kind: 'dropped', reason: 'TERRAIN' });
   });
 
-  it('lowering the gear under 150 m lets go (LOW)', () => {
+  it('lowering the gear low down keeps it on; getting too low lets go (LOW)', () => {
     let s = engage(settled({ z: 100 }), 45, 3281 - 400);
-    expect(s.autopilot.on).toBe(true);
     s = send(s, [{ kind: 'gear' }]);
-    s = steps(s, 60 * 10);
-    expect(s.autopilot).toMatchObject({ on: false, spd: false, notice: { kind: 'dropped', reason: 'LOW' } });
+    s = steps(s, 60 * 5);
+    expect(s.autopilot).toMatchObject({ hdg: true, alt: true, notice: null });
+    s = send(s, [{ kind: 'apTarget', z: 0 }]);
+    s = steps(s, 60 * 60);
+    expect(s.autopilot).toMatchObject({ hdg: false, alt: false, spd: false, notice: { kind: 'dropped', reason: 'LOW' } });
   });
 
   it('a tuning change that makes it slow lets go, and the player can fly on without input', () => {
     let s = engage(settled({ speed: 80 }), 45, a0);
     s = tune(s, 'massT', 40);
     s = steps(s, 60);
-    expect(s.autopilot).toMatchObject({ on: false, notice: { kind: 'dropped' } });
+    expect(s.autopilot).toMatchObject({ hdg: false, alt: false, notice: { kind: 'dropped' } });
     expect(['SLOW', 'STALL']).toContain(s.autopilot.notice?.reason);
     s = steps(s, 60 * 5);
     expect(s.crash).toBeNull();

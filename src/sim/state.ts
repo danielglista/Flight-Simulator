@@ -51,9 +51,10 @@ export interface ApNotice {
   readonly reason: ApReason;
 }
 
-/** The autopilot (D4). `on` holds the heading and altitude targets, `spd` the speed target; each can be off alone. */
+/** The autopilot (D4): three modes, each on or off by itself, and their targets. */
 export interface Autopilot {
-  readonly on: boolean;
+  readonly hdg: boolean;
+  readonly alt: boolean;
   readonly spd: boolean;
   /** Radians clockwise from north. */
   readonly headingTarget: number;
@@ -64,7 +65,10 @@ export interface Autopilot {
   readonly notice: ApNotice | null;
 }
 
-export const AUTOPILOT_OFF: Autopilot = { on: false, spd: false, headingTarget: 0, targetZ: 0, targetIas: 0, notice: null };
+export const AUTOPILOT_OFF: Autopilot = { hdg: false, alt: false, spd: false, headingTarget: 0, targetZ: 0, targetIas: 0, notice: null };
+
+/** Whether any mode is on. */
+export const apActive = (a: Pick<Autopilot, 'hdg' | 'alt' | 'spd'>): boolean => a.hdg || a.alt || a.spd;
 
 export interface Controls {
   /** Roll: +1 = bank right (D). Steers on the ground. */

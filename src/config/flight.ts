@@ -142,11 +142,10 @@ export const AP_IAS_MAX = 150;
 /**
  * Stability (D4): the autopilot refuses to engage past the `stable` limits and lets go past the `danger` ones, so it
  * cannot flicker at an edge. Heights are world m above ground, angles degrees, speeds multiples of the level stall speed.
- * With the gear not up it also needs GEAR_AGL_M of height; that equals TAKEOFF_HUD_AGL_M (tests keep them equal).
+ * The gear makes no difference, so the modes can be used on an approach.
  */
 export const STABLE_AGL_M = 45;
 export const DANGER_AGL_M = 30;
-export const GEAR_AGL_M = 150;
 export const STABLE_BANK_DEG = 30;
 export const DANGER_BANK_DEG = 45;
 export const STABLE_PITCH_DEG = 15;

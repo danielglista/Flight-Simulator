@@ -3,7 +3,7 @@ import { AP_CAPTURE_DEG, AP_CAPTURE_FT, AP_CAPTURE_KT, ALT_BUG_RIM_FT, ALT_LONG_
 import type { Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
 import { AP_FLOOR_MULT } from '../config/flight';
-import type { Autopilot } from '../sim/state';
+import { apActive, type Autopilot } from '../sim/state';
 import { powerPct } from './format';
 import { turnNeeded } from './headingBug';
 import type { StallState } from '../sim/flight/aero';
@@ -148,9 +148,9 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
       spoilers: craft.onGround && spoilersOut(craft.lever) && craft.speed > 1,
     },
     lights: { stall: input.crashed || input.stall === 'none' ? 'off' : input.stall, gear: !input.crashed && input.gearWarn, terr: !input.crashed && (input.terr ?? false),
-      ap: !input.crashed && (ap?.on ?? false),
-      hdg: lamp(!input.crashed && (ap?.on ?? false), ap !== undefined && Math.abs(turnNeeded(headingDeg, ap.headingTarget * toDeg)) < AP_CAPTURE_DEG),
-      alt: lamp(!input.crashed && (ap?.on ?? false), ap !== undefined && Math.abs(altFt - displayedAltitudeFt(ap.targetZ, scale)) < AP_CAPTURE_FT),
+      ap: !input.crashed && ap !== undefined && apActive(ap),
+      hdg: lamp(!input.crashed && (ap?.hdg ?? false), ap !== undefined && Math.abs(turnNeeded(headingDeg, ap.headingTarget * toDeg)) < AP_CAPTURE_DEG),
+      alt: lamp(!input.crashed && (ap?.alt ?? false), ap !== undefined && Math.abs(altFt - displayedAltitudeFt(ap.targetZ, scale)) < AP_CAPTURE_FT),
       spd: lamp(!input.crashed && (ap?.spd ?? false), !floorOverrides && Math.abs(kt - targetKt) < AP_CAPTURE_KT),
     },
     spdBugDeg: ap?.spd && !input.crashed ? quantizeDeg(tableAngle(ASI_TABLE, targetKt)) : null,

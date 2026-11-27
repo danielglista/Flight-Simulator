@@ -7,6 +7,7 @@ import { initPanels } from './app/panels';
 import { ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, SPD_BUG_FINE_KT, SPD_BUG_STEP_KT, BUG_FINE_DEG, BUG_STEP_DEG, DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
 import { attachPause } from './app/pause';
 import { createRunwayMenu, type RunwayMenu } from './app/runwayMenu';
+import { createApLamps, type ApLamps, type ApModeName } from './app/apLamps';
 import { runwayEnd } from './views/runwaySelect';
 import { hsiGuide, hsiSentence, type HsiGuide } from './views/hsiData';
 import { fetchWithProgress } from './app/loadMap';
@@ -47,7 +48,7 @@ import { displayedAltitudeFt, indicatedSpeed, knotsToMetersPerSecond, metersPerS
 import { headingError } from './sim/flight/autopilot';
 import { apNoticeText, apSentence } from './views/autopilotText';
 import { heightAboveGround } from './views/format';
-import { AIR_START } from './sim/state';
+import { AIR_START, apActive } from './sim/state';
 import { steerRate } from './sim/flight/ground';
 import { pickStart, startList } from './sim/world/startList';
 import { DEFAULT_TUNING } from './config/motion';
@@ -147,12 +148,28 @@ const moveAltBug = (sign: -1 | 1, fine: boolean): void => {
  * Run on every drawn frame, because the loop drops queued commands on a pause; paused, `send` applies at once.
  */
 const AP_BUG_RESEND_RAD = (0.1 * Math.PI) / 180;
+/** Whether altitude hold was on at the last sync. */
+let altHeld = false;
 function syncAutopilotBugs(): void {
   const ap = loop.state.autopilot;
-  if (!ap.on) return;
+  // Altitude hold just taken: the bug moves to the held altitude, not the plane to the bug.
+  if (ap.alt && !altHeld) altBugFt = Math.round(displayedAltitudeFt(ap.targetZ, scales));
+  altHeld = ap.alt;
+  if (!ap.hdg && !ap.alt) return;
   const heading = bugHeading(loop.state.craft);
   const z = bugWorldZ(altBugFt, scales);
-  if (Math.abs(headingError(ap.headingTarget, heading)) > AP_BUG_RESEND_RAD || Math.abs(ap.targetZ - z) > 1e-6) loop.send({ kind: 'apTarget', heading, z });
+  const headingOff = ap.hdg && Math.abs(headingError(ap.headingTarget, heading)) > AP_BUG_RESEND_RAD;
+  if (headingOff || (ap.alt && Math.abs(ap.targetZ - z) > 1e-6)) loop.send({ kind: 'apTarget', heading, z });
+}
+/** A click on the HDG, ALT or SPD lamp. */
+function toggleApMode(mode: ApModeName): void {
+  const on = !loop.state.autopilot[mode];
+  loop.send({ kind: 'apMode', mode, on, ...(mode === 'hdg' ? { heading: bugHeading(loop.state.craft) } : {}) });
+  if (loop.paused) {
+    syncAutopilotBugs();
+    panels.side.requestDraw();
+    panels.instruments.requestDraw();
+  }
 }
 /** Speed target nudge in knots: the sim's own target moves, so the key repeats are exact. */
 const moveSpeedBug = (sign: -1 | 1, fine: boolean): void => {
@@ -168,6 +185,7 @@ let sideSized = false;
 let requestTop: () => void = () => {};
 // Runway selection (D5C). Made after the panels, whose first draws run before it.
 let runwayMenu: RunwayMenu | null = null;
+let apLamps: ApLamps | null = null;
 
 /**
  * Once per drawn frame (idempotent within one): the zoom phase and easing, and the takeoff HUD. Paused, the zoom snaps
@@ -228,12 +246,9 @@ const keyboard = attachKeyboard({
   Equal: (fine) => moveAltBug(1, fine),
   KeyZ: () => {
     const ap = loop.state.autopilot;
-    if (ap.on) loop.send({ kind: 'autopilot', on: false });
+    // With any mode on, Z is the way out of all of them.
+    if (apActive(ap)) loop.send({ kind: 'autopilot', on: false });
     else loop.send({ kind: 'autopilot', on: true, heading: bugHeading(loop.state.craft), z: bugWorldZ(altBugFt, scales) });
-    if (loop.paused) panels.instruments.requestDraw();
-  },
-  KeyX: () => {
-    loop.send({ kind: 'autothrottle', on: !loop.state.autopilot.spd });
     if (loop.paused) panels.instruments.requestDraw();
   },
   Comma: (fine) => moveSpeedBug(-1, fine),
@@ -356,6 +371,7 @@ const panels = initPanels({
     shownReadout = shownPanel.text;
     drawPanel(ctx, size, shownPanel);
     runwayMenu?.place();
+    apLamps?.place();
   },
   top: (ctx, size) => {
     syncFrame();
@@ -384,7 +400,7 @@ const panels = initPanels({
     syncFrame();
     const changed = size.width !== sideSize.width || size.height !== sideSize.height;
     sideSize = { width: size.width, height: size.height };
-    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, takeoffHud, guide, { on: loop.state.autopilot.on, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) }, variationAt(currentCraft()));
+    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, takeoffHud, guide, { on: loop.state.autopilot.alt, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) }, variationAt(currentCraft()));
     // The top view marks exactly what this panel shows, so it follows our size.
     // Redraw only on a change, so the two panels cannot trigger each other forever.
     if (changed || !sideSized) {
@@ -406,6 +422,12 @@ runwayMenu = createRunwayMenu({
     panels.instruments.requestDraw();
     panels.top.requestDraw();
   },
+});
+apLamps = createApLamps({
+  canvas: panels.instruments.canvas,
+  size: () => panels.instruments.size,
+  autopilot: () => loop.state.autopilot,
+  onToggle: toggleApMode,
 });
 const debug = createDebugPanel({ loop, scales: scales, timing, heightAt: world.heightAt, groundKind: world.groundKind, starts: STARTS, onDisplayChange: () => panels.instruments.requestDraw() });
 

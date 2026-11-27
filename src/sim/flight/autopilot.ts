@@ -23,11 +23,11 @@ export function headingError(from: number, to: number): number {
 }
 
 /**
- * The control law. Pure. ALT and HDG run while `ap.on`, SPD while `ap.spd`. It has no more authority than the keys:
+ * The control law. Pure. ALT runs while `ap.alt`, HDG while `ap.hdg`, SPD while `ap.spd`. It has no more authority than the keys:
  * pitch is a share of the pitch rate, roll of the roll rate, throttle of the lever rate, and load, stall and nose
  * limits still apply in the step.
  */
-export function autopilotOutput(craft: Craft, ap: Pick<Autopilot, 'on' | 'spd' | 'headingTarget' | 'targetZ' | 'targetIas'>, tuning: Tuning, altitudeScale: number): ApOutput {
+export function autopilotOutput(craft: Craft, ap: Pick<Autopilot, 'hdg' | 'alt' | 'spd' | 'headingTarget' | 'targetZ' | 'targetIas'>, tuning: Tuning, altitudeScale: number): ApOutput {
   const sigma = densityRatio(craft.z, altitudeScale);
   const ias = craft.speed * Math.sqrt(sigma);
   const vs = levelStallSpeed(tuning, craft.bank, craft.flaps);
@@ -36,7 +36,7 @@ export function autopilotOutput(craft: Craft, ap: Pick<Autopilot, 'on' | 'spd' |
   let roll: number | null = null;
   let throttle: number | null = null;
 
-  if (ap.on) {
+  if (ap.alt) {
     const [fade0, fade1] = AP_CLIMB_FADE;
     let up = AP_UP_DEG * DEG * clamp((ias - fade0 * vs) / ((fade1 - fade0) * vs), 0, 1);
     let down = AP_DOWN_DEG * DEG;
@@ -48,7 +48,9 @@ export function autopilotOutput(craft: Craft, ap: Pick<Autopilot, 'on' | 'spd' |
     const n = (Math.cos(craft.pathAngle) - (thrust(craft.spool, tuning, sigma) * Math.sin(alpha)) / (m * GRAVITY)) / Math.max(Math.cos(craft.bank), 0.5);
     const nose = path + Math.min(liftAngle(n, craft.speed, sigma, tuning, craft.flaps), (tuning.stallDeg - 4) * DEG);
     pitch = clamp((nose - craft.pitch) / (AP_PITCH_GAIN_DEG * DEG), -1, 1);
+  }
 
+  if (ap.hdg) {
     const bankWanted = clamp(AP_HDG_GAIN * headingError(craft.heading, ap.headingTarget), -AP_BANK_DEG * DEG, AP_BANK_DEG * DEG);
     roll = clamp(((bankWanted - craft.bank) * AP_ROLL_GAIN) / (tuning.rollRateDegS * DEG), -1, 1);
   }

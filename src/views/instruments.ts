@@ -93,6 +93,12 @@ export function hsiOrigin(size: Size): readonly [number, number] {
   return [left + PANEL_CELL * PANEL_COLS, top];
 }
 
+/** Where the lamps strip starts: under the panel's dials. */
+export function lightsOrigin(size: Size): readonly [number, number] {
+  const { left, top } = panelOrigin(size);
+  return [left, top + HSI_SIZE];
+}
+
 /**
  * The panel, centered:
  *   POWER  | SPD | horizon |
@@ -120,7 +126,7 @@ export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelSta
   drawAltimeter(ctx, ...cell(1, 1), s.altLongDeg, s.altShortDeg, t.alt.replace(',', ''), s.altBugDeg);
   drawVsi(ctx, ...cell(2, 1), s.vsDeg, s.vsMode, t.vs);
   drawHsi(ctx, ...hsiOrigin(size), s.headingDeg, s.headingBug, t.hdg, s.hsi);
-  drawLights(ctx, left, top + HSI_SIZE, s.lights);
+  drawLights(ctx, ...lightsOrigin(size), s.lights);
   // Last, over the top of the speed dial and horizon: not in the lamps, so it does not read as a fault.
   if (s.callout) drawCallout(ctx, left + PANEL_CELL * 2, top + 1, s.callout, s.gearPrompt);
 }

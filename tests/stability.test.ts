@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GEAR_AGL_M } from '../src/config/flight';
-import { TAKEOFF_HUD_AGL_M } from '../src/config/display';
+import { DANGER_AGL_M, STABLE_AGL_M } from '../src/config/flight';
 import { DEFAULT_TUNING } from '../src/config/motion';
 import { SCALES } from '../src/config/scales';
 import { densityRatio } from '../src/sim/flight/forces';
@@ -33,14 +32,9 @@ describe('stability', () => {
     expect(at({ z: 25 })).toMatchObject({ danger: true, dangerReason: 'LOW' });
   });
 
-  it('LOW with the gear out: needs 150 m, both ways', () => {
-    expect(at({ z: GEAR_AGL_M + 5, gear: 1 })).toMatchObject({ stable: true });
-    expect(at({ z: GEAR_AGL_M - 5, gear: 1 })).toMatchObject({ stable: false, danger: true, reason: 'LOW' });
-    expect(at({ z: 100, gear: 0.04 })).toMatchObject({ stable: true });
-  });
-
-  it('the gear height equals the takeoff HUD height', () => {
-    expect(GEAR_AGL_M).toBe(TAKEOFF_HUD_AGL_M);
+  it('LOW: the gear makes no difference', () => {
+    expect(at({ z: STABLE_AGL_M + 5, gear: 1 })).toMatchObject({ stable: true });
+    expect(at({ z: DANGER_AGL_M - 5, gear: 1 })).toMatchObject({ danger: true, reason: 'LOW' });
   });
 
   it('BANK: 30 and 45 degrees', () => {

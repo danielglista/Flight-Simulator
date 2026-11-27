@@ -24,6 +24,16 @@ export interface Lights {
   readonly spd: 'off' | 'amber' | 'green';
 }
 
+/** Where lamp `i` sits in the strip, from the strip's top left: x, y, width, height. */
+export const lampRect = (i: number): readonly [number, number, number, number] => [6 + i * 56, 9, 50, 14];
+
+/** The lamps that are also buttons (the autopilot modes), by place in the strip. */
+export const MODE_LAMPS = [
+  { mode: 'hdg', index: 4, name: 'Heading hold' },
+  { mode: 'alt', index: 5, name: 'Altitude hold' },
+  { mode: 'spd', index: 6, name: 'Speed hold' },
+] as const;
+
 /** One place each in a strip, so several warnings can show at once. TRFC (G2) has no slot yet. */
 export function drawLights(ctx: CanvasRenderingContext2D, ox: number, oy: number, l: Lights): void {
   const lamps: readonly (readonly [string, LampState])[] = [
@@ -35,5 +45,8 @@ export function drawLights(ctx: CanvasRenderingContext2D, ox: number, oy: number
     ['ALT', l.alt],
     ['SPD', l.spd],
   ];
-  lamps.forEach(([label, state], i) => drawLamp(ctx, ox + 6 + i * 56, oy + 9, 50, 14, label, state));
+  lamps.forEach(([label, state], i) => {
+    const [x, y, w, h] = lampRect(i);
+    drawLamp(ctx, ox + x, oy + y, w, h, label, state);
+  });
 }

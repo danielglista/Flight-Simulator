@@ -1,5 +1,4 @@
-import { DANGER_AGL_M, DANGER_BANK_DEG, DANGER_PITCH_DEG, DANGER_SLOW_MULT, GEAR_AGL_M, STABLE_AGL_M, STABLE_BANK_DEG, STABLE_PITCH_DEG, STABLE_SLOW_MULT } from '../../config/flight';
-import { GEAR_UP_AT } from '../../config/display';
+import { DANGER_AGL_M, DANGER_BANK_DEG, DANGER_PITCH_DEG, DANGER_SLOW_MULT, STABLE_AGL_M, STABLE_BANK_DEG, STABLE_PITCH_DEG, STABLE_SLOW_MULT } from '../../config/flight';
 import { densityRatio } from './forces';
 import { stallState } from './aero';
 import { terrainAhead } from './terrain';
@@ -31,7 +30,6 @@ export function stability(state: Pick<SimState, 'craft' | 'crash' | 'tuning'>, w
   const { craft, tuning } = state;
   if (craft.onGround || state.crash) return { stable: false, danger: true, reason: 'GROUND', dangerReason: 'GROUND' };
   const agl = craft.z - world.heightAt(craft.x, craft.y);
-  const gearOut = craft.gear > GEAR_UP_AT;
   const ias = craft.speed * Math.sqrt(densityRatio(craft.z, world.altitudeScale));
   const vs = levelStallSpeed(tuning, craft.bank, craft.flaps);
   const bank = Math.abs(craft.bank) / DEG;
@@ -40,7 +38,7 @@ export function stability(state: Pick<SimState, 'craft' | 'crash' | 'tuning'>, w
   const terr = terrainAhead(craft, world.heightAt, false, world.obstacleAt);
   const rows: Readonly<Record<StabilityReason, readonly [boolean, boolean]>> = {
     GROUND: [false, false],
-    LOW: [agl < STABLE_AGL_M || (gearOut && agl < GEAR_AGL_M), agl < DANGER_AGL_M || (gearOut && agl < GEAR_AGL_M)],
+    LOW: [agl < STABLE_AGL_M, agl < DANGER_AGL_M],
     BANK: [bank > STABLE_BANK_DEG, bank > DANGER_BANK_DEG],
     PITCH: [pitch > STABLE_PITCH_DEG, pitch > DANGER_PITCH_DEG],
     STALL: [stalled, stalled],

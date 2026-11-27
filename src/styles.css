@@ -283,6 +283,20 @@ canvas {
   border-color: var(--accent);
 }
 
+/* Autopilot modes (D4): a clear button over each of the HDG, ALT and SPD lamps. */
+.ap-lamp {
+  position: absolute;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ap-lamp:hover,
+.ap-lamp:focus-visible {
+  border-color: var(--accent);
+}
+
 .runway-menu {
   position: fixed;
   z-index: 8;
