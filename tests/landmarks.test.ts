@@ -35,6 +35,13 @@ describe('landmark data', () => {
     expect(clear(1000, 2030)).toBe(true);
     expect(clear(1000, 2033)).toBe(false);
   });
+  it('enlarges a landmark in plan, height and cleared ground alike', () => {
+    const spec = { ...file, landmarks: [{ ...file.landmarks[0]!, enlarge: 2 }] };
+    const [m] = buildLandmarks(spec, () => ({ x: 1000, y: 2000 }), 3);
+    expect(m!.solids[0]!.width).toBeCloseTo((16.8 / 2.5) * 2, 2);
+    expect(m!.solids[2]!.top).toBeCloseTo((169.3 / 3) * 2, 2);
+    expect(landmarkClear(spec, [m!])(1000, 2063)).toBe(true);
+  });
 });
 
 // A shaft 10 wide narrowing to 6 at 40, with a pyramid to 50.
@@ -132,9 +139,9 @@ describe('prisms, the Lincoln Memorial and the Pentagon', () => {
     const d = (239 * 0.92) / 2.5;
     expect(hit(p.x + Math.sin(a) * d, p.y + Math.cos(a) * d)).toBeCloseTo(groundAt(built, scale, p.x, p.y) + 23.5 / 3, 1);
   });
-  it('has the Lincoln Memorial about 10 m tall, with clear air over the pool', () => {
+  it('has the Lincoln Memorial enlarged to about 16 m tall, with clear air over the pool', () => {
     const l = named('lincoln-memorial');
-    expect(hit(l.x, l.y)).toBeCloseTo(groundAt(built, scale, l.x, l.y) + 10, 1);
+    expect(hit(l.x, l.y)).toBeCloseTo(groundAt(built, scale, l.x, l.y) + 16, 1);
     expect(hit(l.x + 150, l.y)).toBeNaN();
   });
 });
@@ -267,5 +274,35 @@ describe('the boxes that let far landmarks be skipped', () => {
       }
     }
     expect(faults).toEqual([]);
+  });
+});
+
+describe('the Jefferson Memorial and the White House', () => {
+  const bytes = Uint8Array.from(atob(mapUrl.slice(mapUrl.indexOf(',') + 1)), (c) => c.charCodeAt(0));
+  const built = midAtlanticGrid(parseMap(bytes.buffer));
+  const hit = createObstacles(built, scale);
+  const named = (id: string) => built.landmarks!.find((l) => l.id === id)!;
+  const top = (id: string, px = 0, py = 0): number => {
+    const l = named(id);
+    const k = 2.5 / (file.landmarks.find((f) => f.id === id)!.enlarge ?? 1);
+    return hit(l.x + px / k, l.y + py / k) - groundAt(built, scale, l.x, l.y);
+  };
+  it('has the memorial enlarged, its dome about 21 m up on dry ground beside the Tidal Basin', () => {
+    expect(top('jefferson-memorial')).toBeCloseTo((39.3 / 3) * 1.6, 1);
+    const m = named('jefferson-memorial');
+    for (const s of m.solids) for (const [x, y] of solidCorners(s, s.width, s.depth)) expect(heightAt(built, scale, x, y)).toBe(groundAt(built, scale, x, y));
+    expect(heightAt(built, scale, m.x + 20, m.y + 30)).toBeGreaterThan(groundAt(built, scale, m.x + 20, m.y + 30));
+  });
+  it('has the White House with its roof enlarged to about 9.6 m up and the porticos to north and south', () => {
+    expect(top('white-house', 20, 0)).toBeCloseTo((18 / 3) * 1.6, 1);
+    expect(top('white-house', 0, 17)).toBeGreaterThan((18 / 3) * 1.6);
+    expect(top('white-house', 0, -20)).toBeCloseTo((19.5 / 3) * 1.6, 1);
+    expect(top('white-house', 0, -60)).toBeNaN();
+  });
+  it('keeps ordinary buildings off both', () => {
+    for (const [id, radius] of [['jefferson-memorial', 60], ['white-house', 78]] as const) {
+      const l = named(id);
+      expect(built.buildings!.filter((b) => Math.hypot(b.x - l.x, b.y - l.y) < radius), id).toEqual([]);
+    }
   });
 });

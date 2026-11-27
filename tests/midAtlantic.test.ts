@@ -47,7 +47,11 @@ describe('the built Mid-Atlantic map', () => {
     const phlCore = near(11194, 11778);
     expect(dcCore.length).toBeGreaterThan(500);
     expect(phlCore.length).toBeGreaterThan(500);
-    expect(Math.max(...dcCore.map((b) => b.height))).toBeLessThanOrEqual(15);
+    // East of the Potomac, DC's limit: 140 ft real is about 14 world m. Rosslyn and Crystal City, west of it, go higher.
+    const tallest = (list: typeof buildings) => Math.max(...list.map((b) => b.height));
+    expect(tallest(dcCore.filter((b) => b.x > 4300))).toBeLessThanOrEqual(14);
+    expect(tallest(buildings.filter((b) => b.x > 3800 && b.x < 4100 && b.y > 7000 && b.y < 7350))).toBeGreaterThan(25); // Rosslyn
+    expect(tallest(buildings.filter((b) => b.x > 4000 && b.x < 4300 && b.y > 5300 && b.y < 6250))).toBeGreaterThan(25); // Crystal City
     expect(Math.max(...phlCore.map((b) => b.height))).toBeGreaterThan(60);
     const wet = buildings.filter((b) => !Number.isNaN(waterLevelAt(grid, scale, b.x, b.y)));
     expect(wet).toEqual([]);

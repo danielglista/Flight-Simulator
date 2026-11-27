@@ -1,6 +1,6 @@
 # E6 Implementation Plan: Landmarks
 
-**Status:** all the landmarks are built (§10): four in DC and six in Philadelphia, with Two Liberty Place in place of the Comcast Center. All but the Monument wait for your judgment of their looks. Towns and the small airport are planned after the landmarks.
+**Status:** all the landmarks are built (§10): six in DC (the Jefferson Memorial and White House added later) and six in Philadelphia, with Two Liberty Place in place of the Comcast Center. All but the Monument wait for your judgment of their looks. Towns and the small airport are planned after the landmarks.
 **Milestone (ARCHITECTURE.md §14):** DC and Philadelphia are told apart at a glance.
 **Starting state:** E5 and E5B built, building approach rule removed, uncommitted. E4 (scale tuning) is not done.
 
@@ -10,8 +10,8 @@ All numbers are provisional. "World" means world meters, "real" means real meter
 
 | In | Out (where it belongs) |
 |---|---|
-| Eight landmarks (§3) as authored shapes | Towns and the small airport (E6, planned later) |
-| Top view, side view, collision for them | White House, Jefferson Memorial, National Cathedral, Walt Whitman Bridge, stadiums (possible extras) |
+| The landmarks of §3 as authored shapes | Towns and the small airport (E6, planned later) |
+| Top view, side view, collision for them | National Cathedral, Walt Whitman Bridge, stadiums (possible extras) |
 | Flying under the Ben Franklin Bridge | Flying under the ordinary highway bridges |
 | | Night lights, final art (H) |
 
@@ -23,7 +23,7 @@ All numbers are provisional. "World" means world meters, "real" means real meter
 | Ben Franklin Bridge | Can be flown under |
 | Outside data | None; positions and dimensions written from general knowledge, corrected by eye |
 | Pictures | Optional, in `tools/raw/landmarks/` (git-ignored), private references only |
-| Size | Footprints about 1:2.5, heights 1:3, each adjustable per landmark. At the core's 1:4 the small ones would be lost among ordinary buildings |
+| Size | Footprints about 1:2.5, heights 1:3, each adjustable per landmark (`enlarge`). At the core's 1:4 the small ones would be lost among ordinary buildings |
 | Cables | Drawn but not solid (proposed) |
 
 ## 3. Landmarks
@@ -34,8 +34,10 @@ Real sizes are approximate. World sizes follow §2.
 |---|---|---|---|---|
 | DC | Washington Monument | Tapered shaft, pyramid tip | 17 x 17 x 169 | 7 x 7 x 57 |
 | DC | Capitol | Long wings, center block, dome | 229 x 107 x 88 | 92 x 43 x 29 |
-| DC | Lincoln Memorial and reflecting pool | White box; flat strip of water | 58 x 36 x 30 | 23 x 14 x 10; pool fitted between memorial and monument |
+| DC | Lincoln Memorial and reflecting pool | White box; flat strip of water | 58 x 36 x 30 | 37 x 22 x 16 (drawn 1.6x); pool fitted between memorial and monument |
 | DC | Pentagon | Five-sided ring with courtyard | 430 across x 23 | 170 across x 8 |
+| DC | Jefferson Memorial | Round colonnade, low dome, portico and steps to the north | 55 across (platform) x 39 | 35 across x 21 (drawn 1.6x) |
+| DC | White House | Main house, north portico, south bow, low wings | house 52 x 26 x 18 | 33 x 17 x 10 (drawn 1.6x) |
 | Philly | City Hall | Square block, courtyard, tall tower | 148 x 143, tower 167 | 59 x 57, tower 56 |
 | Philly | One Liberty Place, Two Liberty Place, Comcast Technology Center | Three towers: chevron crown and spire, pointed crown, stepped with a blade | h 288, 258, 342 | h 96, 86, 114 |
 | Philly | Art Museum | U-shaped, tan | 190 x 120 x 31 | 76 x 48 x 10 |
@@ -106,7 +108,7 @@ Each code step ends with `npm run typecheck`, `npm test` and a look in the brows
 
 ## 9. Done when
 
-All eight are in the game in both views, can be hit, the bridge can be flown under, and you accept how they look.
+All of them are in the game in both views, can be hit, the bridge can be flown under, and you accept how they look.
 
 ## 10. Results
 
@@ -156,3 +158,12 @@ Differences from the plan above:
 | Side view | about 0.1 | about 3 |
 
 With 100 landmarks (copies spread over the map) the figures near one are about the same. With 500, the side view is 6 to 12 ms and the warning about 2 ms. The landmarks in view are drawn afresh each frame; saving their pictures is the next step if that becomes too slow.
+
+**Jefferson Memorial and White House added** (from your pictures; they were listed as possible extras). 47 and 38 solids; no new shape types. `npm run typecheck` passes; guardrails pass; ordinary buildings 16,342 (was 16,353). `npm test`: 793 pass (earlier full runs had long random-input tests time out with another session busy in the same folder).
+- **Jefferson Memorial:** the drawn Tidal Basin covers the real site, so it stands on the south shore, about 8 world m south and west of it, still facing north.
+- **White House:** The wings, lawns, fountains and the Ellipse are from general knowledge, not the pictures.
+**Seen:** both from above and from the north and south by rendering the landmark layers alone; the game loads with a clean console. **Not checked:** flown by hand, the crash, in the running game's views, frame timing.
+
+**White House enlarged**, after your note: 1.6 times in plan and height, grounds included (roof about 9.6 world up, was 6). A landmark entry may now say `enlarge`; its numbers stay real meters. The Ellipse is authored closer in so it stays clear of the monument's grounds. Ordinary buildings 16,337 (was 16,342). `npm run typecheck` and 794 tests pass. **Seen:** from above and from north and south, landmark layers alone. **Not checked:** flown by hand.
+
+**Jefferson and Lincoln Memorials enlarged** 1.6 times, after your note. This replaces the Jefferson size and position given above: it moved to about 45 world m southwest of its real spot, so that it clears the basin and the highway. The Lincoln reflecting pool and oval keep their old place and size on the map and start farther from the memorial (fewer trees); its circular road is a little narrower in radius to stay off the river. Ordinary buildings 16,336. `npm run typecheck` and 794 tests pass; guardrails pass. **Seen:** both from above and from the side, landmark layers alone. **Not checked:** flown by hand.

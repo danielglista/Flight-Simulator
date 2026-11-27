@@ -413,6 +413,7 @@ export function validateLandmarks(data: unknown, cityIds: readonly string[]): La
     const clearAlso = o['clearAlso'] === undefined ? undefined : list(o['clearAlso'], `${p}.clearAlso`).map((q, k) => numbers(q, `${p}.clearAlso[${k}] (landmark ${id})`, 3, 1) as [number, number, number]);
     const extra = {
       ...(o['turn'] === undefined ? {} : { turn: num(o, 'turn', p, { min: -180, max: 180 }) }),
+      ...(o['enlarge'] === undefined ? {} : { enlarge: num(o, 'enlarge', p, { positive: true }) }),
       ...(o['overWater'] === true ? { overWater: true } : {}),
       ...(wires ? { wires } : {}),
       ...(clearAlso ? { clearAlso } : {}),

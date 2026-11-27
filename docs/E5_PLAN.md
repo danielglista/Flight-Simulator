@@ -62,7 +62,7 @@ The map file's JSON meta gains `roads` (world polylines, width, bridge spans) an
 ### 5.3 Buildings
 - Generated from the fixed seed: streets on a grid at the district's angle, rectangles along them, skipping water, roads, parks and airport boundaries.
 - Footprints about 12 to 40 world m, one size everywhere. Height = real height / `buildingHeight` (3).
-- Downtown is real-like per city: DC low and even (about 25 to 45 real), Philadelphia a tall cluster (up to about 240 real, 80 world; was 300 until E6, so the landmark towers stand out).
+- Downtown is real-like per city: DC low and even (25 to 42.5 real, about 140 ft; Rosslyn and Crystal City, across the river, 45 to 91, about 150 to 300 ft), Philadelphia a tall cluster (up to about 240 real, 80 world; was 300 until E6, so the landmark towers stand out).
 - A building stands on the ground height at its center.
 
 ### 5.4 Collision
