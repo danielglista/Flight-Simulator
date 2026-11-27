@@ -1,7 +1,7 @@
 import { PATCH_BLEND_M } from '../../config/map';
 import type { ScaleConfig } from '../../config/scales';
 import { airportContains, blendWeight, fineSurfaceAt, OFF_AIRPORT, onRunway, type Airport, type Runway } from './airport';
-import type { MapBuilding, MapRoad } from './mapFile';
+import type { MapBuilding, MapLandmark, MapRoad } from './mapFile';
 import { Terrain } from './terrain';
 
 /** Cells per chunk side. Chunks are a drawing and loading unit only. */
@@ -34,6 +34,8 @@ export interface WorldGrid {
   readonly roads?: readonly MapRoad[];
   /** City buildings (E5). Not part of `heightAt`. */
   readonly buildings?: readonly MapBuilding[];
+  /** Authored landmarks (E6). Not part of `heightAt`. */
+  readonly landmarks?: readonly MapLandmark[];
 }
 
 /** A finer grid whose southwest corner sits at (x, y) world meters. Its own airports and patches are not used. */

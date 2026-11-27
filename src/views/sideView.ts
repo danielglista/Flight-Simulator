@@ -10,6 +10,7 @@ import { surfaceName } from './surfaceName';
 import { guideText, type ApproachGuide } from './approach';
 import { createPlaneSprites } from './sprite';
 import { createSideBuildings } from './sideBuildings';
+import { createSideLandmarks } from './sideLandmarks';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
 import { formatAgl, formatHeading, heightAboveGround } from './format';
@@ -83,6 +84,7 @@ export interface SideView {
 export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   const sprites = createPlaneSprites();
   const sideBuildings = createSideBuildings(grid, scale);
+  const sideLandmarks = createSideLandmarks(grid, scale);
 
   function drawSky(ctx: CanvasRenderingContext2D, view: Size): void {
     const bandH = Math.ceil(view.height / SKY_BANDS.length);
@@ -249,12 +251,15 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     for (const layer of SIDE_LAYERS) {
       drawProfile(ctx, view, zoom, layerSlice(craft, view, zoom, layer), layer.haze, base);
       sideBuildings.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR);
+      sideLandmarks.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR);
     }
     sideBuildings.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR);
+    sideLandmarks.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR);
     const w = sliceWindow(craft, view, zoom);
     const main = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
     drawProfile(ctx, view, zoom, main, 0, base);
     sideBuildings.drawCrossed(ctx, view, craft, zoom, base);
+    sideLandmarks.drawCrossed(ctx, view, craft, zoom, base);
     return main;
   }
 

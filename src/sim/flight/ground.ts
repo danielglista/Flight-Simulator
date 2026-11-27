@@ -167,7 +167,7 @@ export function stepGround(state: SimState, world: SimWorld): SimState {
   const tick = state.tick + 1;
   const nextControls = controls.level ? { ...controls, level: false } : controls;
 
-  const hitBuilding = (world.obstacleAt?.(x, y) ?? NaN) > z;
+  const hitBuilding = (world.obstacleAt?.(x, y, z) ?? NaN) > z;
   if (hitBuilding || world.groundKind(x, y) === 'rough') {
     return {
       ...state,

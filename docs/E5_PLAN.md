@@ -13,7 +13,7 @@ All numbers are provisional. "World" means world meters, "real" means real meter
 | New ground codes, districts, highways with bridges | Landmarks, small towns, small airport (E6) |
 | Ordinary buildings: top view, side view, collision | Streaming, other cities (after E6) |
 | Terrain warning sees buildings | Terminals and airport buildings (G4) |
-| Obstacle clearance guardrail | Final art, night lights (H) |
+| | Final art, night lights (H) |
 
 ## 2. What was measured
 
@@ -33,7 +33,7 @@ So the approach to DCA 19 flies straight over downtown DC. The 3 deg path is abo
 
 | # | Outline said | Now | Why |
 |---|---|---|---|
-| P1 | No building in an approach corridor | **Downtown DC stays under the approach**, as in the real world; a sloped surface only keeps roofs out of the glide path (§5.5) | The E1 corridor is 1 km wide and 4 km long. At DCA it would clear out the middle of downtown DC |
+| P1 | No building in an approach corridor | **No approach rule for buildings at all** (removed after E5B at your request; §5.5) | Unrealistic; downtown DC sits under the approach, as in the real world |
 | P2 | About 400 buildings per city | **No set count.** Each district type has a density (share of ground under roofs), tuned by eye; the count follows from district size | A fixed number reads as scattered houses at one size and as a limit at another |
 
 ## 4. Data
@@ -62,7 +62,7 @@ The map file's JSON meta gains `roads` (world polylines, width, bridge spans) an
 ### 5.3 Buildings
 - Generated from the fixed seed: streets on a grid at the district's angle, rectangles along them, skipping water, roads, parks and airport boundaries.
 - Footprints about 12 to 40 world m, one size everywhere. Height = real height / `buildingHeight` (3).
-- Downtown is real-like per city: DC low and even (about 25 to 45 real), Philadelphia a tall cluster (up to about 300 real, 100 world).
+- Downtown is real-like per city: DC low and even (25 to 42.5 real, about 140 ft; Rosslyn and Crystal City, across the river, 45 to 91, about 150 to 300 ft), Philadelphia a tall cluster (up to about 240 real, 80 world; was 300 until E6, so the landmark towers stand out).
 - A building stands on the ground height at its center.
 
 ### 5.4 Collision
@@ -71,8 +71,8 @@ The map file's JSON meta gains `roads` (world polylines, width, bridge spans) an
 - The terrain warning (and so the autopilot's let-go) sees roofs.
 - A top-view click inside a building places the plane above its roof.
 
-### 5.5 Clearance guardrail
-For each runway end, out to 4 km from the threshold, within a half width of 150 m growing by 0.1 m per meter: a roof may be no higher than the field height plus the distance times tan 2 deg. The generator lowers or drops a building that breaks it, and the guardrail fails if one remains. At DC this allows about 15 world m at the core's south edge and 40 at its center.
+### 5.5 Approaches
+There is no height limit on buildings near runways. The clearance surface first built here (2 deg from each runway end, lowering or dropping buildings, with a guardrail and tests) was removed after E5B at your request.
 
 ### 5.6 Top view
 - Roofs, and shadows falling southeast like the plane's. Roads under them.
@@ -92,10 +92,10 @@ Each step ends with `npm run typecheck`, `npm test` and a look in the browser.
 |---|---|---|
 | E5.1 | District data, codes 12 to 16, painted by the generator, colors and names | Both cities show district patches in preview and game |
 | E5.2 | Road data, warp, bridges, map meta, top-view drawing | Highways run unbroken through both cities and cross rivers |
-| E5.3 | Building generator, clearance guardrail, map meta, loader | Same inputs give the same file; guardrails pass |
+| E5.3 | Building generator, map meta, loader | Same inputs give the same file; guardrails pass |
 | E5.4 | Top-view building layer | Cities read as cities at every zoom to 10 m/px; frame times hold |
 | E5.5 | Side view | Skylines show; the building ahead is clear |
-| E5.6 | Collision, terrain warning, crash banner | A test flies into a roof and a wall; both finals stay clear |
+| E5.6 | Collision, terrain warning, crash banner | A test flies into a roof and a wall |
 
 ## 7. Files
 
@@ -115,7 +115,7 @@ Each step ends with `npm run typecheck`, `npm test` and a look in the browser.
 |---|---|
 | Determinism | Two builds give identical bytes |
 | Placement | No building on water, a road or airport ground; roof cover near each district's density; the count is reported, not set |
-| Clearance | No roof above the surface; the scripted DCA to PHL flight still lands |
+| Flight | The scripted DCA to PHL flight still lands |
 | Collision | Roof hit, wall hit and a near miss, in tests; no tunneling at 300 m/s |
 | Cost | Load time and top-view frame time over DC recorded before and after |
 | By eye | Both views over both cities; DC and Philadelphia look different |
@@ -131,6 +131,8 @@ Each step ends with `npm run typecheck`, `npm test` and a look in the browser.
 | E4 later changes the scales | Rebuild; retune counts |
 
 ## 10. Results
+
+**Later change:** the clearance surface, its guardrail and its tests, and the check that no building reaches a 3 deg final, were removed (§5.5). Mentions of them below are history.
 
 **E5.1 built.** 31 outlines in `data/map/districts.json`, painted by `tools/map/districts.ts` as the last step of the skeleton; codes 12 to 16 with colors, readout names and no contour lines (park keeps them). Map rebuilt: all guardrails pass, two builds are byte identical, file size unchanged. `npm run typecheck` and 685 tests pass.
 

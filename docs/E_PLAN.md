@@ -290,7 +290,7 @@ Planned in detail in `E5_PLAN.md`, which replaces this outline.
 - Side view: buildings within a corridor of the slice, with skylines in the parallax layers.
 - **Collision:** `obstacleAt(x, y)` is separate from `heightAt`, so ground handling, AGL and landing are unchanged. Included in crash checks and the terrain warning. Crash cause: `building`.
 - Building height at 1:3 will not match the altimeter's 1:5: an object looks taller than its real figure. Accepted.
-- Guardrail: no building in an approach corridor or on water.
+- Guardrail: no building on water.
 
 ### 5.5 E6: landmarks and towns
 

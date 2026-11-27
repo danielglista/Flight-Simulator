@@ -13,19 +13,18 @@ const outDir = join(root, 'tools', 'out');
 const readJson = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 const load = async (p) => (await runnerImport(join(root, p))).module;
 
-const { validateScales, validatePlaces, validateWater, validateDistricts, validateRoads } = await load('tools/map/validate.ts');
+const { validateScales, validatePlaces, validateWater, validateDistricts, validateRoads, validateLandmarks } = await load('tools/map/validate.ts');
 const { placeAll } = await load('tools/map/place.ts');
 const { buildWithPatches } = await load('tools/map/patches.ts');
 const { runGuardrails } = await load('tools/map/guard.ts');
 const { readDbfField, readPolylines } = await load('tools/map/shapefile.ts');
 const { buildRoads, roadClass, roadLength } = await load('tools/map/roads.ts');
 const { cellAt } = await load('tools/map/skeleton.ts');
-const { generateBuildings, createRoadDistance, clearanceBreaks, packBuildings, inRing } = await load('tools/map/buildings.ts');
+const { generateBuildings, createRoadDistance, packBuildings, inRing } = await load('tools/map/buildings.ts');
 const { project } = await load('tools/map/project.ts');
+const { buildLandmarks, landmarkClear } = await load('tools/map/landmarks.ts');
 const { districtCode } = await load('tools/map/districts.ts');
 const { groundAt } = await load('src/sim/world/grid.ts');
-const { buildAirport } = await load('src/sim/world/airport.ts');
-const { midAtlanticDef } = await load('src/sim/world/midAtlantic.ts');
 const { ROAD_WIDTH_M } = await load('src/config/map.ts');
 const { renderTerrain, renderCrop, renderLayered } = await load('tools/map/shade.ts');
 const { decodeFloatPredictorTile, sampleElevation } = await load('tools/map/tiff.ts');
@@ -37,6 +36,7 @@ const places = validatePlaces(readJson('data/map/places.json'));
 const checks = readJson('data/map/checks.json').checks;
 const water = validateWater(readJson('data/map/water.json'));
 const { districts, types: districtTypes } = validateDistricts(readJson('data/map/districts.json'), places.cities.map((c) => c.id));
+const landmarksFile = validateLandmarks(readJson('data/map/landmarks.json'), places.cities.map((c) => c.id));
 const scales = { ...sf.scales, geoDistance: geo };
 const grid = { ...sf.grid, baseCellM: Number(process.argv[3] ?? sf.grid.baseCellM), patchCellM: Number(process.argv[4] ?? sf.grid.patchCellM) };
 const tag = `1-${geo}`;
@@ -162,7 +162,7 @@ const airports = placement.airports.map((a) => {
     ground: (a.airport.footprint ?? []).map((f) => ({ x: f.x * 1000, y: f.y * 1000, length: f.length * 1000, width: f.width * 1000, headingDeg: f.headingDeg })),
   };
 });
-// Buildings (E5.3), placed on the same ground and runways the game will use.
+// Buildings (E5.3), placed on the same ground the game will use.
 const codeAt = (x, y) => {
   for (const k of layersFine) {
     const i = cellAt(k, sk.originKm.x + x / 1000, sk.originKm.y + y / 1000);
@@ -175,7 +175,6 @@ const ground = {
   patches: built.patches.map((p) => ({ id: p.id, x: Math.round((p.skeleton.originKm.x - sk.originKm.x) * 1000), y: Math.round((p.skeleton.originKm.y - sk.originKm.y) * 1000), grid: p.skeleton.grid })),
 };
 const groundWorld = (x, y) => groundAt(ground, { altitude: scales.altitude, geoDistance: geo }, x, y);
-const runways = airports.flatMap((a) => buildAirport(midAtlanticDef(a)).runways.map((r) => ({ a: r.a, b: r.b, fieldM: a.elevationM / scales.altitude })));
 // A district outline through the same warp as its painted ground, long edges subdivided so they bend with it.
 const ringWorld = (d) => {
   const real = [...d.ring, d.ring[0]].map(([lon, lat]) => project(lat, lon));
@@ -190,9 +189,15 @@ const ringWorld = (d) => {
   return out;
 };
 const halfRoad = { major: ROAD_WIDTH_M.major / 2, minor: ROAD_WIDTH_M.minor / 2 };
-const city = generateBuildings({ districts, styles: districtTypes, ringWorld, code: codeAt, ground: groundWorld, roadDistance: createRoadDistance(roads, halfRoad), runways, heightScale: scales.buildingHeight, seed: 20260101 });
+// Landmarks (E6): only the center goes through the warp.
+const landmarks = buildLandmarks(landmarksFile, (lat, lon) => {
+  const r = project(lat, lon);
+  const w = placement.field.toWorld(r.x, r.y);
+  return { x: (w.x - sk.originKm.x) * 1000, y: (w.y - sk.originKm.y) * 1000 };
+}, scales.buildingHeight);
+const city = generateBuildings({ blocked: landmarkClear(landmarksFile, landmarks), districts, styles: districtTypes, ringWorld, code: codeAt, ground: groundWorld, roadDistance: createRoadDistance(roads, halfRoad), heightScale: scales.buildingHeight, seed: 20260101 });
 const buildings = city.buildings;
-console.log(`buildings: ${buildings.length} (${city.lowered} lowered and ${city.dropped} left out for the approaches)`);
+console.log(`buildings: ${buildings.length}`);
 // Count and roof cover per housing density. A district's ground is what still has its color and no later district claims, sampled.
 {
   const rings = districts.map(ringWorld);
@@ -225,8 +230,11 @@ for (const c of placement.cities) {
   const inCore = buildings.filter((b) => Math.abs(b.x - x) <= w / 2 && Math.abs(b.y - y) <= h / 2);
   console.log(`  ${c.city.id} core: ${inCore.length} buildings, roofs cover ${((100 * inCore.reduce((n, b) => n + b.width * b.depth, 0)) / (w * h)).toFixed(1)}% of the core box, tallest ${Math.max(0, ...inCore.map((b) => b.height))} m world`);
 }
-const high = clearanceBreaks(buildings, runways, groundWorld);
-results.push({ name: 'buildings clear the approaches', level: high.length ? 'fail' : 'ok', message: high.length ? `${high.length} roofs reach into a clearance surface, first at ${high[0].x},${high[0].y}` : 'no roof reaches a clearance surface' });
+
+for (const [i, l] of landmarks.entries()) {
+  if (landmarksFile.landmarks[i].overWater) continue;
+  results.push({ name: `landmark ${l.id} on land`, level: wet(l.x, l.y) ? 'fail' : 'ok', message: `at ${Math.round(l.x)},${Math.round(l.y)}, ${wet(l.x, l.y) ? 'in water' : 'dry'}` });
+}
 
 mkdirSync(outDir, { recursive: true });
 const img = renderTerrain(sk, placement, scales.altitude, roads, buildings);
@@ -260,7 +268,7 @@ for (const [name, skel] of [['base', sk], ['patch', dcaPatch.skeleton]]) {
 // elevation (int16 LE), terrain (u8), water (u8).
 const layers = (k) => [Buffer.from(k.grid.elevation.buffer, k.grid.elevation.byteOffset, k.grid.elevation.byteLength), Buffer.from(k.grid.terrain), Buffer.from(k.grid.water)];
 const describe = (k) => ({ cols: k.grid.cols, rows: k.grid.rows, cellM: k.grid.cellSize, originKm: k.originKm });
-const meta = Buffer.from(JSON.stringify({ geoDistance: geo, scales, box: sf.box, grid, airports, roads, buildings: packBuildings(buildings), base: describe(sk), patches: built.patches.map((p) => ({ id: p.id, kind: p.kind, ...describe(p.skeleton) })) }));
+const meta = Buffer.from(JSON.stringify({ geoDistance: geo, scales, box: sf.box, grid, airports, roads, buildings: packBuildings(buildings), landmarks, base: describe(sk), patches: built.patches.map((p) => ({ id: p.id, kind: p.kind, ...describe(p.skeleton) })) }));
 const head2 = Buffer.alloc(10);
 head2.write('FSMAP2', 0, 'ascii');
 head2.writeUInt32LE(meta.length, 6);

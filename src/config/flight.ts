@@ -115,7 +115,7 @@ export const GEAR_WARN_IAS = 85;
 export const TERR_LOOK_S = 8;
 export const TERR_STEP_M = 30;
 /** Spacing of the look for buildings along the same path, world m: finer, as they are narrow. */
-export const TERR_OBSTACLE_STEP_M = 8;
+export const TERR_OBSTACLE_STEP_M = 4;
 export const TERR_CLEAR_M = 10;
 
 /**

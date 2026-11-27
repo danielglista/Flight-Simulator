@@ -20,9 +20,10 @@ export function terrainAhead(craft: Pick<Craft, 'x' | 'y' | 'z' | 'heading' | 's
     const t = (TERR_LOOK_S * i) / (steps * parts);
     const x = craft.x + Math.sin(craft.heading) * ground * t;
     const y = craft.y + Math.cos(craft.heading) * ground * t;
-    const clear = craft.z + climb * t - TERR_CLEAR_M;
+    const z = craft.z + climb * t;
+    const clear = z - TERR_CLEAR_M;
     if (i % parts === 0 && heightAt(x, y) >= clear) return true;
-    if (obstacleAt && obstacleAt(x, y) >= clear) return true;
+    if (obstacleAt && obstacleAt(x, y, z) >= clear) return true;
   }
   return false;
 }

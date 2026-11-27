@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   BUILDING_LAYOUT,
-  clearanceBreaks,
-  clearanceLimit,
   createRoadDistance,
   footprintPoints,
   footprintsOverlap,
@@ -23,7 +21,6 @@ const base: BuildingInput = {
   code: () => Terrain.downtown,
   ground: () => 0,
   roadDistance: () => Infinity,
-  runways: [],
   heightScale: 3,
   seed: 1,
 };
@@ -97,25 +94,5 @@ describe('housing density', () => {
     const inside = generateBuildings(input).buildings.filter((b) => footprintPoints(b).some(([x, y]) => x > 300 && x < 700 && y > 300 && y < 700));
     expect(inside.length).toBe(alone.length);
     expect(inside).toEqual(alone);
-  });
-});
-
-describe('clearance surface', () => {
-  // A runway along x from -1000 to 0, field at 1 m.
-  const runways = [{ a: { x: -1000, y: 500 }, b: { x: 0, y: 500 }, fieldM: 1 }];
-  it('rises from each runway end and widens', () => {
-    expect(clearanceLimit(runways, 400, 500)).toBeCloseTo(1 + 400 * Math.tan((2 * Math.PI) / 180), 6);
-    expect(clearanceLimit(runways, -1400, 500)).toBeCloseTo(clearanceLimit(runways, 400, 500), 6);
-    expect(clearanceLimit(runways, 400, 500 + 200)).toBe(Infinity);
-    expect(clearanceLimit(runways, 1000, 500 + 240)).toBeLessThan(Infinity);
-    expect(clearanceLimit(runways, -500, 900)).toBe(Infinity);
-  });
-  it('lowers or drops what would reach into it, and the guardrail agrees', () => {
-    const open = generateBuildings(base);
-    const under = generateBuildings({ ...base, runways });
-    expect(clearanceBreaks(open.buildings, runways, base.ground).length).toBeGreaterThan(0);
-    expect(under.lowered + under.dropped).toBeGreaterThan(0);
-    expect(under.buildings.length).toBe(open.buildings.length - under.dropped);
-    expect(clearanceBreaks(under.buildings, runways, base.ground)).toEqual([]);
   });
 });

@@ -1,5 +1,6 @@
 import { DEFAULT_GRID, DENSITIES, DISTRICT_TYPES, type BuildingStyle, type Density, type District, type DistrictsFile, type DistrictType, type GridSettings, type HousingLevel, type RoadsFile } from './types';
 import type { Airport, AuthoredRiver, City, FootprintRect, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
+import type { LandmarkDecorSpec, LandmarkSolidSpec, LandmarkSpec, LandmarksFile } from './types';
 import type { WarpShape } from './warp';
 
 export class MapDataError extends Error {}
@@ -325,4 +326,103 @@ export function validateRoads(data: unknown): RoadsFile {
     mergeM: num(root, 'mergeM', 'roads', { min: 0 }),
     bridgeStepM: num(root, 'bridgeStepM', 'roads', { positive: true }),
   };
+}
+
+/** A prism is given by its corners; its box is worked out here. */
+function prism(s: Obj, path: string): LandmarkSolidSpec {
+  const v = s['points'];
+  if (!Array.isArray(v) || v.length < 6 || v.length % 2 !== 0 || !v.every((n) => typeof n === 'number' && Number.isFinite(n))) throw new MapDataError(`${path}.points: expected x, y pairs, at least three`);
+  const points = v as number[];
+  const xs = points.filter((_, i) => i % 2 === 0);
+  const ys = points.filter((_, i) => i % 2 === 1);
+  for (let i = 0; i < xs.length; i++) {
+    const [a, b, c] = [i, (i + 1) % xs.length, (i + 2) % xs.length];
+    const turn = (xs[b]! - xs[a]!) * (ys[c]! - ys[b]!) - (ys[b]! - ys[a]!) * (xs[c]! - xs[b]!);
+    if (turn <= 0) throw new MapDataError(`${path}.points: the outline must be convex and counterclockwise`);
+  }
+  const bottom = num(s, 'bottom', path, { min: 0 });
+  const top = num(s, 'top', path);
+  if (top <= bottom) throw new MapDataError(`${path}: top must be above bottom`);
+  const w = Math.max(...xs) - Math.min(...xs);
+  const d = Math.max(...ys) - Math.min(...ys);
+  const columns = s['columns'] === undefined ? undefined : num(s, 'columns', path, { positive: true });
+  const cap = s['cap'] === undefined ? undefined : str(s, 'cap', path);
+  return { x: (Math.max(...xs) + Math.min(...xs)) / 2, y: (Math.max(...ys) + Math.min(...ys)) / 2, w, d, topW: w, topD: d, bottom, top, material: str(s, 'material', path), shape: 'prism', points, ...(columns ? { columns } : {}), ...(cap ? { cap } : {}) };
+}
+
+export function validateLandmarks(data: unknown, cityIds: readonly string[]): LandmarksFile {
+  const root = obj(data, 'landmarks');
+  const footprintScale = num(root, 'footprintScale', 'landmarks', { positive: true });
+  const list = (v: unknown, path: string): unknown[] => {
+    if (!Array.isArray(v)) throw new MapDataError(`${path}: expected a list`);
+    return v;
+  };
+  const ids = new Set<string>();
+  const landmarks = list(root['landmarks'], 'landmarks.landmarks').map((raw, i): LandmarkSpec => {
+    const p = `landmarks.landmarks[${i}]`;
+    const o = obj(raw, p);
+    const id = str(o, 'id', p);
+    if (ids.has(id)) throw new MapDataError(`${p}.id: duplicate id "${id}"`);
+    ids.add(id);
+    const cityId = str(o, 'cityId', p);
+    if (!cityIds.includes(cityId)) throw new MapDataError(`${p}.cityId: unknown city "${cityId}" (landmark ${id})`);
+    const solids = list(o['solids'], `${p}.solids`).map((q, k): LandmarkSolidSpec => {
+      const path = `${p}.solids[${k}] (landmark ${id})`;
+      const s = obj(q, path);
+      if (s['shape'] === 'prism') return prism(s, path);
+      const w = num(s, 'w', path, { positive: true });
+      const d = num(s, 'd', path, { positive: true });
+      const bottom = num(s, 'bottom', path, { min: 0 });
+      const top = num(s, 'top', path);
+      if (top <= bottom) throw new MapDataError(`${path}: top must be above bottom`);
+      // A solid may narrow upward but not overhang.
+      const solid = { x: num(s, 'x', path), y: num(s, 'y', path), w, d, topW: num(s, 'topW', path, { min: 0, max: w }), topD: num(s, 'topD', path, { min: 0, max: d }), bottom, top, material: str(s, 'material', path) };
+      const shape = s['shape'];
+      if (shape !== undefined && shape !== 'drum' && shape !== 'dome') throw new MapDataError(`${path}.shape: expected drum or dome`);
+      if (shape !== undefined && (w !== d || solid.topW !== solid.topD)) throw new MapDataError(`${path}: a ${shape} is round, so w must equal d and topW topD`);
+      const columns = s['columns'] === undefined ? undefined : num(s, 'columns', path, { positive: true });
+      const cap = s['cap'] === undefined ? undefined : str(s, 'cap', path);
+      return { ...solid, ...(shape ? { shape } : {}), ...(columns ? { columns } : {}), ...(cap ? { cap } : {}), ...(s['base'] === true ? { base: true } : {}) };
+    });
+    const decor = list(o['decor'] ?? [], `${p}.decor`).map((q, k): LandmarkDecorSpec => {
+      const path = `${p}.decor[${k}] (landmark ${id})`;
+      const s = obj(q, path);
+      const material = str(s, 'material', path);
+      const kind = str(s, 'kind', path);
+      if (kind === 'line') {
+        const points = list(s['points'], `${path}.points`);
+        if (points.length < 4 || points.length % 2 !== 0 || !points.every((v) => typeof v === 'number' && Number.isFinite(v))) throw new MapDataError(`${path}.points: expected x, y pairs, at least two`);
+        return { kind, material, width: num(s, 'width', path, { positive: true }), points: points as number[] };
+      }
+      if (kind === 'rect') return { kind, material, x: num(s, 'x', path), y: num(s, 'y', path), w: num(s, 'w', path, { positive: true }), d: num(s, 'd', path, { positive: true }) };
+      const at = { material, x: num(s, 'x', path), y: num(s, 'y', path), radius: num(s, 'radius', path, { positive: true }) };
+      if (kind === 'disc') return { kind, ...at };
+      if (kind === 'ring') return { kind, ...at, width: num(s, 'width', path, { positive: true }) };
+      throw new MapDataError(`${path}.kind: expected disc, ring, line or rect`);
+    });
+    const numbers = (v: unknown, path: string, group: number, least: number): number[] => {
+      const values = list(v, path);
+      if (values.length < group * least || values.length % group !== 0 || !values.every((n) => typeof n === 'number' && Number.isFinite(n))) throw new MapDataError(`${path}: expected groups of ${group} numbers, at least ${least}`);
+      return values as number[];
+    };
+    const wires = o['wires'] === undefined ? undefined : list(o['wires'], `${p}.wires`).map((q, k) => {
+      const path = `${p}.wires[${k}] (landmark ${id})`;
+      const s = obj(q, path);
+      return { material: str(s, 'material', path), points: numbers(s['points'], `${path}.points`, 3, 2) };
+    });
+    const clearAlso = o['clearAlso'] === undefined ? undefined : list(o['clearAlso'], `${p}.clearAlso`).map((q, k) => numbers(q, `${p}.clearAlso[${k}] (landmark ${id})`, 3, 1) as [number, number, number]);
+    const extra = {
+      ...(o['turn'] === undefined ? {} : { turn: num(o, 'turn', p, { min: -180, max: 180 }) }),
+      ...(o['enlarge'] === undefined ? {} : { enlarge: num(o, 'enlarge', p, { positive: true }) }),
+      ...(o['overWater'] === true ? { overWater: true } : {}),
+      ...(wires ? { wires } : {}),
+      ...(clearAlso ? { clearAlso } : {}),
+    };
+    const spec = { ...extra, id, cityId, lat: num(o, 'lat', p, { min: -90, max: 90 }), lon: num(o, 'lon', p, { min: -180, max: 180 }), clearRadiusM: num(o, 'clearRadiusM', p, { min: 0 }), solids, decor };
+    if (o['posts'] === undefined) return spec;
+    const path = `${p}.posts (landmark ${id})`;
+    const s = obj(o['posts'], path);
+    return { ...spec, posts: { x: num(s, 'x', path), y: num(s, 'y', path), radius: num(s, 'radius', path, { positive: true }), count: num(s, 'count', path, { positive: true }), height: num(s, 'height', path, { positive: true }) } };
+  });
+  return { footprintScale, landmarks };
 }
