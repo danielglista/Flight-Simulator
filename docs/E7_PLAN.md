@@ -1,6 +1,6 @@
 # E7 Implementation Plan: Polygon Airports
 
-**Status:** E7.0 trial run, E7.1 to E7.3 built (§10); next is E7.4. The generator works on a convex outline, still fed the `boundaryKm` box, so the map is unchanged.
+**Status:** E7.0 trial run, E7.1 to E7.4 built (§10); next is E7.5. The land bends to the hull of the ground; `boundaryKm` is gone.
 **Milestone:** the airports can be shaped by editing points, and sit in the land around them without a large rectangle pushing it out of the way.
 **Starting state:** E6 landmarks, magnetic headings and approach aids committed. E4 (scale tuning) is not done.
 
@@ -182,3 +182,22 @@ Two trials against the present map, at 1:25. The ground kept its real place; onl
 - `growConvex` was added to `polygon.ts` for the highways' 20 world m margin. Its corners extend until the sides meet, so a very sharp corner would reach far out.
 - Previews draw the outline and the ground polygons.
 - Tests: a rectangle outline reproduces values recorded from the box stamp; DCA's ground hull is exact inside, continuous and fold-free. Typecheck and all 870 tests pass. The game was not looked at, since the map is identical.
+
+### E7.4 (the hull of the ground)
+
+- The outline is the convex hull of all ground points; `boundaryKm` is removed. `stampAnchorKm` must lie inside the hull (DCA's does). Ground shapes are unchanged.
+
+| Measure, world | DCA before / after | PHL before / after |
+|---|---|---|
+| Outline's bounding box, km | 0.60 x 1.50 / 0.38 x 1.20 | 1.70 x 0.70 / 1.68 x 0.63 |
+| Push from the city, m | 550 / 280 | 200 / 180 |
+
+- DCA to PHL, airport to airport: 7.87 to 7.68 km. Fades stay 2 km (none lengthened). Highway pieces 238 to 253 (58 to 67 over water) and buildings 16,336 to 16,191, before the road fix below.
+- No guardrail failures. Typecheck and all 869 tests pass after these test changes:
+  - Trip length lower bound 7.7 to 7.6 km.
+  - Crystal City moved north-east with DCA (still west of the Potomac), so the test's coordinates for it and for "east of the Potomac" were updated.
+  - The patch seam test skips samples within 20 m of water: it failed on a river bank, where the committed map also had steps up to 1.1 m. Away from water the worst step is 0.23 world m.
+  - The synthetic "water past a runway" airport now has two strips, so there is room inside its hull.
+- Seen in the browser: both airports, the Mall, Pentagon and Jefferson Memorial, and the Ben Franklin Bridge; console clean. Not flown by hand.
+- **Fixed:** I-76 (both carriageways), skirting PHL, ran about 600 world m out over the Delaware beside the runway and back. It crosses the east end of the outline, leaves on the river side and then heads east, so both ways round ended in the river. `skirt` in `roads.ts` now cuts such a hairpin: where the road comes back within 250 world m of the reroute, and going round is at least 3 times as far (never more than 2 km), the two are joined straight. About 1.3 km of highway went, all just south of PHL; no other road changed. The map now has 229 highway pieces (55 over water) and 16,198 buildings. Typecheck and all 875 tests pass; seen in the browser.
+

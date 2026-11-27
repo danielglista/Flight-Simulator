@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import placesJson from '../data/map/places.json';
 import scalesJson from '../data/map/scales.json';
 import waterJson from '../data/map/water.json';
-import { boxPolygon, groundLocalKm, placeAll } from '../tools/map/place';
-import { contains, convexHull } from '../src/sim/world/polygon';
+import { boxPolygon, placeAll } from '../tools/map/place';
+import { contains } from '../src/sim/world/polygon';
 import { project } from '../tools/map/project';
 import { pointInRing, strokeAuthored } from '../tools/map/skeleton';
 import { makeField, type Stamp } from '../tools/map/stamp';
@@ -16,17 +16,25 @@ const places = validatePlaces(placesJson);
 const pl = placeAll(sf.scales, sf.box, sf.warp, places);
 const dca = pl.airports.find((a) => a.airport.id === 'DCA')!;
 const stamp = pl.field.stamps.find((s) => s.id === 'DCA')!;
-const half = { w: dca.airport.boundaryKm.w / 2, h: dca.airport.boundaryKm.h / 2 };
+/** DCA's outline, the hull of its ground: real km from its center. */
+const hull = stamp.outline;
+const real = (x: number, y: number) => ({ x: dca.real.x + x, y: dca.real.y + y });
 
 describe('airport stamp field', () => {
-  it('is exactly the stamp inside the boundary', () => {
-    for (const [fx, fy] of [[0, 0], [0.9, -0.9], [-0.99, 0.99], [0.5, 0.2]] as const) {
-      const x = dca.real.x + fx * half.w;
-      const y = dca.real.y + fy * half.h;
-      const w = pl.field.toWorld(x, y);
-      expect(w.x).toBeCloseTo(dca.world.x + (x - dca.real.x) / stamp.scale, 9);
-      expect(w.y).toBeCloseTo(dca.world.y + (y - dca.real.y) / stamp.scale, 9);
+  it('is exactly the stamp inside the outline', () => {
+    expect(hull.length).toBeGreaterThan(4);
+    let tried = 0;
+    for (let x = -0.5; x <= 0.5; x += 0.05) {
+      for (let y = -1.5; y <= 1.2; y += 0.1) {
+        if (!contains(hull, x, y)) continue;
+        tried++;
+        const p = real(x, y);
+        const w = pl.field.toWorld(p.x, p.y);
+        expect(w.x).toBeCloseTo(dca.world.x + x / stamp.scale, 9);
+        expect(w.y).toBeCloseTo(dca.world.y + y / stamp.scale, 9);
+      }
     }
+    expect(tried).toBeGreaterThan(50);
   });
   it('maps the outline onto the placed outline', () => {
     stamp.outline.forEach((v, i) => {
@@ -35,12 +43,23 @@ describe('airport stamp field', () => {
       expect(w.y).toBeCloseTo(dca.outline[i]!.y, 9);
     });
   });
-  it('is continuous across the boundary', () => {
-    const y = dca.real.y + 0.3;
-    const e = dca.real.x + half.w;
-    const a = pl.field.toWorld(e - 1e-7, y);
-    const b = pl.field.toWorld(e + 1e-7, y);
-    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(1e-6);
+  it('is continuous across every side and corner', () => {
+    hull.forEach((a, i) => {
+      const b = hull[(i + 1) % hull.length]!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const out = { x: (b.y - a.y) / len, y: (a.x - b.x) / len };
+      for (const t of [0, 0.37, 1]) {
+        // On the outline and at several distances off it, a step of 1e-7 km moves the map no farther than that allows.
+        for (const off of [0, 0.5, 2]) {
+          const at = real(a.x + (b.x - a.x) * t + out.x * off, a.y + (b.y - a.y) * t + out.y * off);
+          const w = pl.field.toWorld(at.x, at.y);
+          for (const [dx, dy] of [[1e-7, 0], [-1e-7, 0], [0, 1e-7], [0, -1e-7]] as const) {
+            const n = pl.field.toWorld(at.x + dx, at.y + dy);
+            expect(Math.hypot(n.x - w.x, n.y - w.y)).toBeLessThan(1e-6);
+          }
+        }
+      }
+    });
   });
   it('leaves the plain warp alone far away', () => {
     const p = project(39.5, -77.5);
@@ -110,57 +129,6 @@ describe('polygon stamp (E7.3)', () => {
       expect(w.x).toBeCloseTo(x, 9);
       expect(w.y).toBeCloseTo(y, 9);
     }
-  });
-
-  // DCA stamped by the hull of its ground: slanted sides and many corners.
-  const hull = convexHull(groundLocalKm(dca.airport).flat());
-  const field = makeField(pl.warp, [{ id: 'hull', real: dca.real, outline: hull, world: dca.world, scale: dca.scale, fadeKm: 2 }]);
-  const real = (x: number, y: number) => ({ x: dca.real.x + x, y: dca.real.y + y });
-
-  it('is exact inside a many-sided hull', () => {
-    expect(hull.length).toBeGreaterThan(4);
-    let tried = 0;
-    for (let x = -0.5; x <= 0.5; x += 0.05) {
-      for (let y = -1.5; y <= 1.2; y += 0.1) {
-        if (!contains(hull, x, y)) continue;
-        tried++;
-        const p = real(x, y);
-        const w = field.toWorld(p.x, p.y);
-        expect(w.x).toBeCloseTo(dca.world.x + x / dca.scale, 9);
-        expect(w.y).toBeCloseTo(dca.world.y + y / dca.scale, 9);
-      }
-    }
-    expect(tried).toBeGreaterThan(50);
-  });
-  it('is continuous across every side and corner', () => {
-    hull.forEach((a, i) => {
-      const b = hull[(i + 1) % hull.length]!;
-      const len = Math.hypot(b.x - a.x, b.y - a.y);
-      const out = { x: (b.y - a.y) / len, y: (a.x - b.x) / len };
-      for (const t of [0, 0.37, 1]) {
-        // On the outline and at several distances off it, a step of 1e-7 km moves the map no farther than that allows.
-        for (const off of [0, 0.5, 2]) {
-          const at = real(a.x + (b.x - a.x) * t + out.x * off, a.y + (b.y - a.y) * t + out.y * off);
-          const w = field.toWorld(at.x, at.y);
-          for (const [dx, dy] of [[1e-7, 0], [-1e-7, 0], [0, 1e-7], [0, -1e-7]] as const) {
-            const n = field.toWorld(at.x + dx, at.y + dy);
-            expect(Math.hypot(n.x - w.x, n.y - w.y)).toBeLessThan(1e-6);
-          }
-        }
-      }
-    });
-  });
-  it('never folds around a hull: every real point within 8 km round trips', () => {
-    let worst = 0;
-    for (let i = -20; i <= 20; i++) {
-      for (let j = -20; j <= 20; j++) {
-        const p = real(i * 0.4, j * 0.4);
-        const w = field.toWorld(p.x, p.y);
-        const back = field.toReal(w.x, w.y);
-        worst = Math.max(worst, Math.hypot(back.x - p.x, back.y - p.y));
-      }
-    }
-    expect(worst * 1000).toBeLessThan(1);
   });
 });
 

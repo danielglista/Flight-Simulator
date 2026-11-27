@@ -154,10 +154,58 @@ function alongEdge(from: P, to: P, shape: Polygon): P[] {
   return [from, ...passed, to];
 }
 
-/** Reroute a line around a convex shape: each run inside it follows the edge instead. A run with a loose end is cut off. */
+/** A detour that doubles back is cut: where the line comes back within this of the reroute, world m, */
+const SHORTCUT_M = 250;
+/** and going round by way of the reroute is at least this many times the straight way. */
+const SHORTCUT_RATIO = 3;
+/** A cut never drops more road than this, world m, so a road passing by again much later is left alone. */
+const SHORTCUT_MAX_M = 2000;
+
+/**
+ * Where a road leaves a shape only to run back the way the reroute came, join the two straight instead, dropping the
+ * hairpin between. `first` to `last` are the rerouted points of the line; one end of the cut is one of them.
+ */
+function cutHairpin(line: P[], first: number, last: number, shape: Polygon): P[] {
+  const along = [0];
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1] as P;
+    const b = line[i] as P;
+    along.push((along[i - 1] as number) + Math.hypot(b[0] - a[0], b[1] - a[1]));
+  }
+  const clear = (a: P, b: P): boolean => [1, 2, 3, 4, 5, 6, 7, 8, 9].every((k) => !within([a[0] + ((b[0] - a[0]) * k) / 10, a[1] + ((b[1] - a[1]) * k) / 10], shape));
+  let cut: { from: number; to: number; saved: number } | null = null;
+  const consider = (i: number, j: number): void => {
+    const a = line[i] as P;
+    const b = line[j] as P;
+    const chord = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const round = (along[j] as number) - (along[i] as number);
+    if (chord > SHORTCUT_M || round > SHORTCUT_MAX_M || round < SHORTCUT_RATIO * chord || (cut && round - chord <= cut.saved)) return;
+    if (clear(a, b)) cut = { from: i, to: j, saved: round - chord };
+  };
+  for (let e = first; e <= last; e++) {
+    for (let j = last + 1; j < line.length; j++) consider(e, j);
+    for (let i = 0; i < first; i++) consider(i, e);
+  }
+  const found = cut as { from: number; to: number } | null;
+  return found ? [...line.slice(0, found.from + 1), ...line.slice(found.to)] : line;
+}
+
+/**
+ * Reroute a line around a convex shape: each run inside it follows the edge instead, less any hairpin that leaves.
+ * A run with a loose end is cut off.
+ */
 export function skirt(line: readonly P[], shape: Polygon): P[][] {
   const out: P[][] = [];
   let piece: P[] = [];
+  /** First and last index in `piece` of each reroute. */
+  let reroutes: (readonly [number, number])[] = [];
+  const finish = (): void => {
+    // From the last one back, so the earlier indices still hold.
+    let done = piece;
+    for (const [first, last] of [...reroutes].reverse()) if (last < done.length) done = cutHairpin(done, first, last, shape);
+    out.push(done);
+    reroutes = [];
+  };
   let entry: P | null = null;
   for (let i = 0; i < line.length; i++) {
     const p = line[i] as P;
@@ -168,9 +216,12 @@ export function skirt(line: readonly P[], shape: Polygon): P[][] {
     }
     if (prev && within(prev, shape)) {
       const exit = crossing(p, prev, shape);
-      if (entry) piece.push(...alongEdge(entry, exit, shape));
-      else {
-        out.push(piece);
+      if (entry) {
+        const round = alongEdge(entry, exit, shape);
+        reroutes.push([piece.length, piece.length + round.length - 1]);
+        piece.push(...round);
+      } else {
+        finish();
         piece = [exit];
       }
       entry = null;
@@ -178,7 +229,7 @@ export function skirt(line: readonly P[], shape: Polygon): P[][] {
     piece.push(p);
   }
   if (entry) piece.push(entry);
-  out.push(piece);
+  finish();
   return out.filter((q) => q.length > 1);
 }
 

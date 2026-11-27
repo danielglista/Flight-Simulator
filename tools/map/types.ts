@@ -57,13 +57,12 @@ export interface Airport {
   readonly lat: number;
   readonly lon: number;
   readonly size: 'major' | 'small';
-  /** Real km, east-west by north-south. World size is this divided by the airport scale. */
-  readonly boundaryKm: { readonly w: number; readonly h: number };
   /** Main runway axis, degrees clockwise from north. */
   readonly runwayHeadingDeg: number;
   /**
    * Ground the generator levels and keeps dry, and the game uses as airport: runways, apron, terminal.
-   * One or more simple polygons of [lon, lat] corners, either winding.
+   * One or more simple polygons of [lon, lat] corners, either winding. The convex hull of all of them is the
+   * airport's outline: it bends the land and is kept clear (tools/map/place.ts).
    */
   readonly ground: readonly (readonly LonLatPoint[])[];
   /** Field elevation, real m. Defaults to the mean of the surrounding natural ground. */
@@ -76,7 +75,7 @@ export interface Airport {
    */
   readonly stampFadeKm?: number;
   /**
-   * The point of the airport (real km from its center, x east, y north) that stays where the warp
+   * The point of the airport (real km from its center, x east, y north), inside its outline, that stays where the warp
    * and push put it; the stamp grows around it. Defaults to the center. Put it under water that
    * passes beside the airport, so the stamp's extra size pushes the water aside instead of widening it.
    */

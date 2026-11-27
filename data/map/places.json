@@ -37,10 +37,6 @@
       "lat": 38.8512,
       "lon": -77.0415,
       "size": "major",
-      "boundaryKm": {
-        "w": 1.2,
-        "h": 3.0
-      },
       "runwayHeadingDeg": 2,
       "elevationM": 5,
       "stampFadeKm": 2,
@@ -60,10 +56,6 @@
       "lat": 39.9194,
       "lon": -75.1954,
       "size": "major",
-      "boundaryKm": {
-        "w": 3.4,
-        "h": 1.4
-      },
       "runwayHeadingDeg": 80,
       "elevationM": 11,
       "ground": [

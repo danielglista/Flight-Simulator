@@ -2,7 +2,8 @@ import { DEFAULT_GRID, DENSITIES, DISTRICT_TYPES, type BuildingStyle, type Densi
 import type { Airport, AuthoredRiver, City, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
 import type { LandmarkDecorSpec, LandmarkSolidSpec, LandmarkSpec, LandmarksFile } from './types';
 import type { WarpShape } from './warp';
-import { selfCrossing } from '../../src/sim/world/polygon';
+import { contains, selfCrossing } from '../../src/sim/world/polygon';
+import { outlineLocalKm } from './place';
 import { project } from './project';
 
 export class MapDataError extends Error {}
@@ -132,7 +133,6 @@ export function validatePlaces(data: unknown): PlacesFile {
       lat: num(o, 'lat', p, { min: -90, max: 90 }),
       lon: num(o, 'lon', p, { min: -180, max: 180 }),
       size: sz,
-      boundaryKm: size(o, 'boundaryKm', p),
       runwayHeadingDeg: num(o, 'runwayHeadingDeg', p, { min: 0, max: 360 }),
     } as const;
     let extra: { elevationM?: number; pushOverrideKm?: number; stampFadeKm?: number; stampAnchorKm?: { x: number; y: number } } = {};
@@ -144,8 +144,7 @@ export function validatePlaces(data: unknown): PlacesFile {
       const q = `${p}.stampAnchorKm`;
       const an = obj(o['stampAnchorKm'], q);
       const anchor = { x: num(an, 'x', q), y: num(an, 'y', q) };
-      const bk = (base as { boundaryKm: { w: number; h: number } }).boundaryKm;
-      if (Math.abs(anchor.x) > bk.w / 2 || Math.abs(anchor.y) > bk.h / 2) throw new MapDataError(`${q}: must lie inside the boundary (airport ${id})`);
+      if (!contains(outlineLocalKm({ lat: base.lat, lon: base.lon, ground }), anchor.x, anchor.y)) throw new MapDataError(`${q}: must lie inside the outline of the ground (airport ${id})`);
       extra = { ...extra, stampAnchorKm: anchor };
     }
     airports.push({ ...base, ground, ...extra });

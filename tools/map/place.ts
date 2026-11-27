@@ -2,7 +2,7 @@ import { project, type PointKm } from './project';
 import type { Airport, City, MapBox, MapScales, PlacesFile } from './types';
 import { makeField, type MapField, type Stamp } from './stamp';
 import { makeWarp, type Warp, type WarpShape } from './warp';
-import { convexOverlap, type Polygon } from '../../src/sim/world/polygon';
+import { convexHull, convexOverlap, type Polygon } from '../../src/sim/world/polygon';
 
 /** Clear space kept between an airport outline and a city core box, world km. */
 export const AIRPORT_GAP_KM = 0.1;
@@ -69,7 +69,7 @@ export interface Placement {
 }
 
 /** An airport's ground polygons in real km from its center, x east, y north. */
-export function groundLocalKm(a: Airport): Polygon[] {
+export function groundLocalKm(a: Pick<Airport, 'lat' | 'lon' | 'ground'>): Polygon[] {
   const c = project(a.lat, a.lon);
   return a.ground.map((ring) =>
     ring.map(([lon, lat]) => {
@@ -79,9 +79,9 @@ export function groundLocalKm(a: Airport): Polygon[] {
   );
 }
 
-/** The outline in real km from the airport center, counterclockwise. For now the `boundaryKm` box. */
-export function outlineLocalKm(a: Airport): Polygon {
-  return boxPolygon({ cx: 0, cy: 0, w: a.boundaryKm.w, h: a.boundaryKm.h });
+/** The outline in real km from the airport center: the convex hull of all the ground, counterclockwise. */
+export function outlineLocalKm(a: Pick<Airport, 'lat' | 'lon' | 'ground'>): Polygon {
+  return convexHull(groundLocalKm(a).flat());
 }
 
 /** A box's corners, counterclockwise from the southwest. */

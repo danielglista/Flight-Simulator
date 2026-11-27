@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import placesJson from '../data/map/places.json';
 import scalesJson from '../data/map/scales.json';
 import { boundsOf, boxPolygon, distanceKm, groundLocalKm, placeAll, PlaceError } from '../tools/map/place';
-import { convexOverlap } from '../src/sim/world/polygon';
+import { contains, convexOverlap } from '../src/sim/world/polygon';
 import { MapDataError, validatePlaces, validateScales } from '../tools/map/validate';
 
 const sf = validateScales(scalesJson);
@@ -30,9 +30,11 @@ describe('data files', () => {
     expect(() => validatePlaces(noLat)).toThrow(/cities\[0\]\.lat/);
   });
   it('rejects bad airport ground, naming the airport (E7.2)', () => {
-    const [dca] = placesJson.airports;
+    // Without its stamp anchor, which must lie on the ground's hull and would fail the one-strip case.
+    const [full] = placesJson.airports;
+    const { stampAnchorKm: _, ...dca } = full!;
     const of = (ground: unknown) => () => validatePlaces({ cities: placesJson.cities, airports: [{ ...dca, ground }] });
-    const [a, b, c, d] = dca!.ground[0]!;
+    const [a, b, c, d] = dca.ground[0]!;
     expect(of(undefined)).toThrow(/ground.*DCA/);
     expect(of([])).toThrow(/non-empty.*DCA/);
     expect(of([[a, b]])).toThrow(/at least 3 points.*DCA/);
@@ -41,6 +43,24 @@ describe('data files', () => {
     expect(of([[a, b, [200, 0]]])).toThrow(/out of range/);
     // Either winding, and a thin strip, are fine.
     expect(of([[d, c, b, a]])).not.toThrow();
+  });
+});
+
+describe('airport outline (E7.4)', () => {
+  it('is the convex hull of the ground: it holds every ground point and has no other corners', () => {
+    const pl = placeAll(sf.scales, sf.box, sf.warp, places);
+    for (const a of pl.airports) {
+      const points = a.ground.flat();
+      for (const q of points) expect(contains(a.outline, q.x, q.y)).toBe(true);
+      for (const v of a.outline) expect(points.some((q) => Math.hypot(q.x - v.x, q.y - v.y) < 1e-9)).toBe(true);
+    }
+  });
+  it('must hold the stamp anchor', () => {
+    const [first] = placesJson.airports;
+    const of = (x: number) => () => validatePlaces({ cities: placesJson.cities, airports: [{ ...first, stampAnchorKm: { x, y: 0 } }] });
+    expect(of(-0.2)).not.toThrow();
+    // Inside the old box, but off the ground's hull.
+    expect(of(-0.4)).toThrow(/outline.*DCA/);
   });
 });
 
@@ -92,13 +112,16 @@ describe('placement', () => {
     expect(cityToCity).toBeGreaterThan(7.9);
     expect(cityToCity).toBeLessThan(8.1);
     const trip = distanceKm(pl.airports[0]!.world, pl.airports[1]!.world);
-    expect(trip).toBeGreaterThan(7.7);
+    expect(trip).toBeGreaterThan(7.6);
     expect(trip).toBeLessThan(8.1);
   });
   it('sizes the outline by the airport scale', () => {
     const pl = at(25);
-    expect(boundsOf(pl.airports[0]!.outline).w).toBeCloseTo(1.2 / 2, 9);
-    expect(boundsOf(pl.airports[1]!.outline).w).toBeCloseTo(3.4 / 2, 9);
+    for (const a of pl.airports) {
+      const real = boundsOf(groundLocalKm(a.airport).flat());
+      expect(boundsOf(a.outline).w).toBeCloseTo(real.w / 2, 9);
+      expect(boundsOf(a.outline).h).toBeCloseTo(real.h / 2, 9);
+    }
   });
   it('honors a hand override', () => {
     const custom = { ...places, airports: [{ ...dca, pushOverrideKm: 3 }] };

@@ -114,17 +114,17 @@ describe('valueNoise', () => {
 describe('skeleton and guardrails', () => {
   const scales: MapScales = { geoDistance: 25, airportMajor: 1.5, airportSmall: 2, cityCore: 4, altitude: 5, buildingHeight: 3 };
   const box = { south: 38.5, north: 39.3, west: -77.4, east: -76.4 };
-  /** A box of real km about the airport at 38.85, -77, as a ground polygon. */
-  const ground = (w: number, h: number): [number, number][] => {
+  /** A box of real km about the airport at 38.85, -77 (moved `east` real km), as a ground polygon. */
+  const ground = (w: number, h: number, east = 0): [number, number][] => {
     const c = project(38.85, -77.0);
     return ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([i, j]) => {
-      const ll = unproject(c.x + (i * w) / 2, c.y + (j * h) / 2);
+      const ll = unproject(c.x + east + (i * w) / 2, c.y + (j * h) / 2);
       return [ll.lon, ll.lat];
     });
   };
   const places: PlacesFile = {
     cities: [{ id: 'c', name: 'Town', lat: 38.9, lon: -77.0, coreKm: { w: 8, h: 6 } }],
-    airports: [{ id: 'AAA', name: 'Field', cityId: 'c', lat: 38.85, lon: -77.0, size: 'major', boundaryKm: { w: 2, h: 2.5 }, runwayHeadingDeg: 90, ground: [ground(2, 2.5)] }],
+    airports: [{ id: 'AAA', name: 'Field', cityId: 'c', lat: 38.85, lon: -77.0, size: 'major', runwayHeadingDeg: 90, ground: [ground(2, 2.5)] }],
   };
   const placement = placeAll(scales, box, DEFAULT_SHAPE, places);
   const land: PolygonGeo[] = [{ rings: [[[-78, 38], [-76.7, 38], [-76.7, 40], [-78, 40]]] }];
@@ -165,7 +165,7 @@ describe('skeleton and guardrails', () => {
     expect(flat?.level).toBe('ok');
   });
   it('levels only the ground, so water can run past a runway', () => {
-    const fp = { ...places, airports: [{ ...places.airports[0]!, elevationM: 7, ground: [ground(0.2, 1.2)] }] };
+    const fp = { ...places, airports: [{ ...places.airports[0]!, elevationM: 7, ground: [ground(0.2, 1.2, -0.7), ground(0.2, 1.2, 0.7)] }] };
     const pl = placeAll(scales, box, DEFAULT_SHAPE, fp);
     const lake: PolygonGeo[] = [{ rings: [[[-77.1, 38.7], [-76.9, 38.7], [-76.9, 39], [-77.1, 39]]] }];
     const sk = buildSkeleton({ placement: pl, box, land, lakes: lake, rivers: [], elevationAt: hill });

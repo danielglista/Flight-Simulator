@@ -92,6 +92,21 @@ describe('road geometry', () => {
       expect(contains(hexagon, x, y) && q.distance > 0.01).toBe(false);
     }
   });
+  it('cuts the hairpin where a road leaves a shape and runs back the way it was rerouted (E7.4)', () => {
+    const box = [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 200 }, { x: 0, y: 200 }];
+    // In from the north at x 700, out of the south side, then east below the box: the way round is by the east end.
+    const line: [number, number][] = [[700, 300], [700, 100], [700, -50], [850, -50], [920, -50], [990, -50], [1300, -50]];
+    const [out] = skirt(line, box);
+    // Round the northeast corner as before, down the east side, and straight to the road below: not west again.
+    expect(out).toContainEqual([1000, 200]);
+    expect(out).toContainEqual([1000, 0]);
+    expect(out!.some(([x, y]) => x < 900 && y < 150)).toBe(false);
+    expect(out!.at(-1)).toEqual([1300, -50]);
+    // And the same road driven the other way.
+    const [back] = skirt([...line].reverse(), box);
+    expect(back!.some(([x, y]) => x < 900 && y < 150)).toBe(false);
+    expect(back!.at(-1)).toEqual([700, 300]);
+  });
   it('makes one road of two carriageways, and keeps roads that are far apart', () => {
     const build = (gapDeg: number) =>
       buildRoads({

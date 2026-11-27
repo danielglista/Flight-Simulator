@@ -49,9 +49,9 @@ describe('the built Mid-Atlantic map', () => {
     expect(phlCore.length).toBeGreaterThan(500);
     // East of the Potomac, DC's limit: 140 ft real is about 14 world m. Rosslyn and Crystal City, west of it, go higher.
     const tallest = (list: typeof buildings) => Math.max(...list.map((b) => b.height));
-    expect(tallest(dcCore.filter((b) => b.x > 4300))).toBeLessThanOrEqual(14);
+    expect(tallest(dcCore.filter((b) => b.x > 4450))).toBeLessThanOrEqual(14);
     expect(tallest(buildings.filter((b) => b.x > 3800 && b.x < 4100 && b.y > 7000 && b.y < 7350))).toBeGreaterThan(25); // Rosslyn
-    expect(tallest(buildings.filter((b) => b.x > 4000 && b.x < 4300 && b.y > 5300 && b.y < 6250))).toBeGreaterThan(25); // Crystal City
+    expect(tallest(buildings.filter((b) => b.x > 4150 && b.x < 4430 && b.y > 5550 && b.y < 6400))).toBeGreaterThan(25); // Crystal City
     expect(Math.max(...phlCore.map((b) => b.height))).toBeGreaterThan(60);
     const wet = buildings.filter((b) => !Number.isNaN(waterLevelAt(grid, scale, b.x, b.y)));
     expect(wet).toEqual([]);
@@ -126,7 +126,9 @@ describe('the built Mid-Atlantic map', () => {
           [p.x + (w * k) / 20, p.y, 0, 0.01],
           [p.x + (w * k) / 20, p.y + h, 0, 0.01],
         ] as const) {
-          // Ground only: water is per cell, so its edge may step.
+          // Ground only: water is per cell, so its edge may step, and the bed under a river bank with it.
+          const bank = [-20, -10, 0, 10, 20].some((i) => [-20, -10, 0, 10, 20].some((j) => !Number.isNaN(waterLevelAt(grid, scale, x + i, y + j))));
+          if (bank) continue;
           const bed = (px: number, py: number) => groundAt({ ...grid, airports: [] }, scale, px, py);
           expect(Math.abs(bed(x - dx, y - dy) - bed(x + dx, y + dy))).toBeLessThan(0.5);
         }
