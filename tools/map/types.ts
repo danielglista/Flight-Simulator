@@ -243,6 +243,8 @@ export interface LandmarkSpec {
   readonly decor: readonly LandmarkDecorSpec[];
   /** Degrees clockwise the whole landmark is turned about its position; absent for none. */
   readonly turn?: number;
+  /** Draws the whole landmark this many times larger, plan and height, so a small one is not lost; absent for 1. */
+  readonly enlarge?: number;
   /** More ground kept clear of ordinary buildings: x, y, radius, real m before turning. */
   readonly clearAlso?: readonly (readonly [number, number, number])[];
   /** Stands over water on purpose, as a bridge does. */

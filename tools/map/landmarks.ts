@@ -7,8 +7,11 @@ import type { LandmarksFile } from './types';
  * scale, heights by the building height scale.
  */
 export function buildLandmarks(file: LandmarksFile, centerWorld: (lat: number, lon: number) => { readonly x: number; readonly y: number }, heightScale: number): MapLandmark[] {
-  const k = file.footprintScale;
   return file.landmarks.map((l) => {
+    // An enlarged landmark has fewer real meters to the world meter, in plan and in height.
+    const enlarge = l.enlarge ?? 1;
+    const k = file.footprintScale / enlarge;
+    const hk = heightScale / enlarge;
     const c = centerWorld(l.lat, l.lon);
     const turn = l.turn ?? 0;
     const at = turner(turn);
@@ -40,8 +43,8 @@ export function buildLandmarks(file: LandmarksFile, centerWorld: (lat: number, l
         depth: round(s.d / k),
         topWidth: round(s.topW / k),
         topDepth: round(s.topD / k),
-        bottom: round(s.bottom / heightScale),
-        top: round(s.top / heightScale),
+        bottom: round(s.bottom / hk),
+        top: round(s.top / hk),
         material: s.material,
         ...(s.shape ? { shape: s.shape } : {}),
         // Turning keeps corners counterclockwise; round solids look the same turned.
@@ -56,11 +59,11 @@ export function buildLandmarks(file: LandmarksFile, centerWorld: (lat: number, l
         ? {
             wires: l.wires.map((w) => ({
               material: w.material,
-              points: w.points.flatMap((v, i) => (i % 3 === 0 ? [...place(v, w.points[i + 1] as number), round((w.points[i + 2] as number) / heightScale)] : [])),
+              points: w.points.flatMap((v, i) => (i % 3 === 0 ? [...place(v, w.points[i + 1] as number), round((w.points[i + 2] as number) / hk)] : [])),
             })),
           }
         : {}),
-      ...(l.posts ? { posts: { ...xy(l.posts.x, l.posts.y), radius: round(l.posts.radius / k), count: l.posts.count, height: round(l.posts.height / heightScale) } } : {}),
+      ...(l.posts ? { posts: { ...xy(l.posts.x, l.posts.y), radius: round(l.posts.radius / k), count: l.posts.count, height: round(l.posts.height / hk) } } : {}),
     };
   });
 }
@@ -75,10 +78,10 @@ function turner(degrees: number): (x: number, y: number) => [number, number] {
 
 /** Is the point inside the ground a landmark keeps clear of ordinary buildings? */
 export function landmarkClear(file: LandmarksFile, landmarks: readonly MapLandmark[]): (x: number, y: number) => boolean {
-  const k = file.footprintScale;
   const circles = landmarks.flatMap((l, i) => {
     const spec = file.landmarks[i];
     const at = turner(spec?.turn ?? 0);
+    const k = file.footprintScale / (spec?.enlarge ?? 1);
     const more = (spec?.clearAlso ?? []).map(([px, py, r]) => {
       const [rx, ry] = at(px, py);
       return { x: l.x + rx / k, y: l.y + ry / k, r: r / k };

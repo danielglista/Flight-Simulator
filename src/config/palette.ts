@@ -203,6 +203,16 @@ export const LANDMARK_COLORS: Readonly<Record<string, Rgb>> = {
   'ctc-glass': [92, 132, 170],
   'ctc-core': [214, 222, 228],
   'ctc-dark': [90, 98, 110],
+  'jefferson-marble': [234, 231, 222],
+  'jefferson-dome': [242, 240, 234],
+  'jefferson-shadow': [172, 166, 152],
+  'jefferson-pediment': [214, 208, 194],
+  'whitehouse-stone': [240, 238, 230],
+  'whitehouse-shade': [206, 202, 190],
+  'whitehouse-roof': [150, 154, 158],
+  'whitehouse-pole': [226, 228, 232],
+  'flag-red': [186, 48, 44],
+  'flower-grey': [182, 190, 180],
 };
 export const LANDMARK_POLE_COLOR: Rgb = [226, 228, 232];
 export const LANDMARK_FLAG_COLOR: Rgb = [178, 44, 52];
