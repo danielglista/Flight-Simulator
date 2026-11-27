@@ -43,3 +43,5 @@ export const BUILDING_PREBAKE_MIN_MPP = 2.5;
 export const BUILDING_BAKE_MS = 6;
 /** Shadow length per meter of building height. */
 export const BUILDING_SHADOW_PER_M = 0.5;
+/** How solid what the plane flies under is drawn over it in the top view (E6). */
+export const LANDMARK_OVERHEAD_ALPHA = 0.6;

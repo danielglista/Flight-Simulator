@@ -204,3 +204,56 @@ export interface RoadsFile {
   readonly mergeM: number;
   readonly bridgeStepM: number;
 }
+
+/** A landmark solid as authored: real meters from the landmark's position, x east and y north. */
+export interface LandmarkSolidSpec {
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly d: number;
+  readonly topW: number;
+  readonly topD: number;
+  readonly bottom: number;
+  readonly top: number;
+  readonly material: string;
+  readonly shape?: 'drum' | 'dome' | 'prism';
+  /** Part of the ground itself, such as a hill: drawn under the rest, whose shadows then fall on it. */
+  readonly base?: boolean;
+  /** A prism's plan: x, y of each corner of a convex outline, counterclockwise. Its x, y, width and depth are then the box round it. */
+  readonly points?: readonly number[];
+  /** The color of the top from above, where it differs from the walls. */
+  readonly cap?: string;
+  readonly columns?: number;
+}
+
+export type LandmarkDecorSpec =
+  | { readonly kind: 'rect'; readonly material: string; readonly x: number; readonly y: number; readonly w: number; readonly d: number }
+  | { readonly kind: 'disc'; readonly material: string; readonly x: number; readonly y: number; readonly radius: number }
+  | { readonly kind: 'ring'; readonly material: string; readonly x: number; readonly y: number; readonly radius: number; readonly width: number }
+  | { readonly kind: 'line'; readonly material: string; readonly width: number; readonly points: readonly number[] };
+
+export interface LandmarkSpec {
+  readonly id: string;
+  readonly cityId: string;
+  readonly lat: number;
+  readonly lon: number;
+  /** No ordinary building within this of the position, real m. */
+  readonly clearRadiusM: number;
+  readonly solids: readonly LandmarkSolidSpec[];
+  readonly decor: readonly LandmarkDecorSpec[];
+  /** Degrees clockwise the whole landmark is turned about its position; absent for none. */
+  readonly turn?: number;
+  /** More ground kept clear of ordinary buildings: x, y, radius, real m before turning. */
+  readonly clearAlso?: readonly (readonly [number, number, number])[];
+  /** Stands over water on purpose, as a bridge does. */
+  readonly overWater?: boolean;
+  /** Lines in the air: x, y, z, ... real m. */
+  readonly wires?: readonly { readonly material: string; readonly points: readonly number[] }[];
+  readonly posts?: { readonly x: number; readonly y: number; readonly radius: number; readonly count: number; readonly height: number };
+}
+
+export interface LandmarksFile {
+  /** Real meters per world meter of a landmark's plan. */
+  readonly footprintScale: number;
+  readonly landmarks: readonly LandmarkSpec[];
+}

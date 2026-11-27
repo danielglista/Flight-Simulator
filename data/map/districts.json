@@ -34,7 +34,7 @@
     {"id": "phl-south", "cityId": "phl-city", "type": "housing", "density": 5, "ring": [[-75.19, 39.915], [-75.14, 39.915], [-75.14, 39.945], [-75.19, 39.945]], "style": {"streetDeg": 9}},
     {"id": "phl-west", "cityId": "phl-city", "type": "housing", "density": 4, "ring": [[-75.24, 39.94], [-75.19, 39.94], [-75.19, 39.972], [-75.24, 39.972]], "style": {"streetDeg": 9}},
     {"id": "phl-camden-homes", "cityId": "phl-city", "type": "housing", "density": 4, "ring": [[-75.125, 39.915], [-75.085, 39.915], [-75.085, 39.95], [-75.125, 39.95]], "style": {"streetDeg": -8}},
-    {"id": "phl-center-city", "cityId": "phl-city", "type": "downtown", "ring": [[-75.182, 39.945], [-75.146, 39.945], [-75.146, 39.959], [-75.182, 39.959]], "style": {"streetDeg": 9, "heightM": [30, 300], "heightSkew": 3}},
+    {"id": "phl-center-city", "cityId": "phl-city", "type": "downtown", "ring": [[-75.182, 39.945], [-75.146, 39.945], [-75.146, 39.959], [-75.182, 39.959]], "style": {"streetDeg": 9, "heightM": [30, 240], "heightSkew": 3}},
     {"id": "phl-university-city", "cityId": "phl-city", "type": "downtown", "ring": [[-75.2, 39.95], [-75.188, 39.95], [-75.188, 39.96], [-75.2, 39.96]], "style": {"streetDeg": 9}},
     {"id": "phl-camden-center", "cityId": "phl-city", "type": "downtown", "ring": [[-75.132, 39.94], [-75.116, 39.94], [-75.116, 39.952], [-75.132, 39.952]], "style": {"streetDeg": 9}},
     {"id": "phl-port-richmond", "cityId": "phl-city", "type": "industrial", "ring": [[-75.135, 39.963], [-75.105, 39.963], [-75.105, 39.985], [-75.135, 39.985]], "style": {"streetDeg": 9}},

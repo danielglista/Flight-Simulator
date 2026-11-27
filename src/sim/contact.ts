@@ -25,7 +25,7 @@ export interface Contact extends Point3 {
  * was hit, since that may be on a wall.
  */
 export function sweepContact(heightAt: HeightFn, from: Point3, to: Point3, obstacleAt?: ObstacleFn): Contact | null {
-  const inBuilding = (p: Point3): boolean => obstacleAt !== undefined && p.z <= obstacleAt(p.x, p.y); // false for NaN
+  const inBuilding = (p: Point3): boolean => obstacleAt !== undefined && p.z <= obstacleAt(p.x, p.y, p.z); // false for NaN
   const touches = (p: Point3): boolean => p.z <= heightAt(p.x, p.y) || inBuilding(p);
   const at = (t: number): Point3 => ({
     x: from.x + (to.x - from.x) * t,

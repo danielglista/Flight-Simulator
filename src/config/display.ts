@@ -235,3 +235,9 @@ export const SIDE_BUILDING_BESIDE_HAZE = 0.45;
 /** Windows on solid buildings: up to this vertical zoom (world m per pixel), one row per floor of this height. */
 export const SIDE_BUILDING_WINDOW_MAX_MPP = 0.5;
 export const SIDE_BUILDING_FLOOR_M = 3;
+
+/** Landmarks in the side view (E6): shown pale this far to the left of (behind) the flight line, up to the first skyline. */
+export const SIDE_LANDMARK_BEHIND_M = 200;
+export const SIDE_LANDMARK_HAZE = 0.25;
+/** Flag poles show at this vertical scale and closer, m/px. */
+export const SIDE_LANDMARK_POST_MAX_MPP = 1;

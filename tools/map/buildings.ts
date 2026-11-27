@@ -13,41 +13,9 @@ export const BUILDING_LAYOUT = {
   blockLots: [4, 2] as readonly [number, number],
   /** Ground left between a building and the edge of a highway. */
   roadGapM: 4,
-  /** A building lower than this is dropped rather than squeezed under the clearance surface. */
-  minHeightM: 2,
   /** Spacing of the points checked under a footprint. */
   sampleM: 8,
 } as const;
-
-/** The obstacle clearance surface (E5_PLAN 5.5), from each end of every runway outward. World meters. */
-export const CLEARANCE = { lengthM: 4000, halfWidthM: 150, spread: 0.1, slope: Math.tan((2 * Math.PI) / 180) } as const;
-
-export interface ClearanceRunway {
-  readonly a: { readonly x: number; readonly y: number };
-  readonly b: { readonly x: number; readonly y: number };
-  /** Field height, world m. */
-  readonly fieldM: number;
-}
-
-/** The height nothing may reach above sea level at (x, y), world m; Infinity outside every surface. */
-export function clearanceLimit(runways: readonly ClearanceRunway[], x: number, y: number): number {
-  let limit = Infinity;
-  for (const r of runways) {
-    const len = Math.hypot(r.b.x - r.a.x, r.b.y - r.a.y);
-    for (const [end, other] of [
-      [r.a, r.b],
-      [r.b, r.a],
-    ] as const) {
-      const ux = (end.x - other.x) / len;
-      const uy = (end.y - other.y) / len;
-      const along = (x - end.x) * ux + (y - end.y) * uy;
-      const side = Math.abs((x - end.x) * uy - (y - end.y) * ux);
-      if (along < 0 || along > CLEARANCE.lengthM || side > CLEARANCE.halfWidthM + CLEARANCE.spread * along) continue;
-      limit = Math.min(limit, r.fieldM + along * CLEARANCE.slope);
-    }
-  }
-  return limit;
-}
 
 /** Points across a footprint, no farther apart than the sample spacing, corners and edges included. */
 export function footprintPoints(b: Shape): P[] {
@@ -175,7 +143,8 @@ export interface BuildingInput {
   /** Ground height, world m. */
   readonly ground: (x: number, y: number) => number;
   readonly roadDistance: (x: number, y: number) => number;
-  readonly runways: readonly ClearanceRunway[];
+  /** Ground kept for something else, such as a landmark (E6). */
+  readonly blocked?: (x: number, y: number) => boolean;
   /** Real meters of building height per world meter. */
   readonly heightScale: number;
   readonly seed: number;
@@ -183,9 +152,6 @@ export interface BuildingInput {
 
 export interface BuildingResult {
   readonly buildings: readonly MapBuilding[];
-  /** Lowered to fit under a clearance surface, and left out because even the lowest would not fit. */
-  readonly lowered: number;
-  readonly dropped: number;
 }
 
 /**
@@ -198,8 +164,6 @@ export function generateBuildings(input: BuildingInput): BuildingResult {
   const out: MapBuilding[] = [];
   const near = new Map<string, MapBuilding[]>();
   const HASH = 100;
-  let lowered = 0;
-  let dropped = 0;
   const rings = input.districts.map((d) => {
     const ring = input.ringWorld(d);
     const xs = ring.map((p) => p[0]);
@@ -248,7 +212,7 @@ export function generateBuildings(input: BuildingInput): BuildingResult {
         const shape: Shape = { x, y, width, depth, angle: layout.streetDeg };
         const points = footprintPoints(shape);
         const want = districtCode(d);
-        if (!points.every(([px, py]) => input.code(px, py) === want && input.roadDistance(px, py) >= L.roadGapM && !taken(n, px, py))) continue;
+        if (!points.every(([px, py]) => input.code(px, py) === want && input.roadDistance(px, py) >= L.roadGapM && !taken(n, px, py) && !input.blocked?.(px, py))) continue;
 
         const hx = Math.floor(x / HASH);
         const hy = Math.floor(y / HASH);
@@ -259,17 +223,7 @@ export function generateBuildings(input: BuildingInput): BuildingResult {
         if (clash) continue;
 
         const [hMin, hMax] = layout.heightM;
-        let height = Math.round(((hMin + (hMax - hMin) * tall) / input.heightScale) * 2) / 2;
-        const room = Math.min(...points.map(([px, py]) => clearanceLimit(input.runways, px, py))) - input.ground(x, y);
-        if (height > room) {
-          const fit = Math.floor(room * 2) / 2;
-          if (fit < L.minHeightM) {
-            dropped++;
-            continue;
-          }
-          height = fit;
-          lowered++;
-        }
+        const height = Math.round(((hMin + (hMax - hMin) * tall) / input.heightScale) * 2) / 2;
         const building: MapBuilding = { ...shape, height, style: districtStyleIndex(d) };
         out.push(building);
         const key = `${hx},${hy}`;
@@ -279,15 +233,7 @@ export function generateBuildings(input: BuildingInput): BuildingResult {
       }
     }
   }
-  return { buildings: out, lowered, dropped };
-}
-
-/** Guardrail: buildings whose roof reaches above a clearance surface. */
-export function clearanceBreaks(buildings: readonly MapBuilding[], runways: readonly ClearanceRunway[], ground: (x: number, y: number) => number): MapBuilding[] {
-  return buildings.filter((b) => {
-    const top = ground(b.x, b.y) + b.height;
-    return footprintPoints(b).some(([x, y]) => top > clearanceLimit(runways, x, y) + 1e-6);
-  });
+  return { buildings: out };
 }
 
 /** The file form: x, y, width, depth, angle, height, style for each building. */

@@ -17,6 +17,7 @@ import {
 import { createAirportLayer, type MapFrame, type Visible } from './airportLayer';
 import { createRoadLayer } from './roadLayer';
 import { createCityLayer } from './cityLayer';
+import { createLandmarkLayer } from './landmarkLayer';
 import { clampZoom, metersPerPixel, screenToWorld, worldToScreen, zoomLabel, type Camera, type Point } from './camera';
 import { edgeArrow } from './edgeArrow';
 import { cloudTile } from './cloudTile';
@@ -117,6 +118,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   const airportLayer = createAirportLayer(grid.airports);
   const roadLayer = createRoadLayer(grid.roads ?? []);
   const cityLayer = createCityLayer(grid.buildings ?? []);
+  const landmarkLayer = createLandmarkLayer(grid.landmarks ?? [], (x, y) => heightAt(grid, scale, x, y));
   const sprites = createPlaneSprites();
   /** Current plane size step; kept between frames for the hysteresis. */
   let planeTier = 0;
@@ -452,6 +454,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       const frame = drawTerrain(ctx, view, { x: camera.x, y: camera.y, zoom: camera.zoom }, area);
       roadLayer.draw(ctx, frame);
       const unfinished = cityLayer.draw(ctx, frame, area);
+      landmarkLayer.draw(ctx, frame, area);
       // Haze: a pale veil over the terrain and roads, so airports stay crisp.
       const haze = DEPTH_FX.haze ? hazeAlpha(side.craft.z) : 0;
       if (haze > 0) {
@@ -479,6 +482,13 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       else {
         planeTier = DEPTH_FX.planeSize ? planeSizeTier(side.craft.z, planeTier) : 0;
         sprites.drawTop(ctx, spriteHeading, plane.x, plane.y, planeTier);
+        // A bridge deck over the plane is drawn again on top of it.
+        ctx.save();
+        ctx.translate(view.width / 2, view.height / 2);
+        ctx.rotate(-rotation);
+        ctx.translate(-view.width / 2, -view.height / 2);
+        landmarkLayer.drawOverhead(ctx, frame, side.craft);
+        ctx.restore();
       }
       drawOverlays(ctx, view, camera, cursor);
       if (!following) {
