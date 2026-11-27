@@ -26,6 +26,9 @@ export const ROOF_AWAY_LIGHT = 0.72;
 
 /** Sim steps from sunrise to sunset (12 min at 60 Hz). The next step is sunrise again. */
 export const DAY_STEPS = 12 * 60 * 60;
+/** What the clock reads: sunrise and the length of the day, minutes. One real second is one clock minute. */
+export const CLOCK_SUNRISE_MIN = 6 * 60;
+export const CLOCK_DAY_MIN = 12 * 60;
 /** A game starts a quarter of the way through the day: mid-morning. */
 export const SUN_START_TIME = DAY_STEPS / 4;
 /** Fixed sun positions in a day; the sun moves from one to the next every 12 s. */

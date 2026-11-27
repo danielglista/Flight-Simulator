@@ -7,6 +7,7 @@ import type { StallState } from '../sim/flight/aero';
 import { altimeterVerticalSpeedFpm, displayedAltitudeFt, indicatedSpeed, metersPerSecondToKnots, verticalSpeedFpm } from '../sim/units';
 import { drawAirspeed } from './gauges/airspeed';
 import { drawAltimeter } from './gauges/altimeter';
+import { CLOCK_LEFT, drawClock } from './gauges/clock';
 import { drawHsi } from './gauges/hsi';
 import { drawHorizon } from './gauges/horizon';
 import { drawConfig } from './gauges/gearFlaps';
@@ -103,7 +104,7 @@ export function lightsOrigin(size: Size): readonly [number, number] {
  * The panel, centered:
  *   POWER  | SPD | horizon |
  *   CONFIG | ALT | V/S     | HSI (two cells square)
- *   lamps strip, full width
+ *   lamps strip, then the clock at its right end
  */
 export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelState): void {
   ctx.fillStyle = READOUT_BG;
@@ -127,6 +128,9 @@ export function drawPanel(ctx: CanvasRenderingContext2D, size: Size, s: PanelSta
   drawVsi(ctx, ...cell(2, 1), s.vsDeg, s.vsMode, t.vs);
   drawHsi(ctx, ...hsiOrigin(size), s.headingDeg, s.headingBug, t.hdg, s.hsi);
   drawLights(ctx, ...lightsOrigin(size), s.lights);
+  ctx.fillStyle = PANEL_LINE;
+  ctx.fillRect(left + CLOCK_LEFT, top + HSI_SIZE, 1, PANEL_H - HSI_SIZE);
+  drawClock(ctx, ...lightsOrigin(size), s.clockMin);
   // Last, over the top of the speed dial and horizon: not in the lamps, so it does not read as a fault.
   if (s.callout) drawCallout(ctx, left + PANEL_CELL * 2, top + 1, s.callout, s.gearPrompt);
 }

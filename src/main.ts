@@ -368,6 +368,7 @@ const currentPanel = (): PanelState => {
     headingBugDeg: !crashed && takeoffHud === null ? bugDeg : null,
     approach: currentApproach(),
     variationDeg: variationAt(craft),
+    timeOfDay: timeOfDay(loop.state.tick, loop.state.sunClock),
     altBugFt: bugsShown ? altBugFt : null,
     gearWarn: !crashed && gearWarning(craft, heightAboveGround(craft.z, world.heightAt(craft.x, craft.y)), indicatedSpeed(craft, scales)),
     crashed,

@@ -1,6 +1,7 @@
 import { magneticDeg } from './magnetic';
 import { AP_CAPTURE_DEG, AP_CAPTURE_FT, AP_CAPTURE_KT, ALT_BUG_RIM_FT, ALT_LONG_FT, ASI_AMBER_MULT, ASI_ARC_MIN_KT, ASI_TABLE, HSI_DEV_PX, HSI_GS_PX, VS_MODE, type VsMode } from '../config/display';
 import type { Tuning } from '../config/motion';
+import { SUN_START_TIME } from '../config/sun';
 import type { ScaleConfig } from '../config/scales';
 import { AP_FLOOR_MULT } from '../config/flight';
 import { apActive, type Autopilot } from '../sim/state';
@@ -15,6 +16,7 @@ import { altimeterHands, quantizeDeg, tableAngle } from './gauges/dial';
 import { vsiAngle } from './gauges/vsi';
 import type { SpeedMark } from './gauges/airspeed';
 import type { HsiApproach } from './gauges/hsi';
+import { clockMinutes } from './gauges/clock';
 import { hsiDistance, type HsiGuide } from './hsiData';
 import type { Callout } from './takeoffStrip';
 import type { ConfigState } from './gauges/gearFlaps';
@@ -56,6 +58,8 @@ export interface PanelState {
   readonly gearPrompt: boolean;
   /** The selected approach on the HSI (D5D), null with no runway picked. */
   readonly hsi: HsiApproach | null;
+  /** The clock, whole minutes since midnight. */
+  readonly clockMin: number;
 }
 
 export interface PanelInput {
@@ -77,6 +81,8 @@ export interface PanelInput {
   readonly approach?: HsiGuide | null;
   /** Magnetic variation here, degrees: added to every heading shown. `headingBugDeg` is already magnetic. */
   readonly variationDeg?: number;
+  /** Time of day, sim steps since sunrise; a game's starting time when left out. */
+  readonly timeOfDay?: number;
 }
 
 let cacheKey = '';
@@ -158,6 +164,7 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
     callout: input.callout ?? null,
     gearPrompt: input.gearPrompt ?? false,
     hsi: input.approach ? hsiPixels(input.approach, input.variationDeg ?? 0) : null,
+    clockMin: clockMinutes(input.timeOfDay ?? SUN_START_TIME),
   };
 }
 
@@ -169,6 +176,7 @@ export const samePanelState = (a: PanelState, b: PanelState): boolean =>
   sameHsi(a.hsi, b.hsi) &&
   a.callout === b.callout &&
   a.gearPrompt === b.gearPrompt &&
+  a.clockMin === b.clockMin &&
   a.crashed === b.crashed &&
   a.spdDeg === b.spdDeg &&
   a.stallRedKt === b.stallRedKt &&

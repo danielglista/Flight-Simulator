@@ -122,6 +122,7 @@ A fixed 400 x 192 block, centered in the instruments canvas (`views/instruments.
 - Airspeed: piecewise-linear `ASI_TABLE` (`config/display.ts`), red arc to the live level stall speed (moves with flaps, bank, mass), amber to 1.2x. Hidden after a crash and on the ground under 30 kt.
 - Altimeter: long hand 1,000 ft per turn, short hand 10,000 ft, digits in a window.
 - Redraw: `views/panelState.ts` builds a quantized `PanelState` (needles 0.5 deg); `main.ts` redraws only when it changes.
+- Clock (`gauges/clock.ts`), at the right end of the lamp strip, in the panel's own colors and 5x7 font: a sun on a dotted arc over a horizon line, left at sunrise, highest at noon, right at sunset, with `HH:MM` under it. Sunrise reads 06:00 and sunset 18:00, so a real second is a clock minute, a game starts at 09:00 and 17:59 is followed by 06:00. It reads the sun's time, so pause and Hold sun stop it. Not in the screen-reader line.
 
 ## Instruments panel (D2)
 
