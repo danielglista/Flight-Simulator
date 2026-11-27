@@ -18,7 +18,7 @@ import { indicatedSpeed } from '../src/sim/units';
 import { CLOSE_ZOOM, ZOOM_LEVELS, metersPerPixel, zoomForMpp } from '../src/views/camera';
 import { CLOSE_SIDE_ZOOM, clampSideZoom, sideMetersPerPixel, sideZoomForMpp, SIDE_ZOOM_LEVELS, verticalMetersPerPixel } from '../src/views/sideCamera';
 import { NO_CALLOUTS, runwayRemaining, stepCallouts, stepSpeeds, takeoffMode, calloutSentence, gearPrompt, type CalloutInput } from '../src/views/takeoffStrip';
-import { approachBand, easeMpp, gatePhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, stepPhaseZoom } from '../src/views/zoomGate';
+import { approachBand, easeMpp, gatePhase, liningUp, topPhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, stepPhaseZoom } from '../src/views/zoomGate';
 import { craft, fly, realWorld, runwayState } from './helpers';
 import { initialState as air } from '../src/sim/state';
 
@@ -419,11 +419,11 @@ describe('zoom gate', () => {
     expect(gatePhase('ground', false, 41)).toBe('air');
   });
   it('keeps its last phase between 20 and 40 m (hysteresis) and cannot flicker on noise', () => {
-    expect(gatePhase('ground', false, 30)).toBe('ground');
-    expect(gatePhase('air', false, 30)).toBe('air');
+    expect(gatePhase('ground', false, 35)).toBe('ground');
+    expect(gatePhase('air', false, 35)).toBe('air');
     let p = gatePhase('ground', false, 45);
     let changes = 0;
-    for (const h of [41, 38, 42, 39, 41.5, 30, 35, 28, 33, 39.9]) {
+    for (const h of [41, 38, 42, 39, 41.5, 31, 35, 32, 33, 39.9]) {
       const n = gatePhase(p, false, h);
       if (n !== p) changes++;
       p = n;
@@ -432,13 +432,13 @@ describe('zoom gate', () => {
   });
   it('the wheel edits only the current phase', () => {
     const clamp = (z: number) => Math.min(CLOSE_ZOOM, Math.max(0, z));
-    let m = { ground: CLOSE_ZOOM, air: 3 };
+    let m = { ground: CLOSE_ZOOM, approach: 5, air: 3 };
     m = stepPhaseZoom(m, 'air', -1, clamp);
-    expect(m).toEqual({ ground: CLOSE_ZOOM, air: 2 });
+    expect(m).toEqual({ ground: CLOSE_ZOOM, approach: 5, air: 2 });
     m = stepPhaseZoom(m, 'ground', 9, clamp);
-    expect(m).toEqual({ ground: CLOSE_ZOOM, air: 2 });
+    expect(m).toEqual({ ground: CLOSE_ZOOM, approach: 5, air: 2 });
     m = stepPhaseZoom(m, 'ground', -2, clamp);
-    expect(m).toEqual({ ground: CLOSE_ZOOM - 2, air: 2 });
+    expect(m).toEqual({ ground: CLOSE_ZOOM - 2, approach: 5, air: 2 });
     expect(recall(remember(m, 'air', 0), 'ground')).toBe(CLOSE_ZOOM - 2);
   });
   it('easing is monotonic, never overshoots, and lands exactly', () => {
@@ -521,3 +521,39 @@ describe('side view zoom bands', () => {
     expect(approachBand('ground')).toBe('near');
   });
 });
+
+describe('approach zoom', () => {
+  /** Lands northward from (0, 0), 1,000 m of runway. */
+  const end = { ident: 'AAA', name: '36', threshold: { x: 0, y: 0 }, dir: { x: 0, y: 1 }, length: 1000 };
+  const at = (x: number, y: number, heading = 0, onGround = false) => ({ x, y, heading, onGround });
+
+  it('starts lined up before the threshold, within the distance, offset and heading limits', () => {
+    expect(liningUp(false, at(0, -3000), 150, end)).toBe(true);
+    expect(liningUp(false, at(0, -6200), 150, end)).toBe(false);
+    expect(liningUp(false, at(500, -3000), 150, end)).toBe(false);
+    expect(liningUp(false, at(0, -3000, Math.PI / 2), 150, end)).toBe(false);
+    expect(liningUp(false, at(0, -3000), 900, end)).toBe(false);
+    expect(liningUp(false, at(0, -3000), 150, null)).toBe(false);
+  });
+
+  it('is kept to the wider limits and over the runway', () => {
+    expect(liningUp(true, at(500, -6200), 150, end)).toBe(true);
+    expect(liningUp(true, at(0, 500), 30, end)).toBe(true);
+    expect(liningUp(true, at(700, -3000), 150, end)).toBe(false);
+    expect(liningUp(true, at(0, 1100), 150, end)).toBe(false);
+  });
+
+  it('never starts on a takeoff from that runway', () => {
+    expect(liningUp(false, at(0, 500), 50, end)).toBe(false);
+    expect(liningUp(false, at(0, -100, 0, true), 0, end)).toBe(false);
+  });
+
+  it('gives way to the ground zoom low down', () => {
+    expect(topPhase('air', false, 150, true)).toBe('approach');
+    expect(topPhase('approach', false, 150, false)).toBe('air');
+    expect(topPhase('approach', false, 35, true)).toBe('approach');
+    expect(topPhase('approach', false, 30, true)).toBe('ground');
+    expect(topPhase('ground', false, 35, true)).toBe('ground');
+  });
+});
+

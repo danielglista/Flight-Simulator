@@ -1,3 +1,4 @@
+import { RUNWAY_WIDTH_MULT } from '../../config/map';
 import { buildAirport, type Airport, type AirportDef, type PavingDef, type Vec2 } from './airport';
 import type { MapAirport } from './mapFile';
 import { withAirports } from './placeAirports';
@@ -110,7 +111,7 @@ export function midAtlanticDef(placed: MapAirport): AirportDef {
     blend: 0,
     fieldElevationM: placed.elevationM,
     cellSize: cell,
-    runways: [{ a: at(-l.length / 2, 0), b: at(l.length / 2, 0), width: l.width, names: l.names }],
+    runways: [{ a: at(-l.length / 2, 0), b: at(l.length / 2, 0), width: l.width * RUNWAY_WIDTH_MULT, names: l.names }],
     paving,
   };
 }

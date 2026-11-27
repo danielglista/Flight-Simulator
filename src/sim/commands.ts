@@ -13,12 +13,12 @@ export type Command =
   | { readonly kind: 'flaps'; readonly by: 1 | -1 }
   /** Wheel brakes while held (Space). Bad values are ignored. Acts only on the ground. */
   | { readonly kind: 'brake'; readonly value: boolean }
-  /** All three modes on (D4): holds this heading (radians) and altitude (world m) and the current speed. Needs finite numbers and `stability`; otherwise it is refused with a notice. */
-  | { readonly kind: 'autopilot'; readonly on: true; readonly heading: number; readonly z: number }
+  /** All three modes on (D4): holds the present heading, altitude and speed. Needs `stability`; otherwise it is refused with a notice. */
+  | { readonly kind: 'autopilot'; readonly on: true }
   /** Every mode off. */
   | { readonly kind: 'autopilot'; readonly on: false }
-  /** One mode alone. Heading on needs a finite `heading` (radians); altitude holds the present altitude; both need `stability` and their keys released. Speed on needs the air and no crash, and takes the current indicated speed. */
-  | { readonly kind: 'apMode'; readonly mode: 'hdg' | 'alt' | 'spd'; readonly on: boolean; readonly heading?: number }
+  /** One mode alone, holding the present value. Heading and altitude need `stability` and their keys released; speed needs the air and no crash. */
+  | { readonly kind: 'apMode'; readonly mode: 'hdg' | 'alt' | 'spd'; readonly on: boolean }
   /** Moves a target of a mode that is on: heading (radians, wrapped), `z` (world m, kept 0..the ceiling), `ias` (m/s, kept 30..150). Non-finite values are ignored. */
   | { readonly kind: 'apTarget'; readonly heading?: number; readonly z?: number; readonly ias?: number }
   /** Back to the start (`state.start`). Ignored unless crashed or landed and stopped. Keeps tick and controls. */

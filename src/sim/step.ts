@@ -81,7 +81,7 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
       case 'autopilot': {
         if (!c.on) {
           autopilot = withModes(autopilot, ALL_OFF);
-        } else if (Number.isFinite(c.heading) && Number.isFinite(c.z)) {
+        } else {
           const s = stability({ craft, crash, tuning }, world);
           const keyHeld = controls.turn !== 0 || controls.pitch !== 0 || controls.throttle !== 0 || controls.level;
           const reason = s.reason ?? (keyHeld ? 'controls' : stableTicks < STABLE_TICKS ? 'UNSETTLED' : null);
@@ -92,8 +92,8 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
               hdg: true,
               alt: true,
               spd: true,
-              headingTarget: wrapHeading(c.heading),
-              targetZ: clamp(c.z, 0, CEILING_Z),
+              headingTarget: wrapHeading(craft.heading),
+              targetZ: clamp(craft.z, 0, CEILING_Z),
               targetIas: autopilot.spd ? autopilot.targetIas : currentIas(craft, world),
               notice: null,
             };
@@ -106,13 +106,13 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
           autopilot = withModes(autopilot, { [c.mode]: false });
         } else if (c.mode === 'spd') {
           if (!craft.onGround && !crash && !autopilot.spd) autopilot = { ...autopilot, spd: true, targetIas: currentIas(craft, world) };
-        } else if (!autopilot[c.mode] && (c.mode === 'alt' || Number.isFinite(c.heading))) {
+        } else if (!autopilot[c.mode]) {
           const s = stability({ craft, crash, tuning }, world);
           const keyHeld = c.mode === 'hdg' ? controls.turn !== 0 || controls.level : controls.pitch !== 0;
           const reason = s.reason ?? (keyHeld ? 'controls' : stableTicks < STABLE_TICKS ? 'UNSETTLED' : null);
           if (reason) autopilot = { ...autopilot, notice: { tick: state.tick, kind: 'refused', reason } };
           else if (c.mode === 'alt') autopilot = { ...autopilot, alt: true, targetZ: clamp(craft.z, 0, CEILING_Z), notice: null };
-          else autopilot = { ...autopilot, hdg: true, headingTarget: wrapHeading(c.heading as number), notice: null };
+          else autopilot = { ...autopilot, hdg: true, headingTarget: wrapHeading(craft.heading), notice: null };
         }
         break;
       }

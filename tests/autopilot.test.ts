@@ -205,12 +205,16 @@ describe('autopilot commands', () => {
     expect(reasonOf({ ...base, craft: { ...base.craft, pitch: 0.3, pathAngle: 0.1 } })).toBe('PITCH');
   });
 
-  it('is refused with a key held, and with non-finite targets (silently)', () => {
+  it('is refused with a key held', () => {
     const held = send(base, [{ kind: 'pitch', value: 1 }]);
     expect(eng(held).autopilot).toMatchObject({ hdg: false, alt: false, notice: { reason: 'controls' } });
-    const bad = send(base, [{ kind: 'autopilot', on: true, heading: NaN, z: 100 }]);
-    expect(bad.autopilot.alt).toBe(false);
-    expect(bad.autopilot.notice).toBeNull();
+  });
+
+  it('engaging holds the present heading, altitude and speed', () => {
+    const s = send(base, [{ kind: 'autopilot', on: true }]);
+    expect(s.autopilot.headingTarget).toBeCloseTo(base.craft.heading, 9);
+    expect(s.autopilot.targetZ).toBeCloseTo(base.craft.z, 9);
+    expect(s.autopilot.targetIas).toBeCloseTo(ias(base), 6);
   });
 
   it('a command that changes only the autopilot is not lost', () => {
@@ -253,11 +257,10 @@ describe('autopilot commands', () => {
   });
 
   it('heading hold alone leaves pitch and throttle to the keys', () => {
-    const s = send(base, [{ kind: 'apMode', mode: 'hdg', on: true, heading: 90 * DEG }]);
+    const s = send(base, [{ kind: 'apMode', mode: 'hdg', on: true }]);
     expect(s.autopilot).toMatchObject({ hdg: true, alt: false, spd: false });
-    expect(s.autopilot.headingTarget).toBeCloseTo(90 * DEG, 9);
+    expect(s.autopilot.headingTarget).toBeCloseTo(base.craft.heading, 9);
     expect(autopilotOutput(s.craft, s.autopilot, s.tuning, 5)).toMatchObject({ pitch: null, throttle: null });
-    expect(send(base, [{ kind: 'apMode', mode: 'hdg', on: true }]).autopilot).toEqual(base.autopilot);
   });
 
   it('a single mode is refused for its own held key only', () => {
@@ -265,7 +268,7 @@ describe('autopilot commands', () => {
     expect(send(pitching, [{ kind: 'apMode', mode: 'alt', on: true }]).autopilot).toMatchObject({ alt: false, notice: { reason: 'controls' } });
     const turning = send(base, [{ kind: 'turn', value: 1 }]);
     expect(send(turning, [{ kind: 'apMode', mode: 'alt', on: true }]).autopilot.alt).toBe(true);
-    expect(send(turning, [{ kind: 'apMode', mode: 'hdg', on: true, heading: 1 }]).autopilot).toMatchObject({ hdg: false, notice: { reason: 'controls' } });
+    expect(send(turning, [{ kind: 'apMode', mode: 'hdg', on: true }]).autopilot).toMatchObject({ hdg: false, notice: { reason: 'controls' } });
   });
 
   it('crash, restart, start, place and rotate clear everything', () => {

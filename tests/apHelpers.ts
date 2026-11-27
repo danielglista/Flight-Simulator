@@ -32,9 +32,9 @@ export function settled(patch: Partial<StartSpec> = {}, world: SimWorld = flat):
 
 export const send = (s: SimState, cmds: Command[], world: SimWorld = flat): SimState => applyCommands(s, cmds, world);
 
-/** Engages on a heading (degrees) and displayed altitude (ft). */
+/** Engages, then dials in a heading (degrees) and displayed altitude (ft). */
 export function engage(s: SimState, headingDeg: number, ft: number, world: SimWorld = flat): SimState {
-  return send(s, [{ kind: 'autopilot', on: true, heading: headingDeg * DEG, z: ftToZ(ft) }], world);
+  return send(s, [{ kind: 'autopilot', on: true }, { kind: 'apTarget', heading: headingDeg * DEG, z: ftToZ(ft) }], world);
 }
 
 export const ias = (s: SimState): number => indicatedSpeed(s.craft, SCALES);

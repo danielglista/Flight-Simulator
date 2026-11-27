@@ -4,7 +4,7 @@ import { createDebugPanel } from './app/debugPanel';
 import { createFrameStats } from './app/frameStats';
 import { createLoop } from './app/loop';
 import { initPanels } from './app/panels';
-import { ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, SPD_BUG_FINE_KT, SPD_BUG_STEP_KT, BUG_FINE_DEG, BUG_STEP_DEG, DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
+import { APPROACH_ZOOM, ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, SPD_BUG_FINE_KT, SPD_BUG_STEP_KT, BUG_FINE_DEG, BUG_STEP_DEG, DEBUG_REFRESH_HZ, FRAME_SAMPLES, READOUT_SR_HZ } from './config/display';
 import { attachPause } from './app/pause';
 import { createRunwayMenu, type RunwayMenu } from './app/runwayMenu';
 import { createApLamps, type ApLamps, type ApModeName } from './app/apLamps';
@@ -28,7 +28,7 @@ import { buildTestMap } from './sim/world/testMap';
 import { CLOSE_ZOOM, DEFAULT_ZOOM, metersPerPixel, zoomForMpp, type Point } from './views/camera';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from './views/followCamera';
 import { clampSideZoom, sideMetersPerPixel, sideZoomForMpp } from './views/sideCamera';
-import { approachBand, easeMpp, gatePhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, type PhaseZoom, type SideBand, type ZoomPhase } from './views/zoomGate';
+import { approachBand, easeMpp, liningUp, topPhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, type PhaseZoom, type SideBand, type ZoomPhase } from './views/zoomGate';
 import { NO_CALLOUTS, calloutSentence, gearPrompt, remainingOnAny, stepCallouts, stepSpeeds, takeoffMode, type CalloutState, type TakeoffHud } from './views/takeoffStrip';
 import type { VSpeeds } from './sim/flight/vspeeds';
 import { speedMarks } from './views/gauges/airspeed';
@@ -98,10 +98,11 @@ const topView = createTopView(grid, scales);
 const sideView = createSideView(grid, scales);
 
 // Top-view camera: locked to the plane, or free look. Never part of the simulation.
-// The top view remembers one zoom for the ground and one for the air (C4B); the side view one for each height band.
+// The top view remembers one zoom for the ground, one for lining up on the picked runway and one for the air; the side view one for each height band.
 // The wheel edits the current one only; the gates (views/zoomGate.ts) pick it from height above ground, and the shown
 // zoom eases toward it.
-let topMem: PhaseZoom = { ground: CLOSE_ZOOM, air: DEFAULT_ZOOM };
+let topMem: PhaseZoom = { ground: CLOSE_ZOOM, approach: APPROACH_ZOOM, air: DEFAULT_ZOOM };
+let linedUp = false;
 let sideMem: Readonly<Record<SideBand, number>> = SIDE_BAND_ZOOMS;
 let shownBand: SideBand = 'near';
 let zoomPhase: ZoomPhase = 'ground';
@@ -148,12 +149,15 @@ const moveAltBug = (sign: -1 | 1, fine: boolean): void => {
  * Run on every drawn frame, because the loop drops queued commands on a pause; paused, `send` applies at once.
  */
 const AP_BUG_RESEND_RAD = (0.1 * Math.PI) / 180;
-/** Whether altitude hold was on at the last sync. */
+/** Whether heading and altitude hold were on at the last sync. */
+let hdgHeld = false;
 let altHeld = false;
 function syncAutopilotBugs(): void {
   const ap = loop.state.autopilot;
-  // Altitude hold just taken: the bug moves to the held altitude, not the plane to the bug.
+  // A mode just taken holds the present value: its bug moves there, not the plane to the bug.
+  if (ap.hdg && !hdgHeld) bugDeg = stepBug(Math.round((ap.headingTarget * 180) / Math.PI + variationAt(loop.state.craft)), 0);
   if (ap.alt && !altHeld) altBugFt = Math.round(displayedAltitudeFt(ap.targetZ, scales));
+  hdgHeld = ap.hdg;
   altHeld = ap.alt;
   if (!ap.hdg && !ap.alt) return;
   const heading = bugHeading(loop.state.craft);
@@ -164,12 +168,16 @@ function syncAutopilotBugs(): void {
 /** A click on the HDG, ALT or SPD lamp. */
 function toggleApMode(mode: ApModeName): void {
   const on = !loop.state.autopilot[mode];
-  loop.send({ kind: 'apMode', mode, on, ...(mode === 'hdg' ? { heading: bugHeading(loop.state.craft) } : {}) });
-  if (loop.paused) {
-    syncAutopilotBugs();
-    panels.side.requestDraw();
-    panels.instruments.requestDraw();
-  }
+  loop.send({ kind: 'apMode', mode, on });
+  redrawAutopilot();
+}
+/** Paused, a command applies at once but no frame follows: move the bugs and redraw here. */
+function redrawAutopilot(): void {
+  if (!loop.paused) return;
+  syncAutopilotBugs();
+  panels.top.requestDraw();
+  panels.side.requestDraw();
+  panels.instruments.requestDraw();
 }
 /** Speed target nudge in knots: the sim's own target moves, so the key repeats are exact. */
 const moveSpeedBug = (sign: -1 | 1, fine: boolean): void => {
@@ -198,9 +206,12 @@ function syncFrame(): void {
   const sim = loop.state;
   const craft = sim.craft;
   const agl = craft.z - world.heightAt(craft.x, craft.y);
-  const phase = gatePhase(zoomPhase, craft.onGround, agl);
+  linedUp = liningUp(linedUp, craft, agl, runwayEnd(grid.airports, runwayMenu?.selected ?? null));
+  const phase = topPhase(zoomPhase, craft.onGround, agl, linedUp);
   if (phase !== zoomPhase) {
     topMem = remember(topMem, zoomPhase, follow.free.zoom);
+    // Coming down to land always gets the closest level, whatever the ground zoom was left at.
+    if (phase === 'ground') topMem = remember(topMem, 'ground', CLOSE_ZOOM);
     zoomPhase = phase;
     follow = { ...follow, free: { ...follow.free, zoom: recall(topMem, phase) } };
   }
@@ -248,8 +259,8 @@ const keyboard = attachKeyboard({
     const ap = loop.state.autopilot;
     // With any mode on, Z is the way out of all of them.
     if (apActive(ap)) loop.send({ kind: 'autopilot', on: false });
-    else loop.send({ kind: 'autopilot', on: true, heading: bugHeading(loop.state.craft), z: bugWorldZ(altBugFt, scales) });
-    if (loop.paused) panels.instruments.requestDraw();
+    else loop.send({ kind: 'autopilot', on: true });
+    redrawAutopilot();
   },
   Comma: (fine) => moveSpeedBug(-1, fine),
   Period: (fine) => moveSpeedBug(1, fine),

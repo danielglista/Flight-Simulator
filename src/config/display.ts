@@ -194,9 +194,21 @@ export const CALLOUT_TEXT_SCALE = 2;
 /** Call-out POSITIVE RATE needs this much height above ground (world m). */
 export const POSITIVE_RATE_AGL_M = 5;
 /** Zoom gate: ground zoom on the ground or under ENTER, air zoom above EXIT (height above ground, world m), kept between. Time constant of the zoom ease, seconds. */
-export const GROUND_ZOOM_ENTER_AGL = 20;
+export const GROUND_ZOOM_ENTER_AGL = 30.5;
 export const GROUND_ZOOM_EXIT_AGL = 40;
 export const ZOOM_EASE_S = 0.8;
+/**
+ * Top view approach zoom: its level (index into ZOOM_LEVELS, 5 = 6x), and where it applies for the picked runway end.
+ * It starts before the threshold within CENTERLINE_M, this close to the center line (world m), this near the runway
+ * heading (deg) and under MAX_AGL (world m); it is kept out to the wider LEAVE limits, and over the runway.
+ */
+export const APPROACH_ZOOM = 5;
+export const APPROACH_ZOOM_ENTER_OFFSET_M = 400;
+export const APPROACH_ZOOM_LEAVE_OFFSET_M = 600;
+export const APPROACH_ZOOM_ENTER_DEG = 60;
+export const APPROACH_ZOOM_LEAVE_DEG = 90;
+export const APPROACH_ZOOM_LEAVE_BACK_M = 500;
+export const APPROACH_ZOOM_MAX_AGL = 400;
 /**
  * Side view zoom bands by height above ground, displayed feet (the same feet as ALT). Climbing, a band is left above
  * its EXIT; descending, it is entered under its ENTER.
@@ -227,7 +239,7 @@ export const AIRPORT_PAGE_SIZE = 3;
 export const ORDER_BEHIND_WEIGHT = 2;
 
 /** HSI (D5D): full-scale deviations as angles (sideways from the far end, vertically from the aim point), where the glide path shows, and the pixels of full scale on the HSI's 80 px drawing grid. */
-export const HSI_LOC_FULL_DEG = 10;
+export const HSI_LOC_FULL_DEG = 5;
 export const HSI_GS_FULL_DEG = 0.7;
 export const HSI_GS_RANGE_M = 8000;
 export const HSI_GS_CONE_DEG = 35;

@@ -45,3 +45,6 @@ export const BUILDING_BAKE_MS = 6;
 export const BUILDING_SHADOW_PER_M = 0.5;
 /** How solid what the plane flies under is drawn over it in the top view (E6). */
 export const LANDMARK_OVERHEAD_ALPHA = 0.6;
+
+/** Practice aid: Mid-Atlantic runways are this many times their real width (1 = true width; 1.2 helps practice). */
+export const RUNWAY_WIDTH_MULT = 1;
