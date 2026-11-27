@@ -1,7 +1,9 @@
 import { DEFAULT_GRID, DENSITIES, DISTRICT_TYPES, type BuildingStyle, type Density, type District, type DistrictsFile, type DistrictType, type GridSettings, type HousingLevel, type RoadsFile } from './types';
-import type { Airport, AuthoredRiver, City, FootprintRect, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
+import type { Airport, AuthoredRiver, City, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
 import type { LandmarkDecorSpec, LandmarkSolidSpec, LandmarkSpec, LandmarksFile } from './types';
 import type { WarpShape } from './warp';
+import { selfCrossing } from '../../src/sim/world/polygon';
+import { project } from './project';
 
 export class MapDataError extends Error {}
 
@@ -133,25 +135,8 @@ export function validatePlaces(data: unknown): PlacesFile {
       boundaryKm: size(o, 'boundaryKm', p),
       runwayHeadingDeg: num(o, 'runwayHeadingDeg', p, { min: 0, max: 360 }),
     } as const;
-    let extra: { footprint?: FootprintRect[]; elevationM?: number; pushOverrideKm?: number; stampFadeKm?: number; stampAnchorKm?: { x: number; y: number } } = {};
-    const fp = o['footprint'];
-    if (fp !== undefined) {
-      if (!Array.isArray(fp) || fp.length === 0) throw new MapDataError(`${p}.footprint: expected a non-empty list (airport ${id})`);
-      extra = {
-        ...extra,
-        footprint: fp.map((r: unknown, k: number) => {
-          const q = `${p}.footprint[${k}]`;
-          const ro = obj(r, q);
-          return {
-            x: num(ro, 'x', q),
-            y: num(ro, 'y', q),
-            length: num(ro, 'length', q, { positive: true }),
-            width: num(ro, 'width', q, { positive: true }),
-            headingDeg: num(ro, 'headingDeg', q, { min: 0, max: 360 }),
-          };
-        }),
-      };
-    }
+    let extra: { elevationM?: number; pushOverrideKm?: number; stampFadeKm?: number; stampAnchorKm?: { x: number; y: number } } = {};
+    const ground = groundPolygons(o['ground'], `${p}.ground`, id);
     if (o['elevationM'] !== undefined) extra = { ...extra, elevationM: num(o, 'elevationM', p) };
     if (o['pushOverrideKm'] !== undefined) extra = { ...extra, pushOverrideKm: num(o, 'pushOverrideKm', p, { positive: true }) };
     if (o['stampFadeKm'] !== undefined) extra = { ...extra, stampFadeKm: num(o, 'stampFadeKm', p, { positive: true }) };
@@ -163,9 +148,21 @@ export function validatePlaces(data: unknown): PlacesFile {
       if (Math.abs(anchor.x) > bk.w / 2 || Math.abs(anchor.y) > bk.h / 2) throw new MapDataError(`${q}: must lie inside the boundary (airport ${id})`);
       extra = { ...extra, stampAnchorKm: anchor };
     }
-    airports.push({ ...base, ...extra });
+    airports.push({ ...base, ground, ...extra });
   });
   return { cities, airports };
+}
+
+function groundPolygons(v: unknown, path: string, airport: string): LonLatPoint[][] {
+  if (!Array.isArray(v) || v.length === 0) throw new MapDataError(`${path}: expected a non-empty list of polygons (airport ${airport})`);
+  return v.map((ring: unknown, k: number) => {
+    const q = `${path}[${k}]`;
+    if (!Array.isArray(ring) || ring.length < 3) throw new MapDataError(`${q}: expected at least 3 points (airport ${airport})`);
+    const points = ring.map((c: unknown, i: number) => lonLat(c, `${q}[${i}]`, 2) as unknown as LonLatPoint);
+    // Checked in km: degrees are too small a unit for the geometry's tolerance.
+    if (selfCrossing(points.map(([lon, lat]) => project(lat, lon)))) throw new MapDataError(`${q}: edges must not cross or touch, nor a point repeat (airport ${airport})`);
+    return points;
+  });
 }
 
 function lonLat(v: unknown, path: string, len: 2 | 3): number[] {

@@ -1,6 +1,6 @@
 # E7 Implementation Plan: Polygon Airports
 
-**Status:** E7.0 trial run and E7.1 built (§10); next is E7.2. Nothing uses `polygon.ts` yet.
+**Status:** E7.0 trial run, E7.1 and E7.2 built (§10); next is E7.3. The airport ground is polygons; the land still bends to the `boundaryKm` box.
 **Milestone:** the airports can be shaped by editing points, and sit in the land around them without a large rectangle pushing it out of the way.
 **Starting state:** E6 landmarks, magnetic headings and approach aids committed. E4 (scale tuning) is not done.
 
@@ -165,3 +165,11 @@ Two trials against the present map, at 1:25. The ground kept its real place; onl
 - `src/sim/world/polygon.ts`: `contains` (the outline counts as inside), `nearestOnOutline` (also gives the edge and how far along it, for E7.3's fade), `convexHull` (counterclockwise, no points along its sides), `selfCrossing` (touching, repeated points and doubling back count), `convexOverlap` with a gap.
 - The gap of `convexOverlap` is measured across each side, so for two upright boxes it matches the present `overlaps` in `place.ts`.
 - `tests/polygon.test.ts`: 19 tests. Typecheck and all 855 tests pass; the map build has no guardrail failures and leaves the `.bin` unchanged.
+
+### E7.2 (ground polygons)
+
+- `ground` replaces `footprint` in `places.json`: the corners of the former rectangles, `[lon, lat]` to 6 decimals. `boundaryKm` stays.
+- `ground` is required. The validator rejects fewer than 3 points, crossing or touching edges and repeated points, naming the airport. `stampAnchorKm` is still checked against the box until E7.4.
+- `groundLocalKm` in `tools/map/place.ts` gives the polygons in real km from the airport center; placed airports also carry them in world km. The map file stores local real m.
+- Against the previous map: no water, road, building or landmark changed. Heights differ by up to 14 m real around the shoulder corners (DCA and PHL), with 9 terrain cells changed in all. The game's ground differs in 5 cells of 2 world m at DCA and 12 at PHL, from rounding the corners to 6 decimals.
+- Typecheck and all tests pass; the map build has no guardrail failures. Seen in the browser at both airports, console clean. Not flown by hand; the scripted DCA to PHL flight passes.

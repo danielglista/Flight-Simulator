@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import placesJson from '../data/map/places.json';
 import scalesJson from '../data/map/scales.json';
-import { distanceKm, overlaps, placeAll, PlaceError } from '../tools/map/place';
+import { distanceKm, groundLocalKm, overlaps, placeAll, PlaceError } from '../tools/map/place';
 import { MapDataError, validatePlaces, validateScales } from '../tools/map/validate';
 
 const sf = validateScales(scalesJson);
@@ -27,6 +27,40 @@ describe('data files', () => {
     expect(() => validatePlaces(bad)).toThrow(/DCA/);
     const noLat = { cities: [{ ...placesJson.cities[0], lat: 'x' }], airports: [] };
     expect(() => validatePlaces(noLat)).toThrow(/cities\[0\]\.lat/);
+  });
+  it('rejects bad airport ground, naming the airport (E7.2)', () => {
+    const [dca] = placesJson.airports;
+    const of = (ground: unknown) => () => validatePlaces({ cities: placesJson.cities, airports: [{ ...dca, ground }] });
+    const [a, b, c, d] = dca!.ground[0]!;
+    expect(of(undefined)).toThrow(/ground.*DCA/);
+    expect(of([])).toThrow(/non-empty.*DCA/);
+    expect(of([[a, b]])).toThrow(/at least 3 points.*DCA/);
+    expect(of([[a, c, b, d]])).toThrow(/cross.*DCA/);
+    expect(of([[a, b, c, a]])).toThrow(/repeat.*DCA/);
+    expect(of([[a, b, [200, 0]]])).toThrow(/out of range/);
+    // Either winding, and a thin strip, are fine.
+    expect(of([[d, c, b, a]])).not.toThrow();
+  });
+});
+
+describe('airport ground (E7.2)', () => {
+  it('is placed about the airport center at its own scale', () => {
+    const pl = placeAll(sf.scales, sf.box, sf.warp, places);
+    for (const a of pl.airports) {
+      const scale = sf.scales.airportMajor;
+      groundLocalKm(a.airport).forEach((ring, k) => {
+        ring.forEach((q, i) => {
+          expect(a.ground[k]![i]!.x).toBeCloseTo(a.boundary.cx + q.x / scale, 9);
+          expect(a.ground[k]![i]!.y).toBeCloseTo(a.boundary.cy + q.y / scale, 9);
+        });
+      });
+    }
+  });
+  it('converts DCA\'s runway strip to a 2.4 km by 100 m outline', () => {
+    const [strip] = groundLocalKm(places.airports[0]!);
+    const side = (i: number) => Math.hypot(strip![(i + 1) % 4]!.x - strip![i]!.x, strip![(i + 1) % 4]!.y - strip![i]!.y);
+    expect(side(0)).toBeCloseTo(0.1, 3);
+    expect(side(1)).toBeCloseTo(2.4, 3);
   });
 });
 

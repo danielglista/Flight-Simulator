@@ -3,6 +3,7 @@ import { fillRings, strokePolyline } from '../tools/map/fill';
 import { runGuardrails } from '../tools/map/guard';
 import { applyReliefRules, boxBlur } from '../tools/map/mountains';
 import { placeAll } from '../tools/map/place';
+import { project, unproject } from '../tools/map/project';
 import { buildSkeleton, DEFAULT_TERRAIN, valueNoise, type PolygonGeo } from '../tools/map/skeleton';
 import { decodeFloatPredictorTile, sampleElevation, type ElevationGrid } from '../tools/map/tiff';
 import type { MapScales, PlacesFile } from '../tools/map/types';
@@ -113,9 +114,17 @@ describe('valueNoise', () => {
 describe('skeleton and guardrails', () => {
   const scales: MapScales = { geoDistance: 25, airportMajor: 1.5, airportSmall: 2, cityCore: 4, altitude: 5, buildingHeight: 3 };
   const box = { south: 38.5, north: 39.3, west: -77.4, east: -76.4 };
+  /** A box of real km about the airport at 38.85, -77, as a ground polygon. */
+  const ground = (w: number, h: number): [number, number][] => {
+    const c = project(38.85, -77.0);
+    return ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([i, j]) => {
+      const ll = unproject(c.x + (i * w) / 2, c.y + (j * h) / 2);
+      return [ll.lon, ll.lat];
+    });
+  };
   const places: PlacesFile = {
     cities: [{ id: 'c', name: 'Town', lat: 38.9, lon: -77.0, coreKm: { w: 8, h: 6 } }],
-    airports: [{ id: 'AAA', name: 'Field', cityId: 'c', lat: 38.85, lon: -77.0, size: 'major', boundaryKm: { w: 2, h: 2.5 }, runwayHeadingDeg: 90 }],
+    airports: [{ id: 'AAA', name: 'Field', cityId: 'c', lat: 38.85, lon: -77.0, size: 'major', boundaryKm: { w: 2, h: 2.5 }, runwayHeadingDeg: 90, ground: [ground(2, 2.5)] }],
   };
   const placement = placeAll(scales, box, DEFAULT_SHAPE, places);
   const land: PolygonGeo[] = [{ rings: [[[-78, 38], [-76.7, 38], [-76.7, 40], [-78, 40]]] }];
@@ -155,13 +164,13 @@ describe('skeleton and guardrails', () => {
     expect(dry?.level).toBe('ok');
     expect(flat?.level).toBe('ok');
   });
-  it('levels only the footprint, so water can run past a runway', () => {
-    const fp = { ...places, airports: [{ ...places.airports[0]!, elevationM: 7, footprint: [{ x: 0, y: 0, length: 1.2, width: 0.2, headingDeg: 0 }] }] };
+  it('levels only the ground, so water can run past a runway', () => {
+    const fp = { ...places, airports: [{ ...places.airports[0]!, elevationM: 7, ground: [ground(0.2, 1.2)] }] };
     const pl = placeAll(scales, box, DEFAULT_SHAPE, fp);
     const lake: PolygonGeo[] = [{ rings: [[[-77.1, 38.7], [-76.9, 38.7], [-76.9, 39], [-77.1, 39]]] }];
     const sk = buildSkeleton({ placement: pl, box, land, lakes: lake, rivers: [], elevationAt: hill });
     const f = sk.flattened[0]!;
-    const inFootprint = new Set(f.cells);
+    const onGround = new Set(f.cells);
     expect(f.elevationM).toBe(7);
     let wetOutside = 0;
     const b = pl.airports[0]!.boundary;
@@ -169,7 +178,7 @@ describe('skeleton and guardrails', () => {
     const c1 = Math.floor((b.cx + b.w / 2 - sk.originKm.x) / 0.01);
     const r0 = Math.floor((b.cy - b.h / 2 - sk.originKm.y) / 0.01);
     const r1 = Math.floor((b.cy + b.h / 2 - sk.originKm.y) / 0.01);
-    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (!inFootprint.has(r * sk.grid.cols + c) && (sk.grid.water[r * sk.grid.cols + c] as number) > 0) wetOutside++;
+    for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (!onGround.has(r * sk.grid.cols + c) && (sk.grid.water[r * sk.grid.cols + c] as number) > 0) wetOutside++;
     expect(wetOutside).toBeGreaterThan(0);
     for (const i of f.cells) {
       expect(sk.grid.water[i]).toBe(0);

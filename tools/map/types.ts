@@ -50,18 +50,6 @@ export interface City {
   readonly warp?: { readonly lat: number; readonly lon: number; readonly coreKm: number; readonly rampKm: number };
 }
 
-/** One paved or cleared area of an airport, in real km relative to the airport center (x east, y north). */
-export interface FootprintRect {
-  readonly x: number;
-  readonly y: number;
-  /** Along the heading. */
-  readonly length: number;
-  /** Across it. */
-  readonly width: number;
-  /** Degrees clockwise from north. */
-  readonly headingDeg: number;
-}
-
 export interface Airport {
   readonly id: string;
   readonly name: string;
@@ -73,8 +61,11 @@ export interface Airport {
   readonly boundaryKm: { readonly w: number; readonly h: number };
   /** Main runway axis, degrees clockwise from north. */
   readonly runwayHeadingDeg: number;
-  /** Ground the generator levels and keeps dry: runways, apron, terminal. Defaults to the whole boundary. Approximate; E3 defines the real layout. */
-  readonly footprint?: readonly FootprintRect[];
+  /**
+   * Ground the generator levels and keeps dry, and the game uses as airport: runways, apron, terminal.
+   * One or more simple polygons of [lon, lat] corners, either winding.
+   */
+  readonly ground: readonly (readonly LonLatPoint[])[];
   /** Field elevation, real m. Defaults to the mean of the surrounding natural ground. */
   readonly elevationM?: number;
   /** Hand override: final world distance from the city center, km, along the real bearing. */

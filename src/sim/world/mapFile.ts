@@ -1,5 +1,5 @@
-import type { GroundRect } from './airport';
 import { createGrid, type GridPatch, type WorldGrid } from './grid';
+import type { Polygon } from './polygon';
 
 /** An airport as the generator placed it: where it is and which ground it leveled. */
 export interface MapAirport {
@@ -11,8 +11,8 @@ export interface MapAirport {
   readonly elevationM: number;
   /** Real meters per world meter of `ground`. */
   readonly scale: number;
-  /** Leveled, dry rectangles, local real meters from the center. */
-  readonly ground: readonly GroundRect[];
+  /** Leveled, dry polygons, local real meters from the center. */
+  readonly ground: readonly Polygon[];
 }
 
 /** One piece of highway: all over land, or all a bridge. */

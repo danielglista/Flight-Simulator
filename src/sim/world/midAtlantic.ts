@@ -85,14 +85,11 @@ export function midAtlanticDef(placed: MapAirport): AirportDef {
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const g of placed.ground) {
-    const gh = (g.headingDeg * Math.PI) / 180;
-    const ex = (Math.abs(Math.sin(gh)) * g.length + Math.abs(Math.cos(gh)) * g.width) / 2;
-    const ey = (Math.abs(Math.cos(gh)) * g.length + Math.abs(Math.sin(gh)) * g.width) / 2;
-    minX = Math.min(minX, g.x - ex);
-    maxX = Math.max(maxX, g.x + ex);
-    minY = Math.min(minY, g.y - ey);
-    maxY = Math.max(maxY, g.y + ey);
+  for (const q of placed.ground.flat()) {
+    minX = Math.min(minX, q.x);
+    maxX = Math.max(maxX, q.x);
+    minY = Math.min(minY, q.y);
+    maxY = Math.max(maxY, q.y);
   }
 
   return {

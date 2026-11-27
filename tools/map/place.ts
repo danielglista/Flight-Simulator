@@ -2,6 +2,7 @@ import { project, type PointKm } from './project';
 import type { Airport, City, MapBox, MapScales, PlacesFile } from './types';
 import { makeField, type MapField, type Stamp } from './stamp';
 import { makeWarp, type Warp, type WarpShape } from './warp';
+import type { Polygon } from '../../src/sim/world/polygon';
 
 /** Clear space kept between an airport boundary and a city core box, world km. */
 export const AIRPORT_GAP_KM = 0.1;
@@ -38,6 +39,8 @@ export interface PlacedAirport {
   /** Final center, world km. */
   readonly world: PointKm;
   readonly boundary: BoxKm;
+  /** The ground polygons, world km. */
+  readonly ground: readonly Polygon[];
   /** World distance from the city center, before and after the push. */
   /** World km the stamp center moves so its anchor (not its center) stays put; zero without an anchor. */
   readonly anchorShiftKm: PointKm;
@@ -57,6 +60,17 @@ export interface Placement {
   readonly box: BoxKm;
   readonly cities: readonly PlacedCity[];
   readonly airports: readonly PlacedAirport[];
+}
+
+/** An airport's ground polygons in real km from its center, x east, y north. */
+export function groundLocalKm(a: Airport): Polygon[] {
+  const c = project(a.lat, a.lon);
+  return a.ground.map((ring) =>
+    ring.map(([lon, lat]) => {
+      const q = project(lat, lon);
+      return { x: q.x - c.x, y: q.y - c.y };
+    }),
+  );
 }
 
 export function overlaps(a: BoxKm, b: BoxKm, gapKm = 0): boolean {
@@ -161,6 +175,7 @@ export function placeAll(
       warped,
       world,
       boundary: b,
+      ground: groundLocalKm(a).map((ring) => ring.map((q) => ({ x: world.x + q.x / scale, y: world.y + q.y / scale }))),
       anchorShiftKm: shift,
       distanceBeforeKm: distanceBefore,
       distanceAfterKm: d,

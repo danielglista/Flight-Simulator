@@ -1,3 +1,4 @@
+import { contains, type Polygon } from './polygon';
 import { Terrain } from './terrain';
 
 export interface Vec2 {
@@ -48,16 +49,6 @@ export interface Airport {
 /** Fine-grid code of a cell that is not part of a masked airport. */
 export const OFF_AIRPORT = 255;
 
-/** A cleared, level rectangle of a masked airport, local real meters. `length` lies along `headingDeg`. */
-export interface GroundRect {
-  readonly x: number;
-  readonly y: number;
-  readonly length: number;
-  readonly width: number;
-  /** Degrees clockwise from north. */
-  readonly headingDeg: number;
-}
-
 // ---- Authoring format: LOCAL REAL meters (x east, y north from the anchor) ----
 
 export type PavingDef =
@@ -80,8 +71,11 @@ export interface AirportDef {
   readonly scale: number;
   /** Degrees a runway name stands above its true heading (magnetic = true + this, west positive). Default 0. */
   readonly variationDeg?: number;
-  /** When given, the airport is masked: only these rectangles are airport ground, and `boundary` must enclose them. */
-  readonly ground?: readonly GroundRect[];
+  /**
+   * When given, the airport is masked: only inside these polygons (cleared, level; local real meters) is airport
+   * ground, and `boundary` must enclose them.
+   */
+  readonly ground?: readonly Polygon[];
   /** Local real meters, relative to the anchor. */
   readonly boundary: { readonly minX: number; readonly minY: number; readonly maxX: number; readonly maxY: number };
   /** Local real meters. */
@@ -192,22 +186,12 @@ export function buildAirport(def: AirportDef): Airport {
   const rows = Math.round((maxY - minY) / def.cellSize);
   const surface = new Uint8Array(cols * rows).fill(def.ground ? OFF_AIRPORT : Terrain.grass);
 
-  const rects = (def.ground ?? []).map((g) => {
-    const h = (g.headingDeg * Math.PI) / 180;
-    const c = toWorld(g);
-    const ux = Math.sin(h);
-    const uy = Math.cos(h);
-    return (x: number, y: number): boolean => {
-      const dx = x - c.x;
-      const dy = y - c.y;
-      return Math.abs(dx * ux + dy * uy) <= g.length / k / 2 && Math.abs(dx * uy - dy * ux) <= g.width / k / 2;
-    };
-  });
-  for (let r = 0; r < rows && rects.length > 0; r++) {
+  const ground = (def.ground ?? []).map((g) => g.map(toWorld));
+  for (let r = 0; r < rows && ground.length > 0; r++) {
     const y = minY + (r + 0.5) * def.cellSize;
     for (let c = 0; c < cols; c++) {
       const x = minX + (c + 0.5) * def.cellSize;
-      if (rects.some((inside) => inside(x, y))) surface[r * cols + c] = Terrain.grass;
+      if (ground.some((g) => contains(g, x, y))) surface[r * cols + c] = Terrain.grass;
     }
   }
 

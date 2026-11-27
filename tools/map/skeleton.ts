@@ -6,6 +6,7 @@ import { applyReliefRules } from './mountains';
 import type { Placement } from './place';
 import { project, unproject, type PointKm } from './project';
 import type { MapField } from './stamp';
+import { contains, nearestOnOutline } from '../../src/sim/world/polygon';
 import type { AuthoredRiver, District, MapBox, WaterFile } from './types';
 
 export type LonLat = readonly [number, number];
@@ -48,7 +49,7 @@ export interface TerrainConfig {
   readonly farmlandMaxM: number;
   /** Airports: the ground blends back to the land over this distance, world km. */
   readonly airportBlendKm: number;
-  /** Airports: margin added around each footprint rectangle, world km. */
+  /** Airports: margin leveled around each ground polygon, so its corners come out rounded, world km. */
   readonly airportShoulderKm: number;
   /** Fixed noise seed. */
   readonly seed: number;
@@ -102,7 +103,7 @@ export interface Skeleton {
   /** World km of the map's southwest corner (same frame as the placement). */
   readonly originKm: { readonly x: number; readonly y: number };
   /** Cell ranges that were flattened for airports. */
-  readonly flattened: readonly { readonly id: string; readonly c0: number; readonly c1: number; readonly r0: number; readonly r1: number; readonly elevationM: number; /** Cell indices of the leveled footprint. */ readonly cells: readonly number[] }[];
+  readonly flattened: readonly { readonly id: string; readonly c0: number; readonly c1: number; readonly r0: number; readonly r1: number; readonly elevationM: number; /** Cell indices of the leveled ground. */ readonly cells: readonly number[] }[];
 }
 
 // ---------- helpers ----------
@@ -269,36 +270,25 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
     });
   }
 
-  // 5. Airports: level, dry ground under the footprint (runways, apron), blended into the land around it.
-  //    Water and hills inside the boundary but outside the footprint stay, so a river can run past a runway end.
+  // 5. Airports: level, dry ground under the ground polygons (runways, apron), blended into the land around it.
+  //    Water and hills inside the boundary but off the ground stay, so a river can run past a runway end.
   const flattened: Skeleton['flattened'][number][] = [];
   const blendCells = cfg.airportBlendKm / cellKm;
   for (const a of placement.airports) {
-    const b = a.boundary;
-    const scale = a.airport.boundaryKm.w / b.w;
-    const rects = a.airport.footprint
-      ? a.airport.footprint.map((f) => ({
-          cx: b.cx + f.x / scale,
-          cy: b.cy + f.y / scale,
-          hl: f.length / scale / 2 + cfg.airportShoulderKm,
-          hw: f.width / scale / 2 + cfg.airportShoulderKm,
-          h: (f.headingDeg * Math.PI) / 180,
-        }))
-      : [{ cx: b.cx, cy: b.cy, hl: b.h / 2, hw: b.w / 2, h: 0 }];
     const mask = new Set<number>();
-    for (const q of rects) {
-      const reachKm = Math.hypot(q.hl, q.hw);
-      const sinH = Math.sin(q.h);
-      const cosH = Math.cos(q.h);
-      const cA = Math.max(0, Math.floor((q.cx - reachKm - left) / cellKm));
-      const cB = Math.min(cols - 1, Math.ceil((q.cx + reachKm - left) / cellKm));
-      const rA = Math.max(0, Math.floor((q.cy - reachKm - bottom) / cellKm));
-      const rB = Math.min(rows - 1, Math.ceil((q.cy + reachKm - bottom) / cellKm));
+    const margin = cfg.airportShoulderKm;
+    for (const q of a.ground) {
+      const xs = q.map((v) => v.x);
+      const ys = q.map((v) => v.y);
+      const cA = Math.max(0, Math.floor((Math.min(...xs) - margin - left) / cellKm));
+      const cB = Math.min(cols - 1, Math.ceil((Math.max(...xs) + margin - left) / cellKm));
+      const rA = Math.max(0, Math.floor((Math.min(...ys) - margin - bottom) / cellKm));
+      const rB = Math.min(rows - 1, Math.ceil((Math.max(...ys) + margin - bottom) / cellKm));
       for (let r = rA; r <= rB; r++) {
         for (let c = cA; c <= cB; c++) {
-          const dx = left + (c + 0.5) * cellKm - q.cx;
-          const dy = bottom + (r + 0.5) * cellKm - q.cy;
-          if (Math.abs(dx * sinH + dy * cosH) <= q.hl && Math.abs(dx * cosH - dy * sinH) <= q.hw) mask.add(r * cols + c);
+          const x = left + (c + 0.5) * cellKm;
+          const y = bottom + (r + 0.5) * cellKm;
+          if (contains(q, x, y) || nearestOnOutline(q, x, y).distance <= margin) mask.add(r * cols + c);
         }
       }
     }
@@ -330,7 +320,7 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
     }
     target = Math.max(cfg.landMinM + 1, Math.round(target));
 
-    // Distance from the footprint (chamfer) over a window, to blend the ground back into the natural land.
+    // Distance from the ground (chamfer) over a window, to blend the ground back into the natural land.
     const reach = Math.ceil(blendCells);
     const wc0 = Math.max(0, c0 - reach);
     const wc1 = Math.min(cols - 1, c1 + reach);
@@ -413,7 +403,7 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
       }
     }
   }
-  // Under the footprint the ground is plain grass; E3 lays the real surfaces over it.
+  // On the airport ground the terrain is plain grass; E3 lays the real surfaces over it.
   for (const f of flattened) for (const i of f.cells) terrain[i] = Terrain.grass;
 
   // 7. City districts over dry land; airport property (the whole boundary, and any leveled ground) stays as it is.

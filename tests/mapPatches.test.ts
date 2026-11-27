@@ -56,7 +56,7 @@ describe('buildWithPatches', { timeout: 60000 }, () => {
     const ten = buildWithPatches(input, sf.grid).patches[0]!;
     expect(patches[0]!.skeleton.grid.cols).toBe(ten.skeleton.grid.cols * 2);
   });
-  it('levels the airport footprint in the base and in the patch', () => {
+  it('levels the airport ground in the base and in the patch', () => {
     const { base, patches } = buildWithPatches(input, sf.grid);
     const f = base.flattened.find((x) => x.id === 'DCA')!;
     const g = patches[0]!.skeleton.flattened[0]!;

@@ -14,7 +14,7 @@ const readJson = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 const load = async (p) => (await runnerImport(join(root, p))).module;
 
 const { validateScales, validatePlaces, validateWater, validateDistricts, validateRoads, validateLandmarks } = await load('tools/map/validate.ts');
-const { placeAll } = await load('tools/map/place.ts');
+const { placeAll, groundLocalKm } = await load('tools/map/place.ts');
 const { buildWithPatches } = await load('tools/map/patches.ts');
 const { runGuardrails } = await load('tools/map/guard.ts');
 const { readDbfField, readPolylines } = await load('tools/map/shapefile.ts');
@@ -109,7 +109,7 @@ for (const st of placement.field.stamps) {
 const built = buildWithPatches({ placement, box: sf.box, land, lakes, rivers, elevationAt, water, districts }, grid);
 const sk = built.base;
 const results = runGuardrails(sk, placement, scales.altitude, checks);
-// Airports are checked again on their fine patch, where the footprint is exact.
+// Airports are checked again on their fine patch, where the ground is exact.
 for (const p of built.patches) {
   if (p.kind !== 'airport') continue;
   const a = placement.airports.find((x) => x.airport.id === p.id);
@@ -159,7 +159,7 @@ const airports = placement.airports.map((a) => {
     y: (a.boundary.cy - sk.originKm.y) * 1000,
     elevationM: flat.elevationM,
     scale,
-    ground: (a.airport.footprint ?? []).map((f) => ({ x: f.x * 1000, y: f.y * 1000, length: f.length * 1000, width: f.width * 1000, headingDeg: f.headingDeg })),
+    ground: groundLocalKm(a.airport).map((ring) => ring.map((q) => ({ x: q.x * 1000, y: q.y * 1000 }))),
   };
 });
 // Buildings (E5.3), placed on the same ground the game will use.

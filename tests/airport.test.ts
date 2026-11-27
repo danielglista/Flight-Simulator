@@ -4,6 +4,7 @@ import { SCALES } from '../src/config/scales';
 import {
   blendWeight,
   buildAirport,
+  OFF_AIRPORT,
   runwayFrame,
   runwayNumber,
   runwaySpan,
@@ -110,6 +111,44 @@ describe('buildAirport', () => {
     expect(at((2560 + O), (955 + O) + 80)).toBe(Terrain.taxiway); // apron link, (0, 160 real)
     expect(at((2560 + O) - 100, (955 + O) + 11.5)).toBe(Terrain.taxiway); // on the taxiway line at real (-200, 23)
     expect(at((2560 + O) + 100, (955 + O) + 70)).toBe(Terrain.grass);
+  });
+});
+
+describe('masked airport ground (E7.2)', () => {
+  const p = (x: number, y: number) => ({ x, y });
+  const def = {
+    ...TEST_AIRPORT_DEF,
+    anchor: { x: 200, y: 200 },
+    scale: 2,
+    blend: 0,
+    cellSize: 2,
+    boundary: { minX: -200, minY: -200, maxX: 200, maxY: 200 },
+    runways: [],
+    paving: [],
+    // Local real m: an L with its upper right quarter taken out, and a separate triangle.
+    ground: [
+      [p(-200, -200), p(0, -200), p(0, -100), p(-100, -100), p(-100, 0), p(-200, 0)],
+      [p(100, 100), p(200, 100), p(100, 200)],
+    ],
+  };
+  const a = buildAirport(def);
+  const at = (x: number, y: number) => a.surface[Math.floor((y - a.minY) / 2) * a.cols + Math.floor((x - a.minX) / 2)];
+
+  it('covers only the cells inside a polygon, at the airport scale', () => {
+    expect(a.masked).toBe(true);
+    expect(at(125, 125)).toBe(Terrain.grass);
+    expect(at(175, 125)).toBe(Terrain.grass);
+    expect(at(125, 175)).toBe(Terrain.grass);
+    expect(at(175, 175)).toBe(OFF_AIRPORT); // the notch
+    expect(at(275, 275)).toBe(Terrain.grass);
+    expect(at(299, 299)).toBe(OFF_AIRPORT); // past the triangle's slanted side
+    expect(at(225, 225)).toBe(OFF_AIRPORT); // between the pieces
+  });
+  it('covers about the polygons\' area', () => {
+    const cells = a.surface.filter((c) => c !== OFF_AIRPORT).length;
+    // World m2: the L is 3/4 of a 100 m square, the triangle half of a 50 m one.
+    // Cell centers on the slanted side count as inside, so a little over.
+    expect(Math.abs(cells * 4 - (7500 + 1250))).toBeLessThan(100);
   });
 });
 
