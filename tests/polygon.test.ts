@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contains, convexHull, convexOverlap, nearestOnOutline, selfCrossing, type Polygon } from '../src/sim/world/polygon';
+import { contains, convexHull, convexOverlap, growConvex, nearestOnOutline, selfCrossing, type Polygon } from '../src/sim/world/polygon';
 
 const poly = (...c: readonly (readonly [number, number])[]): Polygon => c.map(([x, y]) => ({ x, y }));
 const box = (cx: number, cy: number, w: number, h: number): Polygon =>
@@ -130,5 +130,23 @@ describe('convexOverlap', () => {
       expect(convexOverlap(square, inner)).toBe(true);
       expect(convexOverlap(inner, square)).toBe(true);
     }
+  });
+});
+
+describe('growConvex', () => {
+  it('moves each side of a box out, keeping square corners', () => {
+    expect(growConvex(square, 0.5)).toEqual(box(0, 0, 3, 3));
+  });
+
+  it('keeps every side the same distance out on a many-sided shape', () => {
+    const h = convexHull([...ell]);
+    const g = growConvex(h, 0.25);
+    expect(g).toHaveLength(h.length);
+    g.forEach((a, i) => {
+      const b = g[(i + 1) % g.length]!;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      expect(nearestOnOutline(h, mid.x, mid.y).distance).toBeCloseTo(0.25, 12);
+      expect(contains(h, mid.x, mid.y)).toBe(false);
+    });
   });
 });

@@ -21,7 +21,7 @@ export interface MapBox {
 export interface GridSettings {
   readonly baseCellM: number;
   readonly patchCellM: number;
-  /** Margin around each airport boundary and city core that the patch covers, world km. */
+  /** Margin around each airport outline and city core that the patch covers, world km. */
   readonly patchMarginKm: number;
 }
 

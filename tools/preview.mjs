@@ -10,7 +10,7 @@ const readJson = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 const load = async (p) => (await runnerImport(join(root, p))).module;
 
 const { validateScales, validatePlaces } = await load('tools/map/validate.ts');
-const { placeAll, distanceKm } = await load('tools/map/place.ts');
+const { placeAll, distanceKm, boundsOf } = await load('tools/map/place.ts');
 const { renderPreview, COLOR_KEY } = await load('tools/map/render.ts');
 
 const SCALES = [20, 25, 30];
@@ -50,7 +50,7 @@ for (const geo of SCALES) {
         distanceFromCityBeforeKm: round(a.distanceBeforeKm, 2),
         distanceFromCityAfterKm: round(a.distanceAfterKm, 2),
         pushedKm: round(a.pushedKm, 2),
-        boundaryWorldKm: { w: round(a.boundary.w, 2), h: round(a.boundary.h, 2) },
+        outlineWorldKm: { w: round(boundsOf(a.outline).w, 2), h: round(boundsOf(a.outline).h, 2) },
         corridorInBox: a.corridorInBox,
       })),
     };
@@ -58,7 +58,7 @@ for (const geo of SCALES) {
     console.log(`\n1:${geo}  plateau ${summary.plateau}  box ${summary.boxWorldKm.w} x ${summary.boxWorldKm.h} km  ${summary.cells10m} cells`);
     console.log(`  city to city ${summary.cityToCityKm} km, airport to airport ${summary.airportToAirportKm} km, about ${summary.secondsAt250kt} s at 250 kt`);
     for (const a of summary.airports) {
-      console.log(`  ${a.id}: ${a.distanceFromCityBeforeKm} km from city, pushed ${a.pushedKm} km to ${a.distanceFromCityAfterKm} km; boundary ${a.boundaryWorldKm.w} x ${a.boundaryWorldKm.h} km; corridor ${a.corridorInBox ? 'inside box' : 'LEAVES THE BOX'}`);
+      console.log(`  ${a.id}: ${a.distanceFromCityBeforeKm} km from city, pushed ${a.pushedKm} km to ${a.distanceFromCityAfterKm} km; outline ${a.outlineWorldKm.w} x ${a.outlineWorldKm.h} km; corridor ${a.corridorInBox ? 'inside box' : 'LEAVES THE BOX'}`);
     }
   } catch (e) {
     failed = true;

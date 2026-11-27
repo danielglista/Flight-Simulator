@@ -129,3 +129,20 @@ export function convexOverlap(a: Polygon, b: Polygon, gap = 0): boolean {
   }
   return true;
 }
+
+/** A CONVEX counterclockwise polygon with every side moved out by `by`, the sides extended to meet again. */
+export function growConvex(p: Polygon, by: number): Polygon {
+  /** Outward unit normal of edge i. */
+  const normal = (i: number): Vec2 => {
+    const a = corner(p, i);
+    const b = corner(p, i + 1);
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    return { x: (b.y - a.y) / len, y: (a.x - b.x) / len };
+  };
+  return p.map((v, i) => {
+    const m = normal(i + p.length - 1);
+    const n = normal(i);
+    const k = by / (1 + m.x * n.x + m.y * n.y);
+    return { x: v.x + (m.x + n.x) * k, y: v.y + (m.y + n.y) * k };
+  });
+}

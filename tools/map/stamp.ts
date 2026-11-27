@@ -1,20 +1,21 @@
 import type { PointKm } from './project';
 import type { Warp } from './warp';
+import { contains, nearestOnOutline, type Polygon } from '../../src/sim/world/polygon';
 
 /**
  * An airport drawn at its own scale (a stamp), with the land around it bent to meet it.
  *
- * Inside the real boundary, world = stamp center + (real - real center) / scale, exactly.
- * Outside, a point gets the stamp's offset at the nearest boundary point, fading to zero over
+ * Inside the real outline, world = stamp center + (real - real center) / scale, exactly.
+ * Outside, a point gets the stamp's offset at the nearest outline point, fading to zero over
  * `fadeKm` of world distance. So a river beside the runway stays beside it, instead of the
  * pushed and enlarged stamp landing on top of the warped river.
  */
 export interface Stamp {
   readonly id: string;
-  /** Real km center and half sizes of the boundary. */
+  /** Real km center. */
   readonly real: PointKm;
-  readonly halfW: number;
-  readonly halfH: number;
+  /** The shape that is stamped: CONVEX and counterclockwise, real km from the center. */
+  readonly outline: Polygon;
   /** World km center. */
   readonly world: PointKm;
   /** Real km per world km inside the stamp. */
@@ -40,82 +41,97 @@ export interface MapField {
 
 export class FieldError extends Error {}
 
-const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
-
 export interface Prepared extends Stamp {
-  /** Largest offset along the boundary, world km. */
+  /** Largest offset along the outline, world km. */
   readonly maxD: number;
-  /** Fade length at each corner, world km: southwest, southeast, northwest, northeast. Interpolated along the sides. */
-  readonly corners: readonly [number, number, number, number];
+  /** The outline in real km and in world km. */
+  readonly ring: Polygon;
+  readonly worldRing: Polygon;
+  /** Fade length at each corner of the outline, world km. Interpolated along the sides. */
+  readonly fades: readonly number[];
   /** World box the stamp can move points into or out of. */
   readonly reach: { readonly x0: number; readonly x1: number; readonly y0: number; readonly y1: number };
 }
 
 /** The world offset a stamp adds at a real point, given that point's plain warp `q`. */
 function offset(s: Prepared, warp: Warp, x: number, y: number, q: PointKm): PointKm {
-  const cx = clamp(x, s.real.x - s.halfW, s.real.x + s.halfW);
-  const cy = clamp(y, s.real.y - s.halfH, s.real.y + s.halfH);
-  const wc = cx === x && cy === y ? q : warp.toWorld(cx, cy);
+  const inside = contains(s.ring, x, y);
+  const near = inside ? null : nearestOnOutline(s.ring, x, y);
+  const cx = near ? near.x : x;
+  const cy = near ? near.y : y;
+  const wc = near ? warp.toWorld(cx, cy) : q;
   const dx = s.world.x + (cx - s.real.x) / s.scale - wc.x;
   const dy = s.world.y + (cy - s.real.y) / s.scale - wc.y;
+  if (!near) return { x: dx, y: dy };
   const d = Math.hypot(q.x - wc.x, q.y - wc.y);
-  // Fade length from the corners, by where the nearest boundary point sits: continuous all round.
-  const fx = (cx - s.real.x + s.halfW) / (2 * s.halfW);
-  const fy = (cy - s.real.y + s.halfH) / (2 * s.halfH);
-  const [sw, se, nw, ne] = s.corners;
-  const fade = (sw * (1 - fx) + se * fx) * (1 - fy) + (nw * (1 - fx) + ne * fx) * fy;
+  // Fade length from the corners, by where the nearest outline point sits: continuous all round.
+  const a = s.fades[near.edge] as number;
+  const b = s.fades[(near.edge + 1) % s.fades.length] as number;
+  const fade = a * (1 - near.t) + b * near.t;
   if (d >= fade) return { x: 0, y: 0 };
   const t = d / fade;
   const w = 1 - t * t * (3 - 2 * t);
   return { x: w * dx, y: w * dy };
 }
 
-/** Largest offset along the boundary and the box the stamp can reach. */
+/** Largest offset along the outline, each corner's fade, and the box the stamp can reach. */
 function prepare(s: Stamp, warp: Warp): Prepared {
+  const ring = s.outline.map((v) => ({ x: s.real.x + v.x, y: s.real.y + v.y }));
+  const worldRing = s.outline.map((v) => ({ x: s.world.x + v.x / s.scale, y: s.world.y + v.y / s.scale }));
+  const at = (i: number): PointKm => ring[i % ring.length] as PointKm;
+  /** The offset that puts a real point where the stamp has it. */
+  const shift = (r: PointKm, q: PointKm): PointKm => ({ x: s.world.x + (r.x - s.real.x) / s.scale - q.x, y: s.world.y + (r.y - s.real.y) / s.scale - q.y });
+
   let maxD = 0;
   let x0 = Infinity;
   let x1 = -Infinity;
   let y0 = Infinity;
   let y1 = -Infinity;
   const n = 64;
-  for (let k = 0; k < 4 * n; k++) {
-    const side = Math.floor(k / n);
-    const t = (k % n) / n;
-    const rx = s.real.x + s.halfW * (side === 0 ? -1 + 2 * t : side === 1 ? 1 : side === 2 ? 1 - 2 * t : -1);
-    const ry = s.real.y + s.halfH * (side === 0 ? -1 : side === 1 ? -1 + 2 * t : side === 2 ? 1 : 1 - 2 * t);
-    const q = warp.toWorld(rx, ry);
-    maxD = Math.max(maxD, Math.hypot(s.world.x + (rx - s.real.x) / s.scale - q.x, s.world.y + (ry - s.real.y) / s.scale - q.y));
-    x0 = Math.min(x0, q.x);
-    x1 = Math.max(x1, q.x);
-    y0 = Math.min(y0, q.y);
-    y1 = Math.max(y1, q.y);
+  for (let e = 0; e < ring.length; e++) {
+    const a = at(e);
+    const b = at(e + 1);
+    for (let k = 0; k < n; k++) {
+      const r = { x: a.x + ((b.x - a.x) * k) / n, y: a.y + ((b.y - a.y) * k) / n };
+      const q = warp.toWorld(r.x, r.y);
+      const o = shift(r, q);
+      maxD = Math.max(maxD, Math.hypot(o.x, o.y));
+      x0 = Math.min(x0, q.x);
+      x1 = Math.max(x1, q.x);
+      y0 = Math.min(y0, q.y);
+      y1 = Math.max(y1, q.y);
+    }
   }
   // Each corner's fade, from the stricter of its two sides. Only an offset pointing away from the
   // stamp can fold the land; one pointing back toward it, or sideways, may fade quickly, which keeps
   // the stamp from bending the land far beyond it.
-  const need = (sx: -1 | 1, sy: -1 | 1): number => {
-    const rx = s.real.x + sx * s.halfW;
-    const ry = s.real.y + sy * s.halfH;
-    const q = warp.toWorld(rx, ry);
-    const dx = s.world.x + (rx - s.real.x) / s.scale - q.x;
-    const dy = s.world.y + (ry - s.real.y) / s.scale - q.y;
-    const alongX = Math.max(0, dx * sx) + SIDEWAYS_FADE * Math.abs(dy);
-    const alongY = Math.max(0, dy * sy) + SIDEWAYS_FADE * Math.abs(dx);
-    return Math.max(MIN_FADE_KM, maxD > 0 ? (s.fadeKm * Math.max(alongX, alongY)) / maxD : 0);
-  };
-  const corners = [need(-1, -1), need(1, -1), need(-1, 1), need(1, 1)] as const;
-  const m = Math.max(...corners) + maxD;
-  const sw = s.halfW / s.scale;
-  const sh = s.halfH / s.scale;
+  const fades = ring.map((v, i) => {
+    const o = shift(v, warp.toWorld(v.x, v.y));
+    const along = [i + ring.length - 1, i].map((e) => {
+      const a = at(e);
+      const b = at(e + 1);
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      // Outward normal of a counterclockwise side.
+      const nx = (b.y - a.y) / len;
+      const ny = (a.x - b.x) / len;
+      return Math.max(0, o.x * nx + o.y * ny) + SIDEWAYS_FADE * Math.abs(o.y * nx - o.x * ny);
+    });
+    return Math.max(MIN_FADE_KM, maxD > 0 ? (s.fadeKm * Math.max(...along)) / maxD : 0);
+  });
+  const m = Math.max(...fades) + maxD;
+  const xs = worldRing.map((v) => v.x);
+  const ys = worldRing.map((v) => v.y);
   return {
     ...s,
     maxD,
-    corners,
+    ring,
+    worldRing,
+    fades,
     reach: {
-      x0: Math.min(x0 - m, s.world.x - sw),
-      x1: Math.max(x1 + m, s.world.x + sw),
-      y0: Math.min(y0 - m, s.world.y - sh),
-      y1: Math.max(y1 + m, s.world.y + sh),
+      x0: Math.min(x0 - m, ...xs),
+      x1: Math.max(x1 + m, ...xs),
+      y0: Math.min(y0 - m, ...ys),
+      y1: Math.max(y1 + m, ...ys),
     },
   };
 }
@@ -137,9 +153,7 @@ function build(warp: Warp, prepared: readonly Prepared[]): Omit<MapField, 'stamp
   const toReal = (X: number, Y: number): PointKm => {
     let near = false;
     for (const s of prepared) {
-      const sw = s.halfW / s.scale;
-      const sh = s.halfH / s.scale;
-      if (Math.abs(X - s.world.x) <= sw && Math.abs(Y - s.world.y) <= sh) {
+      if (contains(s.worldRing, X, Y)) {
         return { x: s.real.x + (X - s.world.x) * s.scale, y: s.real.y + (Y - s.world.y) * s.scale };
       }
       if (X >= s.reach.x0 && X <= s.reach.x1 && Y >= s.reach.y0 && Y <= s.reach.y1) near = true;
@@ -153,7 +167,7 @@ function build(warp: Warp, prepared: readonly Prepared[]): Omit<MapField, 'stamp
       p = warp.toReal(X - (t0.x - q0.x), Y - (t0.y - q0.y));
     }
     // Damped Newton's method on toWorld, with a numeric Jacobian: a step that does not bring the
-    // point closer is halved, since the clamp and the fade edge make the field only piecewise smooth.
+    // point closer is halved, since the outline and the fade edge make the field only piecewise smooth.
     const h = 1e-5;
     let t = toWorld(p.x, p.y);
     let err = Math.hypot(t.x - X, t.y - Y);
@@ -236,5 +250,5 @@ export function makeField(warp: Warp, stamps: readonly Stamp[]): MapField {
     }
     throw new FieldError(`airport ${s.id}: the land around the stamp folds over itself even with a ${fade.toFixed(1)} km fade`);
   });
-  return { ...build(warp, prepared), stamps: prepared.map(({ maxD: _m, reach: _r, corners: _c, ...s }) => s) };
+  return { ...build(warp, prepared), stamps: prepared.map(({ maxD: _m, reach: _r, ring: _g, worldRing: _w, fades: _f, ...s }) => s) };
 }

@@ -20,6 +20,7 @@ const { runGuardrails } = await load('tools/map/guard.ts');
 const { readDbfField, readPolylines } = await load('tools/map/shapefile.ts');
 const { buildRoads, roadClass, roadLength } = await load('tools/map/roads.ts');
 const { cellAt } = await load('tools/map/skeleton.ts');
+const { growConvex } = await load('src/sim/world/polygon.ts');
 const { generateBuildings, createRoadDistance, packBuildings, inRing } = await load('tools/map/buildings.ts');
 const { project } = await load('tools/map/project.ts');
 const { buildLandmarks, landmarkClear } = await load('tools/map/landmarks.ts');
@@ -137,12 +138,9 @@ const wet = (x, y) => {
   }
   return false;
 };
-const roads = buildRoads({ lines: roadLines, config: roadsConfig, toWorld: (x, y) => placement.field.toWorld(x, y), originKm: sk.originKm, width: sk.grid.cols * sk.grid.cellSize, height: sk.grid.rows * sk.grid.cellSize, wet, avoid: placement.airports.map(({ boundary: b }) => {
-  const m = 20; // clear of the boundary, world m
-  const x = (b.cx - sk.originKm.x) * 1000;
-  const y = (b.cy - sk.originKm.y) * 1000;
-  return { left: x - b.w * 500 - m, right: x + b.w * 500 + m, bottom: y - b.h * 500 - m, top: y + b.h * 500 + m };
-}) });
+const roads = buildRoads({ lines: roadLines, config: roadsConfig, toWorld: (x, y) => placement.field.toWorld(x, y), originKm: sk.originKm, width: sk.grid.cols * sk.grid.cellSize, height: sk.grid.rows * sk.grid.cellSize, wet, avoid: placement.airports.map((a) =>
+  growConvex(a.outline.map((v) => ({ x: (v.x - sk.originKm.x) * 1000, y: (v.y - sk.originKm.y) * 1000 })), 20), // clear of the outline, world m
+) });
 const bridges = roads.filter((r) => r.bridge);
 console.log(`roads: ${roads.length} pieces, ${roads.reduce((n, r) => n + r.points.length / 2, 0)} points, ${bridges.length} over water`);
 for (const r of bridges.filter((b) => roadLength(b) > 300).sort((a, b) => roadLength(b) - roadLength(a))) {
@@ -151,14 +149,13 @@ for (const r of bridges.filter((b) => roadLength(b) > 300).sort((a, b) => roadLe
 
 // Where each airport ended up, in the game's frame (the base grid's southwest corner is 0, 0), and the ground leveled for it.
 const airports = placement.airports.map((a) => {
-  const scale = a.airport.boundaryKm.w / a.boundary.w;
   const flat = sk.flattened.find((f) => f.id === a.airport.id);
   return {
     id: a.airport.id,
-    x: (a.boundary.cx - sk.originKm.x) * 1000,
-    y: (a.boundary.cy - sk.originKm.y) * 1000,
+    x: (a.world.x - sk.originKm.x) * 1000,
+    y: (a.world.y - sk.originKm.y) * 1000,
     elevationM: flat.elevationM,
-    scale,
+    scale: a.scale,
     ground: groundLocalKm(a.airport).map((ring) => ring.map((q) => ({ x: q.x * 1000, y: q.y * 1000 }))),
   };
 });

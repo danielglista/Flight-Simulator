@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fillRings, strokePolyline } from '../tools/map/fill';
 import { runGuardrails } from '../tools/map/guard';
 import { applyReliefRules, boxBlur } from '../tools/map/mountains';
-import { placeAll } from '../tools/map/place';
+import { boundsOf, placeAll } from '../tools/map/place';
 import { project, unproject } from '../tools/map/project';
 import { buildSkeleton, DEFAULT_TERRAIN, valueNoise, type PolygonGeo } from '../tools/map/skeleton';
 import { decodeFloatPredictorTile, sampleElevation, type ElevationGrid } from '../tools/map/tiff';
@@ -173,7 +173,7 @@ describe('skeleton and guardrails', () => {
     const onGround = new Set(f.cells);
     expect(f.elevationM).toBe(7);
     let wetOutside = 0;
-    const b = pl.airports[0]!.boundary;
+    const b = boundsOf(pl.airports[0]!.outline);
     const c0 = Math.floor((b.cx - b.w / 2 - sk.originKm.x) / 0.01);
     const c1 = Math.floor((b.cx + b.w / 2 - sk.originKm.x) / 0.01);
     const r0 = Math.floor((b.cy - b.h / 2 - sk.originKm.y) / 0.01);

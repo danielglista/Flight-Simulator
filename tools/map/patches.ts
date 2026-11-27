@@ -1,4 +1,4 @@
-import type { BoxKm, Placement } from './place';
+import { boundsOf, type BoxKm, type Placement } from './place';
 import { buildSkeleton, DEFAULT_TERRAIN, type BuildWindow, type Skeleton, type SkeletonInput, type TerrainConfig } from './skeleton';
 import type { GridSettings } from './types';
 
@@ -22,12 +22,12 @@ export function snapWindow(b: BoxKm, marginKm: number, baseCellKm: number, origi
   return { left: l, bottom: bo, width: r - l, height: t - bo };
 }
 
-/** One patch per airport (its boundary) and per city (its core). */
+/** One patch per airport (its outline) and per city (its core). */
 export function planPatches(pl: Placement, grid: GridSettings): PatchSpec[] {
   const baseKm = grid.baseCellM / 1000;
   const origin = { x: pl.box.cx - pl.box.w / 2, y: pl.box.cy - pl.box.h / 2 };
   const out: PatchSpec[] = [];
-  for (const a of pl.airports) out.push({ id: a.airport.id, kind: 'airport', window: snapWindow(a.boundary, grid.patchMarginKm, baseKm, origin) });
+  for (const a of pl.airports) out.push({ id: a.airport.id, kind: 'airport', window: snapWindow(boundsOf(a.outline), grid.patchMarginKm, baseKm, origin) });
   for (const c of pl.cities) out.push({ id: c.city.id, kind: 'city', window: snapWindow(c.core, grid.patchMarginKm, baseKm, origin) });
   return out;
 }

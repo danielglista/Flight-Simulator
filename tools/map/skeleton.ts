@@ -271,7 +271,7 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
   }
 
   // 5. Airports: level, dry ground under the ground polygons (runways, apron), blended into the land around it.
-  //    Water and hills inside the boundary but off the ground stay, so a river can run past a runway end.
+  //    Water and hills inside the outline but off the ground stay, so a river can run past a runway end.
   const flattened: Skeleton['flattened'][number][] = [];
   const blendCells = cfg.airportBlendKm / cellKm;
   for (const a of placement.airports) {
@@ -406,14 +406,14 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
   // On the airport ground the terrain is plain grass; E3 lays the real surfaces over it.
   for (const f of flattened) for (const i of f.cells) terrain[i] = Terrain.grass;
 
-  // 7. City districts over dry land; airport property (the whole boundary, and any leveled ground) stays as it is.
+  // 7. City districts over dry land; airport property (the whole outline, and any leveled ground) stays as it is.
   if (input.districts?.length) {
     const keep = new Set<number>();
     for (const f of flattened) for (const i of f.cells) keep.add(i);
     const onAirport = (i: number): boolean => {
       const x = left + ((i % cols) + 0.5) * cellKm;
       const y = bottom + (Math.floor(i / cols) + 0.5) * cellKm;
-      return placement.airports.some(({ boundary: b }) => Math.abs(x - b.cx) <= b.w / 2 && Math.abs(y - b.cy) <= b.h / 2);
+      return placement.airports.some((a) => contains(a.outline, x, y));
     };
     paintDistricts(input.districts, toCells, cols, rows, (i) => land[i] === 1 && water[i] === 0 && !keep.has(i) && !onAirport(i), terrain);
   }

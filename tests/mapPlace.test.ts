@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import placesJson from '../data/map/places.json';
 import scalesJson from '../data/map/scales.json';
-import { distanceKm, groundLocalKm, overlaps, placeAll, PlaceError } from '../tools/map/place';
+import { boundsOf, boxPolygon, distanceKm, groundLocalKm, placeAll, PlaceError } from '../tools/map/place';
+import { convexOverlap } from '../src/sim/world/polygon';
 import { MapDataError, validatePlaces, validateScales } from '../tools/map/validate';
 
 const sf = validateScales(scalesJson);
@@ -50,8 +51,8 @@ describe('airport ground (E7.2)', () => {
       const scale = sf.scales.airportMajor;
       groundLocalKm(a.airport).forEach((ring, k) => {
         ring.forEach((q, i) => {
-          expect(a.ground[k]![i]!.x).toBeCloseTo(a.boundary.cx + q.x / scale, 9);
-          expect(a.ground[k]![i]!.y).toBeCloseTo(a.boundary.cy + q.y / scale, 9);
+          expect(a.ground[k]![i]!.x).toBeCloseTo(a.world.x + q.x / scale, 9);
+          expect(a.ground[k]![i]!.y).toBeCloseTo(a.world.y + q.y / scale, 9);
         });
       });
     }
@@ -68,8 +69,8 @@ describe('placement', () => {
   for (const geo of [20, 25, 30]) {
     it(`keeps airports clear of cores and each other at 1:${geo}`, () => {
       const pl = at(geo);
-      for (const a of pl.airports) for (const c of pl.cities) expect(overlaps(a.boundary, c.core)).toBe(false);
-      expect(overlaps(pl.airports[0]!.boundary, pl.airports[1]!.boundary)).toBe(false);
+      for (const a of pl.airports) for (const c of pl.cities) expect(convexOverlap(a.outline, boxPolygon(c.core))).toBe(false);
+      expect(convexOverlap(pl.airports[0]!.outline, pl.airports[1]!.outline)).toBe(false);
     });
   }
   it('pushes along the real bearing from the city', () => {
@@ -94,10 +95,10 @@ describe('placement', () => {
     expect(trip).toBeGreaterThan(7.7);
     expect(trip).toBeLessThan(8.1);
   });
-  it('sizes the boundary by the airport scale', () => {
+  it('sizes the outline by the airport scale', () => {
     const pl = at(25);
-    expect(pl.airports[0]!.boundary.w).toBeCloseTo(1.2 / 2, 9);
-    expect(pl.airports[1]!.boundary.w).toBeCloseTo(3.4 / 2, 9);
+    expect(boundsOf(pl.airports[0]!.outline).w).toBeCloseTo(1.2 / 2, 9);
+    expect(boundsOf(pl.airports[1]!.outline).w).toBeCloseTo(3.4 / 2, 9);
   });
   it('honors a hand override', () => {
     const custom = { ...places, airports: [{ ...dca, pushOverrideKm: 3 }] };

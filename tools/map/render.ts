@@ -12,6 +12,7 @@ export const COLORS = {
   core: [215, 40, 40],
   ring: [235, 150, 30],
   airport: [30, 150, 70],
+  ground: [90, 60, 30],
   corridor: [150, 60, 190],
   unwarped: [150, 150, 150],
   warped: [235, 150, 30],
@@ -24,7 +25,8 @@ export const COLOR_KEY: readonly (readonly [string, string])[] = [
   ['black rectangle', 'map box'],
   ['red box', 'city core'],
   ['orange circles', 'warp radii: 8 km, 80 km and 90 km real (ring edge is the outer one)'],
-  ['green box', 'airport boundary'],
+  ['green outline', 'airport outline: bends the land and is kept clear'],
+  ['brown outlines', 'airport ground'],
   ['purple box', 'approach corridor'],
   ['gray cross', 'airport real position with no warping'],
   ['orange cross', 'airport after warping, before the push'],
@@ -82,7 +84,8 @@ export function renderPreview(pl: Placement): Raster {
 
   for (const a of pl.airports) {
     r.polyline(a.corridor.map((p) => [px(p.x), py(p.y)] as const), COLORS.corridor, true);
-    r.box(px(a.boundary.cx), py(a.boundary.cy), a.boundary.w * PX_PER_KM, a.boundary.h * PX_PER_KM, COLORS.airport, 2);
+    r.polyline(a.outline.map((p) => [px(p.x), py(p.y)] as const), COLORS.airport, true, 2);
+    for (const g of a.ground) r.polyline(g.map((p) => [px(p.x), py(p.y)] as const), COLORS.ground, true);
     r.cross(px(a.real.x * sg), py(a.real.y * sg), 8, COLORS.unwarped);
     r.cross(px(a.warped.x), py(a.warped.y), 8, COLORS.warped);
     r.cross(px(a.world.x), py(a.world.y), 8, COLORS.final, 2);

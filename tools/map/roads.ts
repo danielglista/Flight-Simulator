@@ -1,4 +1,5 @@
 import type { MapRoad } from '../../src/sim/world/mapFile';
+import { nearestOnOutline, type Polygon } from '../../src/sim/world/polygon';
 import { project, type PointKm } from './project';
 import type { ShapeLine } from './shapefile';
 import type { RoadsFile } from './types';
@@ -14,15 +15,8 @@ export interface RoadInput {
   readonly height: number;
   /** True over water, game frame world meters. */
   readonly wet: (x: number, y: number) => boolean;
-  /** Airport boundaries, game frame world meters: roads go around them. */
-  readonly avoid?: readonly Box[];
-}
-
-export interface Box {
-  readonly left: number;
-  readonly bottom: number;
-  readonly right: number;
-  readonly top: number;
+  /** Convex counterclockwise shapes around the airports, game frame world meters: roads go around them. */
+  readonly avoid?: readonly Polygon[];
 }
 
 type P = readonly [number, number];
@@ -113,68 +107,68 @@ export function joinLines(lines: readonly ShapeLine[]): ShapeLine[] {
   return out;
 }
 
-const within = (p: P, b: Box): boolean => p[0] > b.left && p[0] < b.right && p[1] > b.bottom && p[1] < b.top;
+/** Strictly inside a convex counterclockwise polygon: left of every side. */
+const within = (p: P, shape: Polygon): boolean =>
+  shape.every((a, i) => {
+    const b = shape[(i + 1) % shape.length] as Polygon[number];
+    return (b.x - a.x) * (p[1] - a.y) - (b.y - a.y) * (p[0] - a.x) > 0;
+  });
 
-/** Where the segment from `out` (outside) to `inner` (inside) meets the box edge. */
-function crossing(out: P, inner: P, b: Box): P {
+/** Where the segment from `out` (outside) to `inner` (inside) meets the edge of the shape. */
+function crossing(out: P, inner: P, shape: Polygon): P {
   let lo = 0;
   let hi = 1;
   const at = (t: number): P => [out[0] + (inner[0] - out[0]) * t, out[1] + (inner[1] - out[1]) * t];
   for (let k = 0; k < 24; k++) {
     const m = (lo + hi) / 2;
-    if (within(at(m), b)) hi = m;
+    if (within(at(m), shape)) hi = m;
     else lo = m;
   }
   return at(lo);
 }
 
-/** The shorter way along the box edge from one edge point to another, including any corners passed. */
-function alongEdge(from: P, to: P, b: Box): P[] {
-  const w = b.right - b.left;
-  const h = b.top - b.bottom;
-  const total = 2 * (w + h);
-  // Distance counterclockwise from the southwest corner.
+/** The shorter way along the outline from one point on it to another, including any corners passed. */
+function alongEdge(from: P, to: P, shape: Polygon): P[] {
+  /** Distance counterclockwise from the first corner to each corner. */
+  const starts: number[] = [];
+  let total = 0;
+  shape.forEach((a, i) => {
+    const b = shape[(i + 1) % shape.length] as Polygon[number];
+    starts.push(total);
+    total += Math.hypot(b.x - a.x, b.y - a.y);
+  });
   const where = (p: P): number => {
-    const d = [Math.abs(p[1] - b.bottom), Math.abs(p[0] - b.right), Math.abs(p[1] - b.top), Math.abs(p[0] - b.left)];
-    const side = d.indexOf(Math.min(...d));
-    if (side === 0) return p[0] - b.left;
-    if (side === 1) return w + (p[1] - b.bottom);
-    if (side === 2) return w + h + (b.right - p[0]);
-    return 2 * w + h + (b.top - p[1]);
+    const { edge, t } = nearestOnOutline(shape, p[0], p[1]);
+    const start = starts[edge] as number;
+    return start + t * ((starts[edge + 1] ?? total) - start);
   };
   const t0 = where(from);
   const ahead = (where(to) - t0 + total) % total;
   const sign = ahead <= total - ahead ? 1 : -1;
   const span = sign > 0 ? ahead : total - ahead;
-  const corners: [number, P][] = [
-    [0, [b.left, b.bottom]],
-    [w, [b.right, b.bottom]],
-    [w + h, [b.right, b.top]],
-    [2 * w + h, [b.left, b.top]],
-  ];
-  const passed = corners
-    .map(([t, c]) => [(((t - t0) * sign) % total + total) % total, c] as const)
+  const passed = shape
+    .map((v, i) => [(((((starts[i] as number) - t0) * sign) % total) + total) % total, [v.x, v.y] as P] as const)
     .filter(([d]) => d > 0 && d < span)
     .sort((a, c) => a[0] - c[0])
     .map(([, c]) => c);
   return [from, ...passed, to];
 }
 
-/** Reroute a line around a box: each run inside it follows the edge instead. A run with a loose end is cut off. */
-export function skirt(line: readonly P[], box: Box): P[][] {
+/** Reroute a line around a convex shape: each run inside it follows the edge instead. A run with a loose end is cut off. */
+export function skirt(line: readonly P[], shape: Polygon): P[][] {
   const out: P[][] = [];
   let piece: P[] = [];
   let entry: P | null = null;
   for (let i = 0; i < line.length; i++) {
     const p = line[i] as P;
     const prev = line[i - 1];
-    if (within(p, box)) {
-      if (prev && !within(prev, box)) entry = crossing(prev, p, box);
+    if (within(p, shape)) {
+      if (prev && !within(prev, shape)) entry = crossing(prev, p, shape);
       continue;
     }
-    if (prev && within(prev, box)) {
-      const exit = crossing(p, prev, box);
-      if (entry) piece.push(...alongEdge(entry, exit, box));
+    if (prev && within(prev, shape)) {
+      const exit = crossing(p, prev, shape);
+      if (entry) piece.push(...alongEdge(entry, exit, shape));
       else {
         out.push(piece);
         piece = [exit];
@@ -271,7 +265,7 @@ export function buildRoads(input: RoadInput): MapRoad[] {
         }
       }
       let lines: P[][] = [world];
-      for (const box of input.avoid ?? []) lines = lines.flatMap((l) => skirt(l, box));
+      for (const shape of input.avoid ?? []) lines = lines.flatMap((l) => skirt(l, shape));
 
       for (const line of lines) {
         let piece: P[] = [];

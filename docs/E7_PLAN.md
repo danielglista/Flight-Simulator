@@ -1,6 +1,6 @@
 # E7 Implementation Plan: Polygon Airports
 
-**Status:** E7.0 trial run, E7.1 and E7.2 built (§10); next is E7.3. The airport ground is polygons; the land still bends to the `boundaryKm` box.
+**Status:** E7.0 trial run, E7.1 to E7.3 built (§10); next is E7.4. The generator works on a convex outline, still fed the `boundaryKm` box, so the map is unchanged.
 **Milestone:** the airports can be shaped by editing points, and sit in the land around them without a large rectangle pushing it out of the way.
 **Starting state:** E6 landmarks, magnetic headings and approach aids committed. E4 (scale tuning) is not done.
 
@@ -173,3 +173,12 @@ Two trials against the present map, at 1:25. The ground kept its real place; onl
 - `groundLocalKm` in `tools/map/place.ts` gives the polygons in real km from the airport center; placed airports also carry them in world km. The map file stores local real m.
 - Against the previous map: no water, road, building or landmark changed. Heights differ by up to 14 m real around the shoulder corners (DCA and PHL), with 9 terrain cells changed in all. The game's ground differs in 5 cells of 2 world m at DCA and 12 at PHL, from rounding the corners to 6 decimals.
 - Typecheck and all tests pass; the map build has no guardrail failures. Seen in the browser at both airports, console clean. Not flown by hand; the scripted DCA to PHL flight passes.
+
+### E7.3 (generator on a convex outline)
+
+- The rebuilt map matches E7.2's byte for byte; no guardrail failures.
+- A placed airport has `outline` (convex, counterclockwise, world km) and `scale` in place of the `boundary` box. The stamp, push, overlap checks, patch window, district keep-out, highway skirting and previews use the outline.
+- `outlineLocalKm` in `tools/map/place.ts` still returns the `boundaryKm` box: it is the one place E7.4 changes the shape. The `stampAnchorKm` check in `validate.ts` also still reads the box.
+- `growConvex` was added to `polygon.ts` for the highways' 20 world m margin. Its corners extend until the sides meet, so a very sharp corner would reach far out.
+- Previews draw the outline and the ground polygons.
+- Tests: a rectangle outline reproduces values recorded from the box stamp; DCA's ground hull is exact inside, continuous and fold-free. Typecheck and all 870 tests pass. The game was not looked at, since the map is identical.

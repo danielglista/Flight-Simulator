@@ -2,9 +2,9 @@ import { project, type PointKm } from './project';
 import type { Airport, City, MapBox, MapScales, PlacesFile } from './types';
 import { makeField, type MapField, type Stamp } from './stamp';
 import { makeWarp, type Warp, type WarpShape } from './warp';
-import type { Polygon } from '../../src/sim/world/polygon';
+import { convexOverlap, type Polygon } from '../../src/sim/world/polygon';
 
-/** Clear space kept between an airport boundary and a city core box, world km. */
+/** Clear space kept between an airport outline and a city core box, world km. */
 export const AIRPORT_GAP_KM = 0.1;
 /** Approach corridor length each way from the airport center, and its full width, world km. */
 export const CORRIDOR_LENGTH_KM = 4;
@@ -38,7 +38,13 @@ export interface PlacedAirport {
   readonly warped: PointKm;
   /** Final center, world km. */
   readonly world: PointKm;
-  readonly boundary: BoxKm;
+  /**
+   * The convex shape, world km, counterclockwise, that bends the land and is kept clear: of city cores and other
+   * airports, of districts and of highways.
+   */
+  readonly outline: Polygon;
+  /** Real km per world km of this airport. */
+  readonly scale: number;
   /** The ground polygons, world km. */
   readonly ground: readonly Polygon[];
   /** World distance from the city center, before and after the push. */
@@ -73,8 +79,34 @@ export function groundLocalKm(a: Airport): Polygon[] {
   );
 }
 
-export function overlaps(a: BoxKm, b: BoxKm, gapKm = 0): boolean {
-  return Math.abs(a.cx - b.cx) < (a.w + b.w) / 2 + gapKm && Math.abs(a.cy - b.cy) < (a.h + b.h) / 2 + gapKm;
+/** The outline in real km from the airport center, counterclockwise. For now the `boundaryKm` box. */
+export function outlineLocalKm(a: Airport): Polygon {
+  return boxPolygon({ cx: 0, cy: 0, w: a.boundaryKm.w, h: a.boundaryKm.h });
+}
+
+/** A box's corners, counterclockwise from the southwest. */
+export function boxPolygon(b: BoxKm): Polygon {
+  const x0 = b.cx - b.w / 2;
+  const x1 = b.cx + b.w / 2;
+  const y0 = b.cy - b.h / 2;
+  const y1 = b.cy + b.h / 2;
+  return [
+    { x: x0, y: y0 },
+    { x: x1, y: y0 },
+    { x: x1, y: y1 },
+    { x: x0, y: y1 },
+  ];
+}
+
+/** The upright box around a polygon. */
+export function boundsOf(p: Polygon): BoxKm {
+  const xs = p.map((v) => v.x);
+  const ys = p.map((v) => v.y);
+  const x0 = Math.min(...xs);
+  const x1 = Math.max(...xs);
+  const y0 = Math.min(...ys);
+  const y1 = Math.max(...ys);
+  return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 };
 }
 
 /** World-frame box for a lat/lon box, unwarped at its edge. */
@@ -141,8 +173,7 @@ export function placeAll(
     const scale = a.size === 'major' ? scales.airportMajor : scales.airportSmall;
     const real = project(a.lat, a.lon);
     const warped = warp.toWorld(real.x, real.y);
-    const boundaryW = a.boundaryKm.w / scale;
-    const boundaryH = a.boundaryKm.h / scale;
+    const local = outlineLocalKm(a);
 
     // Real bearing from the city center; warping is radial so the world bearing is the same.
     const dx = real.x - city.real.x;
@@ -157,25 +188,27 @@ export function placeAll(
     const an = a.stampAnchorKm ?? { x: 0, y: 0 };
     const wa = warp.toWorld(real.x + an.x, real.y + an.y);
     const shift = { x: wa.x - warped.x - an.x / scale, y: wa.y - warped.y - an.y / scale };
-    const boxAt = (d: number): BoxKm => ({ cx: city.world.x + ux * d + shift.x, cy: city.world.y + uy * d + shift.y, w: boundaryW, h: boundaryH });
+    const centerAt = (d: number): PointKm => ({ x: city.world.x + ux * d + shift.x, y: city.world.y + uy * d + shift.y });
+    const place = (ring: Polygon, c: PointKm): Polygon => ring.map((v) => ({ x: c.x + v.x / scale, y: c.y + v.y / scale }));
 
     let d = a.pushOverrideKm ?? distanceBefore;
     if (a.pushOverrideKm === undefined) {
-      while (overlaps(boxAt(d), city.core, AIRPORT_GAP_KM)) {
+      const core = boxPolygon(city.core);
+      while (convexOverlap(place(local, centerAt(d)), core, AIRPORT_GAP_KM)) {
         d += PUSH_STEP_KM;
         if (d > PUSH_LIMIT_KM) throw new PlaceError(`airport ${a.id} could not be pushed clear of ${city.city.name}`);
       }
     }
-    const b = boxAt(d);
-    const world = { x: b.cx, y: b.cy };
+    const world = centerAt(d);
     const corridor = corridorFor(world, a.runwayHeadingDeg);
     placed.push({
       airport: a,
       real,
       warped,
       world,
-      boundary: b,
-      ground: groundLocalKm(a).map((ring) => ring.map((q) => ({ x: world.x + q.x / scale, y: world.y + q.y / scale }))),
+      outline: place(local, world),
+      scale,
+      ground: groundLocalKm(a).map((ring) => place(ring, world)),
       anchorShiftKm: shift,
       distanceBeforeKm: distanceBefore,
       distanceAfterKm: d,
@@ -188,22 +221,21 @@ export function placeAll(
   // Nothing may overlap: each airport against every core and every other airport.
   for (const p of placed) {
     for (const c of cities) {
-      if (overlaps(p.boundary, c.core)) throw new PlaceError(`airport ${p.airport.id} overlaps the core of ${c.city.name}`);
+      if (convexOverlap(p.outline, boxPolygon(c.core))) throw new PlaceError(`airport ${p.airport.id} overlaps the core of ${c.city.name}`);
     }
   }
   for (let i = 0; i < placed.length; i++) {
     for (let j = i + 1; j < placed.length; j++) {
       const a = placed[i] as PlacedAirport;
       const b = placed[j] as PlacedAirport;
-      if (overlaps(a.boundary, b.boundary)) throw new PlaceError(`airports ${a.airport.id} and ${b.airport.id} overlap`);
+      if (convexOverlap(a.outline, b.outline)) throw new PlaceError(`airports ${a.airport.id} and ${b.airport.id} overlap`);
     }
   }
 
   const stamps: Stamp[] = placed.flatMap((p) => {
     const fade = p.airport.stampFadeKm;
     if (fade === undefined) return [];
-    const scale = p.airport.boundaryKm.w / p.boundary.w;
-    return [{ id: p.airport.id, real: p.real, halfW: p.airport.boundaryKm.w / 2, halfH: p.airport.boundaryKm.h / 2, world: p.world, scale, fadeKm: fade }];
+    return [{ id: p.airport.id, real: p.real, outline: outlineLocalKm(p.airport), world: p.world, scale: p.scale, fadeKm: fade }];
   });
   return { warp, field: makeField(warp, stamps), box: wbox, cities, airports: placed };
 }

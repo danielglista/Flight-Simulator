@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import roadsJson from '../data/map/roads.json';
 import { buildRoads, joinLines, roadClass, roadLength, simplify, skirt, splitAtWater } from '../tools/map/roads';
+import { contains, nearestOnOutline } from '../src/sim/world/polygon';
 import { readDbfField, readPolylines } from '../tools/map/shapefile';
 import { MapDataError, validateRoads } from '../tools/map/validate';
 
@@ -73,11 +74,23 @@ describe('road geometry', () => {
     expect(joined[0]!.line).toHaveLength(3);
   });
   it('goes around a box the shorter way, never through it', () => {
-    const box = { left: 0, bottom: 0, right: 100, top: 40 };
+    const box = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 40 }, { x: 0, y: 40 }];
     const [line] = skirt([[80, 60], [80, 30], [80, 10], [80, -20]], box);
     expect(line).toContainEqual([100, 40]);
     expect(line).toContainEqual([100, 0]);
     for (const [x, y] of line!) expect(x > 0.01 && x < 99.99 && y > 0.01 && y < 39.99).toBe(false);
+  });
+  it('follows the slanted sides of a many-sided shape (E7.3)', () => {
+    const hexagon = [{ x: 20, y: 0 }, { x: 60, y: 0 }, { x: 80, y: 30 }, { x: 60, y: 60 }, { x: 20, y: 60 }, { x: 0, y: 30 }];
+    const [line] = skirt([[-10, 40], [10, 40], [50, 40], [90, 40]], hexagon);
+    // North over the top, the shorter way, by both upper corners.
+    expect(line).toContainEqual([60, 60]);
+    expect(line).toContainEqual([20, 60]);
+    expect(line).toHaveLength(6); // the two ends, where it enters and leaves, and the two corners
+    for (const [x, y] of line!) {
+      const q = nearestOnOutline(hexagon, x, y);
+      expect(contains(hexagon, x, y) && q.distance > 0.01).toBe(false);
+    }
   });
   it('makes one road of two carriageways, and keeps roads that are far apart', () => {
     const build = (gapDeg: number) =>

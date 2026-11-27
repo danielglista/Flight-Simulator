@@ -35,11 +35,12 @@ function cellColor(sk: Skeleton, c: number, r: number, altitudeScale: number): R
   return [Math.min(255, base[0] * lit), Math.min(255, base[1] * lit), Math.min(255, base[2] * lit)];
 }
 
-/** Draw the footprints and overlays; `px` and `py` turn world km into image pixels. */
+/** Draw the city cores, airport outlines, ground and corridors; `px` and `py` turn world km into image pixels. */
 function overlays(img: Raster, sk: Skeleton, placement: Placement, px: (x: number) => number, py: (y: number) => number, pxPerKm: number): void {
   for (const c of placement.cities) img.box(px(c.core.cx), py(c.core.cy), c.core.w * pxPerKm, c.core.h * pxPerKm, [215, 40, 40], 2);
   for (const a of placement.airports) {
-    img.box(px(a.boundary.cx), py(a.boundary.cy), a.boundary.w * pxPerKm, a.boundary.h * pxPerKm, [0, 0, 0], 1);
+    img.polyline(a.outline.map((p) => [px(p.x), py(p.y)] as const), [0, 0, 0], true);
+    for (const g of a.ground) img.polyline(g.map((p) => [px(p.x), py(p.y)] as const), [90, 60, 30], true);
     img.polyline(a.corridor.map((p) => [px(p.x), py(p.y)] as const), [150, 60, 190], true);
   }
   void sk;
@@ -75,7 +76,7 @@ function drawRoads(img: Raster, roads: readonly MapRoad[], px: (x: number) => nu
   }
 }
 
-/** Whole map, one pixel per cell, north up. Footprints are tinted gray. */
+/** Whole map, one pixel per cell, north up. Airport ground is tinted gray. */
 export function renderTerrain(sk: Skeleton, placement: Placement, altitudeScale: number, roads: readonly MapRoad[] = [], buildings: readonly MapBuilding[] = []): Raster {
   const { cols, rows } = sk.grid;
   const img = new Raster(cols, rows);
