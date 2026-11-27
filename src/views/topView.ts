@@ -1,7 +1,7 @@
-import { centerlineEnds, type ApproachGuide } from './approach';
+import { centerlineEnds, centerlineTicks, type ApproachGuide, type CenterlineEnd } from './approach';
 import { GUIDE_COLOR } from '../config/palette';
 import type { Size } from '../config/display';
-import { CLOUD_BASE_M, CLOUD_SEED, CLOUD_SHADOW_ALPHA, CLOUD_ALPHA_HIGH, CLOUD_SHADOW_SKEW, CLOUD_TILE_M, CLOUD_TILE_PX, DEPTH_FX, RING_LABEL_DEG, RING_MARGIN, RING_MAX_RADIUS, RING_TICK_DEG, TURN_LINE_MAX_S, TURN_LINE_MIN_SPEED, TURN_LINE_TICK_S } from '../config/display';
+import { CENTERLINE_END_PX, CENTERLINE_TICK_PX, CLOUD_BASE_M, CLOUD_SEED, CLOUD_SHADOW_ALPHA, CLOUD_ALPHA_HIGH, CLOUD_SHADOW_SKEW, CLOUD_TILE_M, CLOUD_TILE_PX, DEPTH_FX, RING_LABEL_DEG, RING_MARGIN, RING_MAX_RADIUS, RING_TICK_DEG, TURN_LINE_MAX_S, TURN_LINE_MIN_SPEED, TURN_LINE_TICK_S } from '../config/display';
 import { BUG_COLOR, HAZE_COLOR, MARKER_COLOR, RING_COLOR, ROUTE_COLOR, SEA_COLOR, TURN_LINE_COLOR } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import {
@@ -26,7 +26,7 @@ import { createPlaneSprites } from './sprite';
 import { surfaceName } from './surfaceName';
 import { drawScaleBar, drawText } from './overlay';
 import type { Craft } from '../sim/state';
-import { bugCrossing, turnNeeded } from './headingBug';
+import { bugCrossing, topBugShown, turnNeeded } from './headingBug';
 import { turnTrack } from './turnLine';
 import { colorCells, colorChunk, reduce2x } from './terrainColors';
 import { routeInfo, routeText, type Route } from './route';
@@ -51,14 +51,16 @@ export interface TopView {
     side: SideLink,
     /** False in free look: shows the banner and an arrow to an off-screen plane. */
     following: boolean,
-    /** Heading bug, degrees clockwise from north. Drawn on the compass ring while following. */
+    /** Heading bug, degrees clockwise from magnetic north. Drawn on the compass ring while following. */
     bugDeg: number,
-    /** Takeoff HUD mode (C4B): the heading bug and its ring are not drawn; the value is kept. */
-    takeoff?: boolean,
     /** Approach guidance (C5): the runway center line is drawn out from the threshold. */
     guide?: ApproachGuide | null,
     /** The leg being flown (E3): a line between the two airports, and how far there is to go. */
     route?: Route | null,
+    /** The runway end picked on the HSI: its center line is always drawn. */
+    selected?: CenterlineEnd | null,
+    /** Magnetic variation here, degrees: the ring, bug and route bearing read magnetic. */
+    variationDeg?: number,
     /** Returns true when building tiles are still stand-ins and another frame would sharpen them. */
   ): boolean;
   /** Builds every chunk, airport patch and sprite frame now, so none is built mid-flight. */
@@ -285,12 +287,8 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     return { x: Math.floor(home.x) + 0.5, y: Math.floor(home.y) + 0.5 };
   }
 
-  /**
-   * Dashed line from the plane along the path it will fly at its current speed and turn rate,
-   * with a tick every few seconds. Straight when level, curving into the turn when banked.
-   */
-  /** The runway center line, from far out on the approach to the far end, dashed, even where the runway itself is off screen. */
-  function drawCenterline(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, g: ApproachGuide): void {
+  /** The runway center line, from far out on the approach to the far end, dashed with distance ticks, even where the runway itself is off screen. */
+  function drawCenterline(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, g: CenterlineEnd): void {
     const { from, to } = centerlineEnds(g);
     const a = worldToScreen(camera, view, from.x, from.y);
     const b = worldToScreen(camera, view, to.x, to.y);
@@ -302,10 +300,22 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
     ctx.setLineDash([]);
+    // Ticks cross the line; the outermost is a long bar, the point to be lined up by.
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const nx = -(b.y - a.y) / len;
+    const ny = (b.x - a.x) / len;
+    ctx.beginPath();
+    for (const tick of centerlineTicks(g)) {
+      const p = worldToScreen(camera, view, tick.x, tick.y);
+      const half = tick.end ? CENTERLINE_END_PX : CENTERLINE_TICK_PX;
+      ctx.moveTo(p.x - nx * half, p.y - ny * half);
+      ctx.lineTo(p.x + nx * half, p.y + ny * half);
+    }
+    ctx.stroke();
   }
 
   /** The leg as a dashed line, a ring at the destination, and bearing, distance and time to go top left. */
-  function drawRoute(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, route: Route, craft: Craft): void {
+  function drawRoute(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, route: Route, craft: Craft, variationDeg: number): void {
     const a = worldToScreen(camera, view, route.from.x, route.from.y);
     const b = worldToScreen(camera, view, route.to.x, route.to.y);
     ctx.strokeStyle = ROUTE_COLOR;
@@ -319,9 +329,13 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     ctx.beginPath();
     ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
     ctx.stroke();
-    drawText(ctx, routeText(route.toIdent, routeInfo(craft, route, scale.geoDistance)), 5, 30);
+    drawText(ctx, routeText(route.toIdent, routeInfo(craft, route, scale.geoDistance, variationDeg)), 5, 30);
   }
 
+  /**
+   * Dashed line from the plane along the path it will fly at its current speed and turn rate,
+   * with a tick every few seconds. Straight when level, curving into the turn when banked.
+   */
   function drawTurnLine(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, side: SideLink, home: Point, bugDeg: number | null): void {
     const SAMPLES_PER_TICK = 4;
     // Start exactly at the plane's drawn pixel, so the line never disagrees with the sprite.
@@ -370,11 +384,11 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
    * Compass ring around the plane. It turns with the map (heading up). The bug sits on it with a faint line from the plane,
    * and a text line gives the bug and the turn needed.
    */
-  function drawRing(ctx: CanvasRenderingContext2D, view: Size, rotation: number, craft: Craft, home: Point, bugDeg: number): void {
+  function drawRing(ctx: CanvasRenderingContext2D, view: Size, rotation: number, craft: Craft, home: Point, bugDeg: number, variationDeg: number): void {
     const r = ringRadius(view);
     // Screen position of a compass heading, at distance d from the plane.
     const at = (deg: number, d: number): Point => {
-      const a = (deg * Math.PI) / 180 - rotation;
+      const a = ((deg - variationDeg) * Math.PI) / 180 - rotation;
       return { x: home.x + Math.sin(a) * d, y: home.y - Math.cos(a) * d };
     };
     ctx.strokeStyle = RING_COLOR;
@@ -415,7 +429,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     ctx.lineTo(right.x, right.y);
     ctx.closePath();
     ctx.fill();
-    const need = Math.round(turnNeeded((craft.heading * 180) / Math.PI, bugDeg));
+    const need = Math.round(turnNeeded((craft.heading * 180) / Math.PI + variationDeg, bugDeg));
     const label = need === 0 ? 'ON' : `${need < 0 ? 'L' : 'R'} ${Math.abs(need)}`;
     drawText(ctx, `BUG ${String(Math.round(bugDeg) % 360).padStart(3, '0')}  ${label}`, view.width / 2, 16, 'center');
   }
@@ -442,7 +456,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   }
 
   return {
-    draw(ctx, view, camera, cursor, side, following, bugDeg, takeoff = false, guide = null, route = null) {
+    draw(ctx, view, camera, cursor, side, following, bugDeg, guide = null, route = null, selected = null, variationDeg = 0) {
       // Terrain and airports are drawn north-up, then turned about the view center so the
       // camera's heading points up.
       const rotation = camera.rotation ?? 0;
@@ -467,17 +481,20 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       if (DEPTH_FX.clouds) drawClouds(ctx, view, frame, area, side.craft.z);
       ctx.restore();
       const plane = planePixel(view, camera, side.craft);
-      const showBug = following && !side.crashed && !takeoff && !guide;
-      if (route) drawRoute(ctx, view, camera, route, side.craft);
-      if (guide) drawCenterline(ctx, view, camera, guide);
-      if (showBug) drawRing(ctx, view, camera.rotation ?? 0, side.craft, plane, bugDeg);
+      const showBug = topBugShown(following, side.crashed, side.craft.onGround);
+      if (route) drawRoute(ctx, view, camera, route, side.craft, variationDeg);
+      if (selected) drawCenterline(ctx, view, camera, selected);
+      // The approach's own line too, unless it is the picked one already drawn.
+      const drawn = guide && selected && guide.threshold.x === selected.threshold.x && guide.threshold.y === selected.threshold.y;
+      if (guide && !drawn) drawCenterline(ctx, view, camera, guide);
+      if (showBug) drawRing(ctx, view, camera.rotation ?? 0, side.craft, plane, bugDeg, variationDeg);
       const spriteHeading = side.craft.heading - rotation;
       if (!side.crashed && DEPTH_FX.shadow) {
         const height = agl(side.craft.z, heightAt(grid, scale, side.craft.x, side.craft.y));
         const off = shadowOffsetPx(height, rotation);
         sprites.drawTopShadow(ctx, spriteHeading, plane.x, plane.y, off.x, off.y, shadowAlpha(height));
       }
-      if (!side.crashed && !(side.craft.onGround && side.craft.speed < TURN_LINE_MIN_SPEED)) drawTurnLine(ctx, view, camera, side, plane, showBug ? bugDeg : null);
+      if (!side.crashed && !(side.craft.onGround && side.craft.speed < TURN_LINE_MIN_SPEED)) drawTurnLine(ctx, view, camera, side, plane, showBug ? bugDeg - variationDeg : null);
       if (side.crashed) sprites.drawWreck(ctx, plane.x, plane.y);
       else {
         planeTier = DEPTH_FX.planeSize ? planeSizeTier(side.craft.z, planeTier) : 0;

@@ -1,6 +1,7 @@
 import { ROUTE_MIN_SPEED, ROUTE_NEAR_M } from '../config/map';
 import type { Airport } from '../sim/world/airport';
 import type { Craft } from '../sim/state';
+import { magneticDeg } from './magnetic';
 
 /** The leg being flown, world meters. */
 export interface Route {
@@ -28,7 +29,7 @@ export function routeFor(airports: readonly Airport[], start: { readonly x: numb
 }
 
 export interface RouteInfo {
-  /** Degrees clockwise from north, 0..359. */
+  /** Degrees clockwise from magnetic north, 0..359. */
   readonly bearingDeg: number;
   /** Nautical miles between places (world distance x geoDistance), or null close in, where that would mislead. */
   readonly nm: number | null;
@@ -36,13 +37,13 @@ export interface RouteInfo {
   readonly seconds: number | null;
 }
 
-export function routeInfo(craft: Pick<Craft, 'x' | 'y' | 'speed' | 'pathAngle'>, route: Route, geoDistance: number): RouteInfo {
+export function routeInfo(craft: Pick<Craft, 'x' | 'y' | 'speed' | 'pathAngle'>, route: Route, geoDistance: number, variationDeg = 0): RouteInfo {
   const dx = route.to.x - craft.x;
   const dy = route.to.y - craft.y;
   const d = Math.hypot(dx, dy);
   const over = craft.speed * Math.cos(craft.pathAngle);
   return {
-    bearingDeg: Math.round((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360,
+    bearingDeg: Math.round(magneticDeg((Math.atan2(dx, dy) * 180) / Math.PI, variationDeg)) % 360,
     nm: d < ROUTE_NEAR_M ? null : (d * geoDistance) / 1852,
     seconds: over < ROUTE_MIN_SPEED ? null : d / over,
   };

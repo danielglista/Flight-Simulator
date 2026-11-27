@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bugCrossing, stepBug, turnNeeded } from '../src/views/headingBug';
+import { topBugShown, bugCrossing, stepBug, turnNeeded } from '../src/views/headingBug';
 
 const RAD = Math.PI / 180;
 
@@ -42,5 +42,14 @@ describe('bugCrossing', () => {
     expect(bugCrossing(track(0, -10), 30)).toBeNull();
     expect(bugCrossing(track(0, 10), 80)).toBeNull();
     expect(bugCrossing(track(30, 10), 30)).toBeNull();
+  });
+});
+
+describe('top view bug visibility', () => {
+  it('shows only airborne, following and not crashed', () => {
+    expect(topBugShown(true, false, false)).toBe(true);
+    expect(topBugShown(false, false, false)).toBe(false);
+    expect(topBugShown(true, true, false)).toBe(false);
+    expect(topBugShown(true, false, true)).toBe(false);
   });
 });

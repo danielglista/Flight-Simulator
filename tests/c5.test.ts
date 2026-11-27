@@ -10,7 +10,7 @@ import { initialState, type SimState, type Touchdown } from '../src/sim/state';
 import { advance, applyCommands } from '../src/sim/step';
 import { finalStart } from '../src/sim/world/starts';
 import { formatAgl } from '../src/views/format';
-import { approachGuide, guideText } from '../src/views/approach';
+import { approachGuide, centerlineEnds, centerlineTicks, guideText } from '../src/views/approach';
 import { brakeText } from '../src/views/instruments';
 import { speedMarks } from '../src/views/gauges/airspeed';
 import { fly, realWorld, runwayState } from './helpers';
@@ -326,5 +326,19 @@ describe('approach guide', () => {
     expect(g).not.toBeNull();
     expect(g!.threshold).toEqual(runway.b);
     expect(g!.along).toBeCloseTo(-1200, 5);
+  });
+});
+
+describe('top view center line', () => {
+  const end = { threshold: { x: 100, y: 0 }, dir: { x: 0, y: 1 }, length: 1000 };
+
+  it('reaches 6 km before the threshold and on to the far end', () => {
+    expect(centerlineEnds(end)).toEqual({ from: { x: 100, y: -6000 }, to: { x: 100, y: 1000 } });
+  });
+
+  it('marks each km out, the last as the end', () => {
+    const ticks = centerlineTicks(end);
+    expect(ticks.map((t) => t.y)).toEqual([-1000, -2000, -3000, -4000, -5000, -6000]);
+    expect(ticks.map((t) => t.end)).toEqual([false, false, false, false, false, true]);
   });
 });

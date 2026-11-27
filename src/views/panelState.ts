@@ -1,3 +1,4 @@
+import { magneticDeg } from './magnetic';
 import { AP_CAPTURE_DEG, AP_CAPTURE_FT, AP_CAPTURE_KT, ALT_BUG_RIM_FT, ALT_LONG_FT, ASI_AMBER_MULT, ASI_ARC_MIN_KT, ASI_TABLE, HSI_DEV_PX, HSI_GS_PX, VS_MODE, type VsMode } from '../config/display';
 import type { Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
@@ -74,6 +75,8 @@ export interface PanelInput {
   readonly callout?: Callout | null;
   readonly gearPrompt?: boolean;
   readonly approach?: HsiGuide | null;
+  /** Magnetic variation here, degrees: added to every heading shown. `headingBugDeg` is already magnetic. */
+  readonly variationDeg?: number;
 }
 
 let cacheKey = '';
@@ -89,9 +92,9 @@ export function cachedStallSpeed(tuning: Tuning, bank: number, flaps: number): n
   return cacheValue;
 }
 
-const hsiPixels = (g: HsiGuide): HsiApproach => ({
-  courseDeg: quantizeDeg(g.courseDeg),
-  bearingDeg: quantizeDeg(g.bearingDeg),
+const hsiPixels = (g: HsiGuide, variationDeg: number): HsiApproach => ({
+  courseDeg: quantizeDeg(magneticDeg(g.courseDeg, variationDeg)),
+  bearingDeg: quantizeDeg(magneticDeg(g.bearingDeg, variationDeg)),
   barPx: Math.round(g.deviation * HSI_DEV_PX),
   glidePx: g.glide === null ? null : Math.round(g.glide * HSI_GS_PX),
   ident: g.ident,
@@ -119,7 +122,7 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
   const floorOverrides = AP_FLOOR_MULT * stallNowKt > targetKt;
   const lamp = (on: boolean, captured: boolean): 'off' | 'amber' | 'green' => (!on ? 'off' : captured ? 'green' : 'amber');
   return {
-    text: readoutText(craft, scale, input.stall, input.braking, input.gearWarn, vsMode, input.terr ?? false),
+    text: readoutText(craft, scale, input.stall, input.braking, input.gearWarn, vsMode, input.terr ?? false, input.variationDeg ?? 0),
     crashed: input.crashed,
     spdDeg: quantizeDeg(tableAngle(ASI_TABLE, kt)),
     stallRedKt: Math.round(stallKt / 2) * 2,
@@ -130,7 +133,7 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
     pitchDeg: quantizeDeg(craft.pitch * toDeg),
     bankDeg: quantizeDeg(craft.bank * toDeg),
     fpmDeg: craft.onGround || input.crashed ? null : quantizeDeg((craft.pitch - craft.pathAngle) * toDeg),
-    headingDeg: quantizeDeg(headingDeg),
+    headingDeg: quantizeDeg(magneticDeg(headingDeg, input.variationDeg ?? 0)),
     headingBug: input.headingBugDeg ?? null,
     vsDeg: quantizeDeg(vsiAngle(vsMode === 'altimeter' ? altimeterVerticalSpeedFpm(craft, scale) : verticalSpeedFpm(craft), vsMode)),
     vsMode,
@@ -154,7 +157,7 @@ export function buildPanelState(craft: Craft, scale: ScaleConfig, tuning: Tuning
     speedMarks: input.speedMarks ?? [],
     callout: input.callout ?? null,
     gearPrompt: input.gearPrompt ?? false,
-    hsi: input.approach ? hsiPixels(input.approach) : null,
+    hsi: input.approach ? hsiPixels(input.approach, input.variationDeg ?? 0) : null,
   };
 }
 

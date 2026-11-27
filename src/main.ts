@@ -34,6 +34,7 @@ import { speedMarks } from './views/gauges/airspeed';
 import { createSideView } from './views/sideView';
 import { bestApproach, type ApproachGuide } from './views/approach';
 import { routeFor } from './views/route';
+import { magneticVariation } from './views/magnetic';
 import { stallState } from './sim/flight/aero';
 import { gearWarning } from './sim/flight/gear';
 import { forcesOn } from './sim/flight/forces';
@@ -117,8 +118,12 @@ let calloutState: CalloutState = NO_CALLOUTS;
 let takeoffHud: TakeoffHud | null = null;
 let guide: ApproachGuide | null = null;
 let sideCursor: Point | null = null;
-// Heading bug (degrees, clockwise from north): a view setting. It starts at the plane's heading.
-let bugDeg = Math.round((pageStart.heading * 180) / Math.PI) % 360;
+/** Magnetic variation at a position, degrees. Headings are shown magnetic; the sim flies true. */
+const variationAt = (at: { readonly x: number; readonly y: number }): number => magneticVariation(grid.airports, at.x, at.y);
+// Heading bug (degrees, clockwise from magnetic north): a view setting. It starts at the plane's heading.
+let bugDeg = Math.round((pageStart.heading * 180) / Math.PI + variationAt(pageStart)) % 360;
+/** The bug as the true heading, radians, that the autopilot flies from here. */
+const bugHeading = (at: { readonly x: number; readonly y: number }): number => ((bugDeg - variationAt(at)) * Math.PI) / 180;
 const moveBug = (sign: -1 | 1, fine: boolean): void => {
   bugDeg = stepBug(bugDeg, sign * (fine ? BUG_FINE_DEG : BUG_STEP_DEG));
   syncAutopilotBugs();
@@ -141,12 +146,13 @@ const moveAltBug = (sign: -1 | 1, fine: boolean): void => {
  * The bugs are view state; the autopilot flies the sim's copies. While it is on, any difference is sent as `apTarget`.
  * Run on every drawn frame, because the loop drops queued commands on a pause; paused, `send` applies at once.
  */
+const AP_BUG_RESEND_RAD = (0.1 * Math.PI) / 180;
 function syncAutopilotBugs(): void {
   const ap = loop.state.autopilot;
   if (!ap.on) return;
-  const heading = (bugDeg * Math.PI) / 180;
+  const heading = bugHeading(loop.state.craft);
   const z = bugWorldZ(altBugFt, scales);
-  if (Math.abs(headingError(ap.headingTarget, heading)) > 1e-6 || Math.abs(ap.targetZ - z) > 1e-6) loop.send({ kind: 'apTarget', heading, z });
+  if (Math.abs(headingError(ap.headingTarget, heading)) > AP_BUG_RESEND_RAD || Math.abs(ap.targetZ - z) > 1e-6) loop.send({ kind: 'apTarget', heading, z });
 }
 /** Speed target nudge in knots: the sim's own target moves, so the key repeats are exact. */
 const moveSpeedBug = (sign: -1 | 1, fine: boolean): void => {
@@ -223,7 +229,7 @@ const keyboard = attachKeyboard({
   KeyZ: () => {
     const ap = loop.state.autopilot;
     if (ap.on) loop.send({ kind: 'autopilot', on: false });
-    else loop.send({ kind: 'autopilot', on: true, heading: (bugDeg * Math.PI) / 180, z: bugWorldZ(altBugFt, scales) });
+    else loop.send({ kind: 'autopilot', on: true, heading: bugHeading(loop.state.craft), z: bugWorldZ(altBugFt, scales) });
     if (loop.paused) panels.instruments.requestDraw();
   },
   KeyX: () => {
@@ -331,6 +337,7 @@ const currentPanel = (): PanelState => {
     // The HSI keeps its bug on an approach; the other views do not (D5D).
     headingBugDeg: !crashed && takeoffHud === null ? bugDeg : null,
     approach: currentApproach(),
+    variationDeg: variationAt(craft),
     altBugFt: bugsShown ? altBugFt : null,
     gearWarn: !crashed && gearWarning(craft, heightAboveGround(craft.z, world.heightAt(craft.x, craft.y)), indicatedSpeed(craft, scales)),
     crashed,
@@ -365,9 +372,10 @@ const panels = initPanels({
       },
       follow.following,
       bugDeg,
-      takeoffHud !== null,
       guide,
       routeFor(grid.airports, loop.state.start),
+      runwayEnd(grid.airports, runwayMenu?.selected ?? null),
+      variationAt(craft),
     );
     // Running, the next frame comes anyway; paused, ask for one so the buildings finish sharpening.
     if (unfinished && loop.paused) requestAnimationFrame(() => requestTop());
@@ -376,7 +384,7 @@ const panels = initPanels({
     syncFrame();
     const changed = size.width !== sideSize.width || size.height !== sideSize.height;
     sideSize = { width: size.width, height: size.height };
-    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, takeoffHud, guide, { on: loop.state.autopilot.on, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) });
+    sideView.draw(ctx, sideSize, currentCraft(), shownSideZoom, sideCursor, loop.state.crash !== null, altBugFt, takeoffHud, guide, { on: loop.state.autopilot.on, notice: apNoticeText(loop.state.autopilot.notice, loop.state.tick) }, variationAt(currentCraft()));
     // The top view marks exactly what this panel shows, so it follows our size.
     // Redraw only on a change, so the two panels cannot trigger each other forever.
     if (changed || !sideSized) {
@@ -394,7 +402,9 @@ runwayMenu = createRunwayMenu({
   destination: () => routeFor(grid.airports, loop.state.start)?.toIdent ?? null,
   // While running, the next frame draws it.
   onChange: () => {
-    if (loop.paused) panels.instruments.requestDraw();
+    if (!loop.paused) return;
+    panels.instruments.requestDraw();
+    panels.top.requestDraw();
   },
 });
 const debug = createDebugPanel({ loop, scales: scales, timing, heightAt: world.heightAt, groundKind: world.groundKind, starts: STARTS, onDisplayChange: () => panels.instruments.requestDraw() });

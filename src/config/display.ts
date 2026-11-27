@@ -216,13 +216,18 @@ export const APPROACH_WIDTH_M = 2500;
 /** The guide path: its angle (deg) and the aim point past the threshold (m). Matches the Final start. */
 export const APPROACH_PATH_DEG = 3;
 export const APPROACH_AIM_M = 150;
+/** Top view center line: how far before the threshold it reaches and the spacing of its distance ticks (world m), then half the tick and end-bar lengths (pixels). */
+export const CENTERLINE_M = 6000;
+export const CENTERLINE_TICK_M = 1000;
+export const CENTERLINE_TICK_PX = 5;
+export const CENTERLINE_END_PX = 12;
 
 /** Runway selection (D5C): airports shown at once, and how much farther one behind the plane counts when ordering them. */
 export const AIRPORT_PAGE_SIZE = 3;
 export const ORDER_BEHIND_WEIGHT = 2;
 
 /** HSI (D5D): full-scale deviations as angles (sideways from the far end, vertically from the aim point), where the glide path shows, and the pixels of full scale on the HSI's 80 px drawing grid. */
-export const HSI_LOC_FULL_DEG = 2.5;
+export const HSI_LOC_FULL_DEG = 10;
 export const HSI_GS_FULL_DEG = 0.7;
 export const HSI_GS_RANGE_M = 8000;
 export const HSI_GS_CONE_DEG = 35;

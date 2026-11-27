@@ -74,6 +74,8 @@ export interface SideView {
     guide?: ApproachGuide | null,
     /** Autopilot (D4): the altitude bug line is solid while it holds, and a refusal or let-go notice shows at the call-out place. */
     ap?: { readonly on: boolean; readonly notice: ApNoticeText | null },
+    /** Magnetic variation here, degrees: the HDG text reads magnetic. */
+    variationDeg?: number,
   ): void;
   /** Builds every sprite frame now, so none is built mid-flight. */
   warm(): void;
@@ -439,8 +441,8 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
     drawText(ctx, `${formatClimb(need)}`, tapeLeft + ALT_TAPE_WIDTH_PX / 2, top + h + 14, 'center');
   }
 
-  function drawLabels(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number): void {
-    drawText(ctx, `HDG ${formatHeading(craft.heading)}`, planeColumn(view) + 10, 16);
+  function drawLabels(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, variationDeg: number): void {
+    drawText(ctx, `HDG ${formatHeading(craft.heading + (variationDeg * Math.PI) / 180)}`, planeColumn(view) + 10, 16);
     const ex = exaggeration(zoom);
     drawText(ctx, `vert x${ex}  water depth x${WATER_EXAGGERATION}`, view.width - 8, 16, 'right');
     drawScaleBar(ctx, sideMetersPerPixel(zoom), view.width - 180, view.height - 56);
@@ -503,7 +505,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   }
 
   return {
-    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt, hud = null, guide = null, ap = { on: false, notice: null }) {
+    draw(ctx, view, craft, zoom, cursor, crashed, altBugFt, hud = null, guide = null, ap = { on: false, notice: null }, variationDeg = 0) {
       const base = baseHeight(view, zoom, craft.z);
       drawSky(ctx, view);
       const slice = drawGround(ctx, view, craft, zoom, base);
@@ -532,7 +534,7 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
         ctx.fillStyle = ap.notice.kind === 'dropped' ? STALL_COLOR : WARN_COLOR;
         ctx.fillText(ap.notice.text, view.width / 2, 62);
       }
-      drawLabels(ctx, view, craft, zoom);
+      drawLabels(ctx, view, craft, zoom, variationDeg);
       drawReadout(ctx, view, slice, sliceWindow(craft, view, zoom), zoom, cursor);
     },
     distanceAt: (view, zoom, x) => xToDistance(view, zoom, Math.floor(x)),

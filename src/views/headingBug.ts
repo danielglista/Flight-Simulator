@@ -5,6 +5,11 @@ export function stepBug(bug: number, deltaDeg: number): number {
   return (((bug + deltaDeg) % 360) + 360) % 360;
 }
 
+/** The top view's ring and bug: whenever airborne and following the plane, on approaches too. */
+export function topBugShown(following: boolean, crashed: boolean, onGround: boolean): boolean {
+  return following && !crashed && !onGround;
+}
+
 /** Shortest signed turn from `heading` to `bug`, degrees, positive = right. Exactly opposite counts as right (+180). */
 export function turnNeeded(heading: number, bug: number): number {
   const d = (((bug - heading) % 360) + 360) % 360;

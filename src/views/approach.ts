@@ -1,4 +1,4 @@
-import { APPROACH_AGL_M, APPROACH_ALIGN_DEG, APPROACH_PATH_DEG, APPROACH_RANGE_M, APPROACH_AIM_M, APPROACH_WIDTH_M, GEAR_UP_AT } from '../config/display';
+import { APPROACH_AGL_M, APPROACH_ALIGN_DEG, APPROACH_PATH_DEG, APPROACH_RANGE_M, APPROACH_AIM_M, APPROACH_WIDTH_M, CENTERLINE_M, CENTERLINE_TICK_M, GEAR_UP_AT } from '../config/display';
 import type { Craft } from '../sim/state';
 import type { Runway } from '../sim/world/airport';
 
@@ -99,10 +99,22 @@ export function guideText(g: ApproachGuide): string {
   return `${loc}   ${hdg}   ${gs}`;
 }
 
-/** The two ends of the center line drawn in the top view: out to APPROACH_RANGE_M before the threshold, and to the far end. */
-export function centerlineEnds(g: ApproachGuide): { from: { x: number; y: number }; to: { x: number; y: number } } {
+/** A runway end as the center line needs it: an approach guide or the runway picked on the HSI. */
+export type CenterlineEnd = Pick<ApproachGuide, 'threshold' | 'dir' | 'length'>;
+
+/** The two ends of the center line drawn in the top view: out to CENTERLINE_M before the threshold, and to the far end. */
+export function centerlineEnds(g: CenterlineEnd): { from: { x: number; y: number }; to: { x: number; y: number } } {
   return {
-    from: { x: g.threshold.x - g.dir.x * APPROACH_RANGE_M, y: g.threshold.y - g.dir.y * APPROACH_RANGE_M },
+    from: { x: g.threshold.x - g.dir.x * CENTERLINE_M, y: g.threshold.y - g.dir.y * CENTERLINE_M },
     to: { x: g.threshold.x + g.dir.x * g.length, y: g.threshold.y + g.dir.y * g.length },
   };
+}
+
+/** Distance marks on the line, every CENTERLINE_TICK_M before the threshold; `end` marks the outermost one. */
+export function centerlineTicks(g: CenterlineEnd): readonly { x: number; y: number; end: boolean }[] {
+  const count = Math.floor(CENTERLINE_M / CENTERLINE_TICK_M);
+  return Array.from({ length: count }, (_, i) => {
+    const back = (i + 1) * CENTERLINE_TICK_M;
+    return { x: g.threshold.x - g.dir.x * back, y: g.threshold.y - g.dir.y * back, end: i === count - 1 };
+  });
 }

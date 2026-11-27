@@ -41,11 +41,11 @@ export interface ReadoutText {
  * The readout strings. Pure; a crashed craft already has speed 0, so SPD and V/S read 0.
  * `SPD` is indicated airspeed. `stall` comes from the caller, which knows about crashes.
  */
-export function readoutText(craft: Craft, scale: ScaleConfig, stall: StallState = 'none', braking = false, gearWarn = false, vsMode: VsMode = VS_MODE.mode, terr = false): ReadoutText {
+export function readoutText(craft: Craft, scale: ScaleConfig, stall: StallState = 'none', braking = false, gearWarn = false, vsMode: VsMode = VS_MODE.mode, terr = false, variationDeg = 0): ReadoutText {
   return {
     spd: formatSpeed(metersPerSecondToKnots(indicatedSpeed(craft, scale))),
     alt: formatAltitude(displayedAltitudeFt(craft.z, scale)),
-    hdg: formatHeading(craft.heading),
+    hdg: formatHeading(craft.heading + (variationDeg * Math.PI) / 180),
     vs: formatVerticalSpeed(vsMode === 'altimeter' ? altimeterVerticalSpeedFpm(craft, scale) : verticalSpeedFpm(craft)),
     pit: formatPitch((craft.pitch * 180) / Math.PI),
     bnk: formatBank((craft.bank * 180) / Math.PI),
