@@ -179,7 +179,10 @@ export function createRoadLayer(roads: readonly MapRoad[]): RoadLayer {
     ctx.setLineDash(s.dash ? [...s.dash] : []);
     const [east, north] = shadowAlong(sun, s.shift ?? 0);
     ctx.translate(east, north);
+    // A shadow fades with the sun.
+    ctx.globalAlpha = s.shift ? sun.strength : 1;
     ctx.stroke(p);
+    ctx.globalAlpha = 1;
     ctx.translate(-east, -north);
   }
 

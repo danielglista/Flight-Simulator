@@ -29,5 +29,9 @@ export type Command =
   | { readonly kind: 'place'; readonly x: number; readonly y: number }
   /** Pointer and test tool. Radians, positive = right. */
   | { readonly kind: 'rotate'; readonly by: number }
+  /** Debug panel: the time of day, in steps since sunrise (wrapped into the day). Non-finite values are ignored. */
+  | { readonly kind: 'sunTime'; readonly value: number }
+  /** Debug panel: hold the sun where it is, or let it move again. */
+  | { readonly kind: 'sunHold'; readonly value: boolean }
   /** Debug panel. Unknown keys and non-finite values are ignored; others are clamped to their range. Allowed while crashed. */
   | { readonly kind: 'tune'; readonly key: keyof Tuning; readonly value: number };

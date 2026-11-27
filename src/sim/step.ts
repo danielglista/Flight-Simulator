@@ -9,6 +9,7 @@ import { densityRatio } from './flight/forces';
 import { landed, stepGround } from './flight/ground';
 import { AIR_START, AUTOPILOT_OFF, apActive, craftAt, type Autopilot, type Axis, type Craft, type FlapLever, type SimState, type StartSpec } from './state';
 import type { GroundKind } from './world/groundKind';
+import { setHold, setTime } from './sun';
 import { topOf, type ObstacleFn } from './world/obstacles';
 
 /** The world as the simulation sees it: the map size and the top surface. */
@@ -59,7 +60,7 @@ const startCraft = (s: StartSpec, world: SimWorld): Craft => craftAt(s, world.he
 
 /** Applies commands at the current tick. Time and tick do not change. */
 export function applyCommands(state: SimState, commands: readonly Command[], world: SimWorld): SimState {
-  let { craft, controls, crash, tuning, start, liftoffTick, touchdown, autopilot, stableTicks } = state;
+  let { craft, controls, crash, tuning, start, liftoffTick, touchdown, autopilot, stableTicks, sunClock } = state;
   for (const c of commands) {
     switch (c.kind) {
       case 'turn':
@@ -177,6 +178,12 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
           stableTicks = 0;
         }
         break;
+      case 'sunTime':
+        if (Number.isFinite(c.value)) sunClock = setTime(sunClock, state.tick, Math.round(c.value));
+        break;
+      case 'sunHold':
+        if (typeof c.value === 'boolean') sunClock = setHold(sunClock, state.tick, c.value);
+        break;
       case 'tune': {
         const range = Object.hasOwn(TUNING_RANGES, c.key) ? TUNING_RANGES[c.key] : undefined;
         if (range && Number.isFinite(c.value)) {
@@ -212,10 +219,10 @@ export function applyCommands(state: SimState, commands: readonly Command[], wor
       }
     }
   }
-  if (craft === state.craft && controls === state.controls && crash === state.crash && tuning === state.tuning && start === state.start && liftoffTick === state.liftoffTick && touchdown === state.touchdown && autopilot === state.autopilot && stableTicks === state.stableTicks) {
+  if (craft === state.craft && controls === state.controls && crash === state.crash && tuning === state.tuning && start === state.start && liftoffTick === state.liftoffTick && touchdown === state.touchdown && autopilot === state.autopilot && stableTicks === state.stableTicks && sunClock === state.sunClock) {
     return state;
   }
-  return { ...state, craft, controls, crash, tuning, start, liftoffTick, touchdown, autopilot, stableTicks };
+  return { ...state, craft, controls, crash, tuning, start, liftoffTick, touchdown, autopilot, stableTicks, sunClock };
 }
 
 /**

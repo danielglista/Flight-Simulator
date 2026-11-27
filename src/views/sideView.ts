@@ -69,7 +69,7 @@ export interface SideView {
     crashed: boolean,
     /** Altitude bug, displayed feet. */
     altBugFt: number,
-    /** Where the light comes from (E8): the lit faces of landmarks. */
+    /** Where the light comes from (E8): the lit faces of buildings and landmarks. */
     sun: Sun,
     /** Takeoff HUD mode (C4B): runway left replaces the altitude bug and tape. Null otherwise. */
     hud?: TakeoffHud | null,
@@ -255,15 +255,15 @@ export function createSideView(grid: WorldGrid, scale: ScaleConfig): SideView {
   function drawGround(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, sun: Sun) {
     for (const layer of SIDE_LAYERS) {
       drawProfile(ctx, view, zoom, layerSlice(craft, view, zoom, layer), layer.haze, base);
-      sideBuildings.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR);
+      sideBuildings.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR, sun);
       sideLandmarks.drawSkyline(ctx, view, craft, zoom, base, SIDE_FX.parallax ? layer : { ...layer, k: 1 }, HAZE_COLOR, sun);
     }
-    sideBuildings.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR);
+    sideBuildings.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR, sun);
     sideLandmarks.drawBeside(ctx, view, craft, zoom, base, HAZE_COLOR, sun);
     const w = sliceWindow(craft, view, zoom);
     const main = sliceAlong(grid, scale, w.origin, w.heading, w.length, w.samples);
     drawProfile(ctx, view, zoom, main, 0, base);
-    sideBuildings.drawCrossed(ctx, view, craft, zoom, base);
+    sideBuildings.drawCrossed(ctx, view, craft, zoom, base, sun);
     sideLandmarks.drawCrossed(ctx, view, craft, zoom, base, sun);
     return main;
   }

@@ -152,7 +152,9 @@ function paintPosts(ctx: CanvasRenderingContext2D, posts: NonNullable<MapLandmar
     ctx.moveTo(x, y);
     ctx.lineTo(x + east, y + north);
   }
+  ctx.globalAlpha = sun.strength;
   ctx.stroke();
+  ctx.globalAlpha = 1;
   const dot = Math.max(mpp, 0.5);
   for (const [x, y] of points) {
     ctx.fillStyle = rgb(LANDMARK_FLAG_COLOR);
@@ -272,7 +274,9 @@ export function createLandmarkLayer(landmarks: readonly MapLandmark[], groundOf:
           ctx.fillStyle = BUILDING_SHADOW_COLOR;
           ctx.beginPath();
           for (const points of shadows) trace(ctx, points);
+          ctx.globalAlpha = sun.strength;
           ctx.fill();
+          ctx.globalAlpha = 1;
         };
         shade(hillShadows);
         for (const s of hill) paintSolid(ctx, s, f.mpp, sun);

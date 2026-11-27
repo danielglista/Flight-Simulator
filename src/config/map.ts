@@ -39,8 +39,13 @@ export const BUILDING_TILE_PX = 256;
 export const BUILDING_CACHE_TILES = 150;
 /** Levels this zoomed-out or more are baked at load and kept; closer ones are baked as they come into view. */
 export const BUILDING_PREBAKE_MIN_MPP = 2.5;
-/** Time per frame for baking, ms. A tile that does not fit is shown from the stored zoomed-out one until later. */
+/**
+ * Time per frame for painting tiles, ms. A tile that does not fit carries on next frame; until it is done the old one,
+ * or else the stored zoomed-out one, is shown.
+ */
 export const BUILDING_BAKE_MS = 6;
+/** Buildings painted between looks at the clock. */
+export const BUILDING_BAKE_BATCH = 100;
 /** How far a bridge's shadow lies from its deck, world m. */
 export const BRIDGE_SHADOW_M = 5 * Math.SQRT2;
 /** How solid what the plane flies under is drawn over it in the top view (E6). */

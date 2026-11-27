@@ -1,6 +1,9 @@
 import { DEFAULT_TUNING, TUNING_RANGES, type Tuning } from '../config/motion';
 import type { ScaleConfig } from '../config/scales';
 import { GRAVITY } from '../config/flight';
+import { DAY_STEPS } from '../config/sun';
+import { sunPosition, sunStep, timeOfDay } from '../sim/sun';
+import { sunForStep } from '../views/sunLight';
 import { FRAME_SAMPLES, SIDE_FX, VS_MODE } from '../config/display';
 import { stallState } from '../sim/flight/aero';
 import { levelStallSpeed, vSpeeds } from '../sim/flight/vspeeds';
@@ -112,6 +115,30 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
   });
   vsLine.append(el('span', 'debug-name', 'V/S = altimeter rate'), vsBox);
 
+  const sunLine = el('label', 'debug-slider');
+  const sunInput = el('input');
+  sunInput.type = 'range';
+  sunInput.min = '0';
+  // One second a notch; the last is just before sunset, since sunset's next step is sunrise.
+  sunInput.step = '60';
+  sunInput.max = String(DAY_STEPS - 60);
+  const sunValue = el('span', 'debug-value');
+  sunInput.addEventListener('input', () => {
+    loop.send({ kind: 'sunTime', value: Number(sunInput.value) });
+    refresh();
+  });
+  sunLine.append(el('span', 'debug-name', 'Time of day'), sunInput, sunValue);
+  const holdLine = el('label', 'debug-slider');
+  const holdBox = el('input');
+  holdBox.type = 'checkbox';
+  holdBox.addEventListener('change', () => {
+    loop.send({ kind: 'sunHold', value: holdBox.checked });
+    holdBox.blur();
+    refresh();
+  });
+  holdLine.append(el('span', 'debug-name', 'Hold sun'), holdBox);
+  const sunText = el('pre', 'debug-text');
+
   const startsBox = el('div');
   for (const { label, spec } of o.starts) {
     const b = el('button', undefined, label);
@@ -138,7 +165,7 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
     g.append(el('h3', undefined, title), ...kids);
     return g;
   };
-  root.append(tuningBox, group('SIDE VIEW', fgLine), group('INSTRUMENTS', vsLine), group('START', startsBox), group('FLIGHT', flight), group('SCALES', scalesText), group('FRAME TIMING (ms)', timingText, clear));
+  root.append(group('SUN', sunLine, holdLine, sunText), tuningBox, group('SIDE VIEW', fgLine), group('INSTRUMENTS', vsLine), group('START', startsBox), group('FLIGHT', flight), group('SCALES', scalesText), group('FRAME TIMING (ms)', timingText, clear));
 
   function refresh(): void {
     if (root!.hidden) return;
@@ -150,6 +177,14 @@ export function createDebugPanel(o: DebugOptions): DebugPanel | null {
       if (sl.input.value !== v) sl.input.value = v;
       sl.value.textContent = `${v} ${TUNING_RANGES[key].unit}`;
     }
+    const time = timeOfDay(s.tick, s.sunClock);
+    sunInput.value = String(time);
+    holdBox.checked = s.sunClock.held !== null;
+    const seconds = Math.floor(time / 60);
+    sunValue.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    const position = sunPosition(time);
+    const sun = sunForStep(sunStep(time));
+    sunText.textContent = `now       azimuth ${(position.azimuth * DEG).toFixed(0)} deg, elevation ${(position.elevation * DEG).toFixed(0)} deg\ndrawn     step ${sunStep(time)}, shadow ${sun.shadowPerM.toFixed(2)} per m, strength ${sun.strength.toFixed(2)}`;
     const c = s.craft;
     const above = c.z - o.heightAt(c.x, c.y);
     const f = forcesOn(c, s.tuning, scales.altitude);

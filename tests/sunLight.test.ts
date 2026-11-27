@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FIXED_SUN, FLAT_SHADING, ROUND_SHADING, type Sun } from '../src/config/sun';
-import { faceLight, shadowAlong, shadowVector, towardSun } from '../src/views/sunLight';
+import { FIXED_SUN, FLAT_SHADING, ROUND_SHADING, SHADOW_MAX_PER_M, SUN_STEPS_PER_DAY, type Sun } from '../src/config/sun';
+import { faceLight, shadowAlong, shadowVector, sunForStep, sunFrom, towardSun } from '../src/views/sunLight';
 
 const from = (deg: number, strength = 1): Sun => ({ azimuth: (deg * Math.PI) / 180, shadowPerM: 0.5, strength });
 const close = (v: readonly number[]) => v.map((n) => expect.closeTo(n, 6));
@@ -29,5 +29,26 @@ describe('sun light', () => {
   it('shades nothing at no strength, and half as much at half', () => {
     expect(faceLight(from(180, 0), 0, 1)).toBe(1);
     expect(faceLight(from(180, 0.5), 0, 1)).toBeCloseTo((1 + faceLight(from(180), 0, 1)) / 2, 6);
+  });
+});
+
+describe('shadow length and fade', () => {
+  const at = (degrees: number) => sunFrom({ azimuth: Math.PI, elevation: (degrees * Math.PI) / 180 });
+  it('is half the height at noon, longer lower down, and capped', () => {
+    expect(at(51).shadowPerM).toBeCloseTo(0.5, 2);
+    expect(at(33.3).shadowPerM).toBeCloseTo(0.94, 2);
+    expect(at(15).shadowPerM).toBe(SHADOW_MAX_PER_M);
+    expect(at(0).shadowPerM).toBe(SHADOW_MAX_PER_M);
+  });
+  it('fades in from nothing at the horizon to full at 10 degrees', () => {
+    expect(at(0).strength).toBe(0);
+    expect(at(5).strength).toBeCloseTo(0.5, 6);
+    expect(at(10).strength).toBeCloseTo(1, 6);
+    expect(at(40).strength).toBe(1);
+  });
+  it('gives one object for each step of the day, nothing showing at sunrise', () => {
+    expect(sunForStep(30)).toBe(sunForStep(30));
+    expect(sunForStep(0).strength).toBe(0);
+    expect(sunForStep(SUN_STEPS_PER_DAY / 2).azimuth).toBeCloseTo(Math.PI, 6);
   });
 });

@@ -1,4 +1,5 @@
 import { DEFAULT_TUNING, START_HEADING, START_LEVER, START_PITCH, START_SPEED, START_X, START_Y, START_Z, type Tuning } from '../config/motion';
+import { SUN_CLOCK_START, type SunClock } from './sun';
 
 export type Axis = -1 | 0 | 1;
 
@@ -159,6 +160,8 @@ export interface SimState {
   readonly autopilot: Autopilot;
   /** Consecutive steps with `stability().stable` (D4). */
   readonly stableTicks: number;
+  /** Time of day (E8.2). Restarts and new starts leave it alone. */
+  readonly sunClock: SunClock;
 }
 
 /** The craft a start puts in the world. `groundHeight` is the top surface at the start's x and y. */
@@ -198,5 +201,6 @@ export function initialState(start: StartSpec = AIR_START): SimState {
     touchdown: null,
     autopilot: AUTOPILOT_OFF,
     stableTicks: 0,
+    sunClock: SUN_CLOCK_START,
   };
 }

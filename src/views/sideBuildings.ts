@@ -1,11 +1,13 @@
 import { SIDE_BUILDING_BESIDE_HAZE, SIDE_BUILDING_BESIDE_M, SIDE_BUILDING_FLOOR_M, SIDE_BUILDING_WINDOW_MAX_MPP, type Size } from '../config/display';
 import { SIDE_WINDOW_COLOR, type Rgb } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
+import type { Sun } from '../config/sun';
 import type { Craft } from '../sim/state';
 import { groundAt, type WorldGrid } from '../sim/world/grid';
 import type { MapBuilding } from '../sim/world/mapFile';
 import { roofColor } from './cityLayer';
 import { heightToY, sliceWindow, verticalMetersPerPixel, type SliceWindow } from './sideCamera';
+import { faceLight } from './sunLight';
 
 type Footprint = Pick<MapBuilding, 'x' | 'y' | 'width' | 'depth' | 'angle'>;
 
@@ -51,6 +53,43 @@ export function besideLine(b: Footprint, ox: number, oy: number, heading: number
   return { from: along - half, to: along + half, left };
 }
 
+/** One wall of a building as seen from a line: which one, its extent along the line, and how brightly the sun lights it. */
+export interface Wall {
+  /** 0..3, quarter turns clockwise from the wall facing the building's angle. */
+  readonly face: number;
+  readonly from: number;
+  readonly to: number;
+  readonly light: number;
+}
+
+/**
+ * The walls turned toward the viewer, who looks to the left of the heading, left to right on screen: one when square
+ * on, otherwise two meeting at the near corner. Together they cover the extent `besideLine` gives.
+ */
+export function wallsSeen(b: Footprint, ox: number, oy: number, heading: number, sun: Sun): Wall[] {
+  const dx = Math.sin(heading);
+  const dy = Math.cos(heading);
+  const seen: { readonly face: number; readonly nx: number; readonly ny: number; readonly back: number; readonly length: number }[] = [];
+  for (let face = 0; face < 4; face++) {
+    const bearing = ((b.angle + face * 90) * Math.PI) / 180;
+    const nx = Math.sin(bearing);
+    const ny = Math.cos(bearing);
+    // Toward the viewer is to the right of the heading.
+    if (nx * dy - ny * dx <= 1e-6) continue;
+    // How much of the line the wall takes up: its own length, foreshortened.
+    const length = (face % 2 === 0 ? b.depth : b.width) * Math.abs(nx * dy - ny * dx);
+    seen.push({ face, nx, ny, back: nx * dx + ny * dy, length });
+  }
+  // A wall facing back down the line is on the left.
+  seen.sort((p, q) => p.back - q.back);
+  let from = (b.x - ox) * dx + (b.y - oy) * dy - seen.reduce((sum, w) => sum + w.length, 0) / 2;
+  return seen.map((w) => {
+    const wall = { face: w.face, from, to: from + w.length, light: faceLight(sun, w.nx, w.ny) };
+    from = wall.to;
+    return wall;
+  });
+}
+
 /** One screen run of a skyline: columns [x, x + width) from row `top` down to row `foot`. */
 export interface Block {
   readonly x: number;
@@ -92,11 +131,11 @@ export function skylineRuns(blocks: Iterable<Block>, columns: number): Block[] {
 
 export interface SideBuildings {
   /** A parallax layer's skyline: buildings whose middles lie in its band, hazed. Draw over that layer's terrain. */
-  drawSkyline(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, layer: { readonly nearM: number; readonly farM: number; readonly haze: number; readonly k: number }, haze: Rgb): void;
+  drawSkyline(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, layer: { readonly nearM: number; readonly farM: number; readonly haze: number; readonly k: number }, haze: Rgb, sun: Sun): void;
   /** Buildings just off the flight line, dimmed. Draw BEFORE the main terrain, which hides their feet. */
-  drawBeside(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, haze: Rgb): void;
+  drawBeside(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, haze: Rgb, sun: Sun): void;
   /** Buildings the flight line goes through, solid: what is drawn here can be hit. Draw over the main terrain. */
-  drawCrossed(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number): void;
+  drawCrossed(ctx: CanvasRenderingContext2D, view: Size, craft: Craft, zoom: number, base: number, sun: Sun): void;
 }
 
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
@@ -149,20 +188,47 @@ export function createSideBuildings(grid: WorldGrid, scale: ScaleConfig): SideBu
     return { x, width: Math.max(1, right - x), top, foot: Math.round(heightToY(view, zoom, ground, base)) };
   }
 
-  // Wall colors mixed toward the haze, worked out once per building and haze amount: this runs for thousands a frame.
-  const mixed = new Map<number, Map<MapBuilding, string>>();
-  function hazed(b: MapBuilding, haze: Rgb, amount: number): string {
+  // Wall colors, lit and mixed toward the haze, worked out once per building, wall and haze amount for each sun: this
+  // runs for thousands a frame.
+  const mixed = new Map<number, Map<MapBuilding, string[]>>();
+  let mixedFor: Sun | null = null;
+  function hazed(b: MapBuilding, wall: Wall, haze: Rgb, amount: number, sun: Sun): string {
+    if (sun !== mixedFor) {
+      mixed.clear();
+      mixedFor = sun;
+    }
     let at = mixed.get(amount);
     if (!at) {
       at = new Map();
       mixed.set(amount, at);
     }
-    let out = at.get(b);
+    let faces = at.get(b);
+    if (!faces) {
+      faces = [];
+      at.set(b, faces);
+    }
+    let out = faces[wall.face];
     if (!out) {
-      out = rgb(mix(roofColor(b), haze, amount));
-      at.set(b, out);
+      const c = roofColor(b);
+      out = rgb(mix([c[0] * wall.light, c[1] * wall.light, c[2] * wall.light], haze, amount));
+      faces[wall.face] = out;
     }
     return out;
+  }
+
+  /** A building's block cut into its walls. Too narrow to show two, it takes the wider wall's color. */
+  function walls(view: Size, zoom: number, base: number, w: SliceWindow, s: Shown, haze: Rgb, amount: number, sun: Sun): Block[] {
+    const p = place(view, zoom, base, w, s);
+    if (!p) return [];
+    const seen = wallsSeen(s.b, w.origin.x, w.origin.y, w.heading, sun);
+    const widest = seen.reduce((best, wall) => (wall.to - wall.from > best.to - best.from ? wall : best), seen[0] as Wall);
+    if (seen.length < 2 || p.width < 3) return [{ ...p, color: hazed(s.b, widest, haze, amount, sun) }];
+    const mpp = w.length / Math.max(1, w.samples - 1);
+    const corner = Math.min(p.x + p.width, Math.max(p.x, Math.round((seen[0] as Wall).to / mpp)));
+    return [
+      { ...p, width: corner - p.x, color: hazed(s.b, seen[0] as Wall, haze, amount, sun) },
+      { ...p, x: corner, width: p.x + p.width - corner, color: hazed(s.b, seen[1] as Wall, haze, amount, sun) },
+    ];
   }
 
   function fill(ctx: CanvasRenderingContext2D, blocks: readonly Block[]): void {
@@ -174,27 +240,23 @@ export function createSideBuildings(grid: WorldGrid, scale: ScaleConfig): SideBu
   }
 
   return {
-    drawSkyline(ctx, view, craft, zoom, base, layer, haze) {
+    drawSkyline(ctx, view, craft, zoom, base, layer, haze, sun) {
       const w = sliceWindow(craft, view, zoom, layer.k);
       const blocks: Block[] = [];
-      for (const s of inBand(w, layer.nearM, layer.farM)) {
-        const p = place(view, zoom, base, w, s);
-        if (p) blocks.push({ ...p, color: hazed(s.b, haze, layer.haze) });
-      }
+      for (const s of inBand(w, layer.nearM, layer.farM)) blocks.push(...walls(view, zoom, base, w, s, haze, layer.haze, sun));
       fill(ctx, skylineRuns(blocks, view.width));
     },
-    drawBeside(ctx, view, craft, zoom, base, haze) {
+    drawBeside(ctx, view, craft, zoom, base, haze, sun) {
       const w = sliceWindow(craft, view, zoom);
       const blocks: Block[] = [];
       for (const s of inBand(w, -SIDE_BUILDING_BESIDE_M, SIDE_BUILDING_BESIDE_M)) {
         if (lineSpan(s.b, w.origin.x, w.origin.y, w.heading)) continue; // solid, drawn later
-        const p = place(view, zoom, base, w, s);
         // Down to the bottom of the panel; the main terrain covers what is below ground.
-        if (p) blocks.push({ ...p, foot: view.height, color: hazed(s.b, haze, SIDE_BUILDING_BESIDE_HAZE) });
+        for (const wall of walls(view, zoom, base, w, s, haze, SIDE_BUILDING_BESIDE_HAZE, sun)) blocks.push({ ...wall, foot: view.height });
       }
       fill(ctx, skylineRuns(blocks, view.width));
     },
-    drawCrossed(ctx, view, craft, zoom, base) {
+    drawCrossed(ctx, view, craft, zoom, base, sun) {
       const w = sliceWindow(craft, view, zoom);
       const floorPx = SIDE_BUILDING_FLOOR_M / verticalMetersPerPixel(zoom);
       const windows = verticalMetersPerPixel(zoom) <= SIDE_BUILDING_WINDOW_MAX_MPP;
@@ -205,11 +267,19 @@ export function createSideBuildings(grid: WorldGrid, scale: ScaleConfig): SideBu
         if (!p || p.foot <= p.top) continue;
         const color = roofColor(near.b);
         const height = p.foot - p.top;
-        ctx.fillStyle = rgb(color);
-        ctx.fillRect(p.x, p.top, p.width, height);
-        // The far side of the wall a little darker, and a dark roof line, so neighbors stay apart.
+        // The walls seen from here, kept to the columns the flight line cuts.
+        const mpp = w.length / Math.max(1, w.samples - 1);
+        const seen = wallsSeen(near.b, w.origin.x, w.origin.y, w.heading, sun);
+        let x = p.x;
+        seen.forEach((wall, n) => {
+          const end = n === seen.length - 1 ? p.x + p.width : Math.min(p.x + p.width, Math.max(x, Math.round(wall.to / mpp)));
+          ctx.fillStyle = rgb(color, wall.light);
+          ctx.fillRect(x, p.top, end - x, height);
+          x = end;
+        });
+        // A dark edge and roof line, so neighbors stay apart.
         ctx.fillStyle = rgb(color, 0.72);
-        ctx.fillRect(p.x + p.width - Math.max(1, Math.round(p.width * 0.2)), p.top, Math.max(1, Math.round(p.width * 0.2)), height);
+        ctx.fillRect(p.x + p.width - 1, p.top, 1, height);
         ctx.fillStyle = rgb(color, 0.45);
         ctx.fillRect(p.x, p.top, p.width, 1);
         if (!windows || p.width < 4) continue;

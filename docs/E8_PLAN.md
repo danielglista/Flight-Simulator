@@ -1,6 +1,6 @@
 # E8 Implementation Plan: Sun and Shadows
 
-**Status:** E8.1 built (2026-11-27), not committed. E8.2 planned, nothing built.
+**Status:** E8.1 built and committed (2026-11-27). E8.2 built and committed the same day; not yet watched in a running game, so "done when" is not met.
 **Milestone:** shadows and lit faces agree with a sun in the southern sky, and then follow a sun that crosses it.
 **Starting state:** E6 committed. E4 (scale tuning) is not done; E7 is planned, not built. E8 depends on neither.
 
@@ -166,3 +166,29 @@ Built as in section 5. `npm run typecheck` and `npm test` pass (820 tests).
 **Not checked:** the running game in a visible window, and flying it.
 
 **Noticed:** the highway bridge near the Jefferson Memorial runs southwest to northeast, along the sun, so its shadow hardly shows.
+
+### E8.2 (2026-11-27)
+
+Built as in section 6, except for how tiles are painted. `npm run typecheck` and `npm test` pass (855 tests, which include some added by other work in the folder).
+
+**Step 1, painting one tile** (256 px, E8.1 code, densest tile near each city center, median ms, Browser pane, forced to finish with a pixel readback):
+
+| m per pixel | DC buildings | DC ms | Philadelphia buildings | Philadelphia ms |
+|---|---|---|---|---|
+| 0.5 | 76 | 3.7 | 73 | 4.6 |
+| 1.25 | 356 | 8.9 | 363 | 14.7 |
+| 2.5 | 703 | 13.1 | 1,318 | 36.6 |
+| 5 | 1,849 | 48 | 2,458 | 95 |
+| 10 | 2,511 | 78 | 6,200 | 389 |
+
+Most of the dense cost was one path holding every shadow: 327 ms at 10 m/px against 18 ms filled in batches on a scratch canvas. Roofs took 44 ms.
+
+**Change from the plan:** rather than the first response in section 7 (fewer sun steps, no coarse shadows, smaller tiles), shadows are filled in batches on a scratch canvas and a tile is painted over several frames. The look and the 60 steps are unchanged.
+
+**After, repainting a 640 x 360 view after one sun step** (building layer alone): the draw call took at most 7 ms at 0.5 and 2.5 m/px and at 10 m/px over DC, and 18 ms once at 10 m/px over Philadelphia; 1 to 6 frames. Forcing the drawing to finish added up to 133 ms in total at Philadelphia 10 m/px (about 22 ms a frame), so the 6 ms budget counts the work of issuing the drawing, not all of the work of doing it. Loading the zoomed-out tiles took 0.23 s.
+
+**Seen in the browser** (drawn from the view modules onto an overlay): the Monument's shadow at steps 1, 15, 30, 45 and 59 points west, northwest, north, northeast and east, faint at both ends and shortest at noon. In the page, the debug slider and Hold sun work and read as the table in section 6; no console errors.
+
+**Not checked:** the pane was hidden, so the game did not run. A full day in motion, stutter, tiles a step apart during a repaint, the sunset reset, and frame times against a baseline in the debug panel are all still owed.
+
+**Added after (asked for):** side-view ordinary buildings are lit by the sun too, which section 2 had not listed: `wallsSeen` in `views/sideBuildings.ts` gives the one or two walls turned to the viewer, used for skylines, buildings beside the line and the ones it crosses. The old darker fifth on the screen right is now a 1 px edge.

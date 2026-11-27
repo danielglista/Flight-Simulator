@@ -150,7 +150,8 @@ export const ROOF_COLORS: readonly (readonly Rgb[])[] = [
   ],
 ];
 export const ROOF_EDGE_COLOR = 'rgba(30,28,30,0.7)';
-export const BUILDING_SHADOW_COLOR = 'rgba(0,0,0,0.38)';
+export const BUILDING_SHADOW_ALPHA = 0.38;
+export const BUILDING_SHADOW_COLOR = `rgba(0,0,0,${BUILDING_SHADOW_ALPHA})`;
 
 /** Windows on buildings in the side view (E5.5). */
 export const SIDE_WINDOW_COLOR = 'rgba(30,40,60,0.75)';

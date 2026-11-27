@@ -65,7 +65,7 @@ export interface TopView {
     selected?: CenterlineEnd | null,
     /** Magnetic variation here, degrees: the ring, bug and route bearing read magnetic. */
     variationDeg?: number,
-    /** Returns true when building tiles are still stand-ins and another frame would sharpen them. */
+    /** Returns true when building tiles are still stand-ins or out of date and another frame would finish them. */
   ): boolean;
   /** Builds every chunk, airport patch and sprite frame now, so none is built mid-flight. */
   warm(sun: Sun): void;
@@ -218,7 +218,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   function drawClouds(ctx: CanvasRenderingContext2D, view: Size, frame: MapFrame, area: Visible, z: number, sun: Sun): void {
     const strength = cloudAlpha(z);
     const shadowPx = (CLOUD_BASE_M * CLOUD_SHADOW_SKEW) / frame.mpp;
-    ctx.globalAlpha = CLOUD_SHADOW_ALPHA * (strength / CLOUD_ALPHA_HIGH);
+    ctx.globalAlpha = CLOUD_SHADOW_ALPHA * (strength / CLOUD_ALPHA_HIGH) * sun.strength;
     const [east, north] = shadowAlong(sun, shadowPx);
     tileClouds(ctx, frame, area, cloudCanvas(true), { x: east, y: -north });
 

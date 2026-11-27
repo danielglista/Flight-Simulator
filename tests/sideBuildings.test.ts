@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { besideLine, lineSpan, skylineRuns } from '../src/views/sideBuildings';
+import { FIXED_SUN, type Sun } from '../src/config/sun';
+import { besideLine, lineSpan, skylineRuns, wallsSeen } from '../src/views/sideBuildings';
+import { faceLight } from '../src/views/sunLight';
 
 // 20 m along north, 10 m across, centered at (0, 100).
 const b = { x: 0, y: 100, width: 20, depth: 10, angle: 0 };
@@ -34,5 +36,34 @@ describe('buildings in the side view', () => {
     const east = besideLine(b, 0, 60, EAST); // heading east, north is left
     expect(east.left).toBeCloseTo(40, 6);
     expect(east.to - east.from).toBeCloseTo(10, 6);
+  });
+});
+
+describe('lit walls in the side view', () => {
+  const from = (deg: number): Sun => ({ ...FIXED_SUN, azimuth: (deg * Math.PI) / 180 });
+  const SOUTH_SUN = from(180);
+  it('shows one wall square on, lit by the way it faces', () => {
+    // Heading east looks north, at the south wall, which is 10 m long.
+    const walls = wallsSeen(b, -50, 100, EAST, SOUTH_SUN);
+    expect(walls).toHaveLength(1);
+    expect([walls[0]!.from, walls[0]!.to]).toEqual([45, 55].map((v) => expect.closeTo(v, 6)));
+    expect(walls[0]!.light).toBeCloseTo(faceLight(SOUTH_SUN, 0, -1), 6);
+    expect(walls[0]!.light).toBeGreaterThan(wallsSeen(b, -50, 100, (3 * Math.PI) / 2, SOUTH_SUN)[0]!.light);
+  });
+  it('shows two walls at an angle, filling the outline, the one facing back on the left', () => {
+    const turned = { ...b, angle: 30 };
+    const [left, right] = wallsSeen(turned, 0, 0, NORTH, SOUTH_SUN);
+    const outline = besideLine(turned, 0, 0, NORTH);
+    expect(left!.from).toBeCloseTo(outline.from, 6);
+    expect(left!.to).toBeCloseTo(right!.from, 6);
+    expect(right!.to).toBeCloseTo(outline.to, 6);
+    expect(left!.light).toBeGreaterThan(right!.light);
+    expect(left!.face).not.toBe(right!.face);
+  });
+  it('changes with the sun', () => {
+    const light = (deg: number) => wallsSeen(b, 50, 100, NORTH, from(deg))[0]!.light;
+    // Heading north looks west, at the east wall.
+    expect(light(90)).toBeGreaterThan(light(180));
+    expect(light(180)).toBeGreaterThan(light(270));
   });
 });

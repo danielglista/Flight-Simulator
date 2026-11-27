@@ -25,7 +25,7 @@ export interface Loop {
   frame(nowMs: number): void;
   /** Starts the browser animation-frame loop. */
   start(): void;
-  /** Commands from pointers or tools. Applied at once when paused, otherwise at the next step. `tune` is always applied at once. */
+  /** Commands from pointers or tools. Applied at once when paused, otherwise at the next step. `tune` and the sun commands are always applied at once. */
   send(command: Command): void;
   pause(): void;
   resume(): void;
@@ -80,8 +80,9 @@ export function createLoop(o: LoopOptions): Loop {
       requestAnimationFrame(tick);
     },
     send(command) {
-      if (command.kind === 'tune') {
-        // Tuning acts only inside `advance`, so applying it now equals applying it at the start of the next step.
+      if (command.kind === 'tune' || command.kind === 'sunTime' || command.kind === 'sunHold') {
+        // Tuning acts only inside `advance`, and the sun does not act on flight, so applying them now equals applying them
+        // at the start of the next step.
         // It is never queued: a pause drops the queue, and the slider would show a value the sim never got.
         state = applyCommands(state, [command], o.world);
         if (paused) o.requestDraw();

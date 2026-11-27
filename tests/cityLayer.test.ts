@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ROOF_COLORS } from '../src/config/palette';
 import { FIXED_SUN, type Sun } from '../src/config/sun';
 import type { MapBuilding } from '../src/sim/world/mapFile';
-import { buildingLevel, buildingsByTile, hull, roofColor, roofCorners, shadedHalf, shadowShape, visibleTiles, withinCoarse } from '../src/views/cityLayer';
+import { buildingLevel, buildingsByTile, hull, nextToPaint, reachBox, runWithin, roofColor, roofCorners, shadedHalf, shadowShape, visibleTiles, withinCoarse } from '../src/views/cityLayer';
+import { sunForStep } from '../src/views/sunLight';
 
 const b: MapBuilding = { x: 100, y: 100, width: 20, depth: 10, angle: 0, height: 20, style: 1 };
 const from = (deg: number): Sun => ({ ...FIXED_SUN, azimuth: (deg * Math.PI) / 180 });
@@ -59,10 +60,51 @@ describe('building layer', () => {
     const f = { ox: -100, oy: -50, mpp: 2, mapHeight: 1000 };
     expect(visibleTiles(f, { left: 0, top: 0, right: 100, bottom: 100 }, 128)).toEqual({ i0: 1, i1: 3, j0: 5, j1: 7 });
   });
-  it('puts a building in every tile its roof or shadow reaches, lowest first', () => {
+  it('covers the roof and the longest shadow the moving sun can cast: west, north and east, never south', () => {
+    const box = reachBox(b);
+    expect([box.minX, box.maxX, box.minY, box.maxY]).toEqual([65, 135, 90, 140].map((v) => expect.closeTo(v, 6)));
+    for (let step = 0; step < 60; step++) {
+      for (const [x, y] of shadowShape(b, sunForStep(step))) {
+        expect(x).toBeGreaterThanOrEqual(box.minX - 1e-6);
+        expect(x).toBeLessThanOrEqual(box.maxX + 1e-6);
+        expect(y).toBeGreaterThanOrEqual(box.minY - 1e-6);
+        expect(y).toBeLessThanOrEqual(box.maxY + 1e-6);
+      }
+    }
+  });
+  it('puts a building in every tile its roof or shadow can reach, lowest first', () => {
     const tall = { ...b, x: 125, height: 80 };
-    const tiles = buildingsByTile([tall, b], 128, FIXED_SUN);
-    expect([...tiles.keys()].sort()).toEqual(['0,0', '0,1', '1,0', '1,1']); // the tall one's shadow reaches east and north
+    const tiles = buildingsByTile([tall, b], 128);
+    expect([...tiles.keys()].sort()).toEqual(['0,0', '0,1', '1,0', '1,1']);
     expect(tiles.get('0,0')!.map((x) => x.height)).toEqual([20, 80]);
+  });
+});
+
+describe('repainting building tiles', () => {
+  const now = from(180);
+  const before = from(170);
+  it('paints a missing tile before a stale one, and nothing when all are up to date', () => {
+    const tiles = [{ id: 1, painted: now }, { id: 2, painted: before }, { id: 3, painted: null }];
+    expect(nextToPaint(tiles, now)?.id).toBe(3);
+    expect(nextToPaint(tiles.slice(0, 2), now)?.id).toBe(2);
+    expect(nextToPaint(tiles.slice(0, 1), now)).toBeNull();
+  });
+  it('stops a job when its time is up, always doing at least one step', () => {
+    let clock = 0;
+    let done = 0;
+    function* work() {
+      for (let i = 0; i < 5; i++) {
+        done++;
+        clock += 4;
+        yield;
+      }
+    }
+    const job = work();
+    expect(runWithin(job, 6, () => clock)).toBe(false);
+    expect(done).toBe(2);
+    expect(runWithin(job, -1, () => clock)).toBe(false);
+    expect(done).toBe(3);
+    expect(runWithin(job, 100, () => clock)).toBe(true);
+    expect(done).toBe(5);
   });
 });

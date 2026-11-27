@@ -127,6 +127,9 @@ MVP weather is chosen per flight from presets such as clear, windy, overcast and
 - **Slopes look about 5x steeper at 1:25,** because height (1:5) is compressed less than distance. The mountain rules in E_PLAN §5.2 soften this. This suits the side view.
 - **Longer flights scale up.** Flight time grows with distance and varies with how the player flies. Optional time acceleration can come later.
 
+### 4.4 Sun
+The sun crosses the southern sky and shadows follow it. Sunrise to sunset takes 12 minutes (provisional, one config value), then it is sunrise again; a game starts mid-morning. There is no night yet.
+
 ## 5. Flight mechanics
 
 ### 5.1 Physics
