@@ -26,8 +26,8 @@ import { buildTestAirport } from './sim/world/testAirport';
 import { buildTestMap } from './sim/world/testMap';
 import { CLOSE_ZOOM, DEFAULT_ZOOM, metersPerPixel, zoomForMpp, type Point } from './views/camera';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from './views/followCamera';
-import { clampSideZoom, CLOSE_SIDE_ZOOM, DEFAULT_SIDE_ZOOM, sideMetersPerPixel, sideZoomForMpp } from './views/sideCamera';
-import { easeMpp, gatePhase, recall, remember, type PhaseZoom, type ZoomPhase } from './views/zoomGate';
+import { clampSideZoom, sideMetersPerPixel, sideZoomForMpp } from './views/sideCamera';
+import { approachBand, easeMpp, gatePhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, type PhaseZoom, type SideBand, type ZoomPhase } from './views/zoomGate';
 import { NO_CALLOUTS, calloutSentence, gearPrompt, remainingOnAny, stepCallouts, stepSpeeds, takeoffMode, type CalloutState, type TakeoffHud } from './views/takeoffStrip';
 import type { VSpeeds } from './sim/flight/vspeeds';
 import { speedMarks } from './views/gauges/airspeed';
@@ -96,14 +96,16 @@ const topView = createTopView(grid, scales);
 const sideView = createSideView(grid, scales);
 
 // Top-view camera: locked to the plane, or free look. Never part of the simulation.
-// Each view remembers one zoom for the ground and one for the air (C4B). The wheel edits the current phase only;
-// the gate (views/zoomGate.ts) picks the phase from height above ground, and the shown zoom eases toward it.
+// The top view remembers one zoom for the ground and one for the air (C4B); the side view one for each height band.
+// The wheel edits the current one only; the gates (views/zoomGate.ts) pick it from height above ground, and the shown
+// zoom eases toward it.
 let topMem: PhaseZoom = { ground: CLOSE_ZOOM, air: DEFAULT_ZOOM };
-let sideMem: PhaseZoom = { ground: CLOSE_SIDE_ZOOM, air: DEFAULT_SIDE_ZOOM };
+let sideMem: Readonly<Record<SideBand, number>> = SIDE_BAND_ZOOMS;
+let shownBand: SideBand = 'near';
 let zoomPhase: ZoomPhase = 'ground';
 let follow = initialFollow(recall(topMem, zoomPhase));
 let cursor: Point | null = null;
-let sideZoom = recall(sideMem, zoomPhase);
+let sideZoom = sideMem[shownBand];
 let shownTopMpp = metersPerPixel(follow.free.zoom);
 let shownSideMpp = sideMetersPerPixel(sideZoom);
 let shownTopZoom = follow.free.zoom;
@@ -175,10 +177,16 @@ function syncFrame(): void {
   const phase = gatePhase(zoomPhase, craft.onGround, agl);
   if (phase !== zoomPhase) {
     topMem = remember(topMem, zoomPhase, follow.free.zoom);
-    sideMem = remember(sideMem, zoomPhase, sideZoom);
     zoomPhase = phase;
     follow = { ...follow, free: { ...follow.free, zoom: recall(topMem, phase) } };
-    sideZoom = recall(sideMem, phase);
+  }
+  const crashed = sim.crash !== null;
+  guide = bestApproach(craft, agl, crashed, runways, world.heightAt);
+  const band = guide ? approachBand(phase) : sideBand(shownBand, craft.onGround, displayedAltitudeFt(agl, scales));
+  if (band !== shownBand) {
+    sideMem = { ...sideMem, [shownBand]: sideZoom };
+    shownBand = band;
+    sideZoom = sideMem[band];
   }
   const topTarget = metersPerPixel(follow.free.zoom);
   const sideTarget = sideMetersPerPixel(sideZoom);
@@ -187,8 +195,6 @@ function syncFrame(): void {
   shownTopZoom = shownTopMpp === topTarget ? follow.free.zoom : zoomForMpp(shownTopMpp);
   shownSideZoom = shownSideMpp === sideTarget ? sideZoom : sideZoomForMpp(shownSideMpp);
 
-  const crashed = sim.crash !== null;
-  guide = bestApproach(craft, agl, crashed, runways, world.heightAt);
   const mode = takeoffMode(craft, agl, crashed) && !guide;
   const remaining = remainingOnAny(runways, craft);
   vSpeedsShown = stepSpeeds(vSpeedsShown, craft, mode, sim.tuning, remaining);

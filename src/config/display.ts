@@ -197,6 +197,14 @@ export const POSITIVE_RATE_AGL_M = 5;
 export const GROUND_ZOOM_ENTER_AGL = 20;
 export const GROUND_ZOOM_EXIT_AGL = 40;
 export const ZOOM_EASE_S = 0.8;
+/**
+ * Side view zoom bands by height above ground, displayed feet (the same feet as ALT). Climbing, a band is left above
+ * its EXIT; descending, it is entered under its ENTER.
+ */
+export const SIDE_NEAR_ENTER_FT = 1200;
+export const SIDE_NEAR_EXIT_FT = 1400;
+export const SIDE_MID_ENTER_FT = 3000;
+export const SIDE_MID_EXIT_FT = 3500;
 /** The height-above-ground text by the plumb line shows under this height (world m, 2,000 displayed ft). */
 export const AGL_TEXT_LIMIT_M = 60;
 

@@ -27,9 +27,9 @@ describe('side camera', () => {
       expect(xToDistance(view, z, distanceToX(view, z, 777))).toBeCloseTo(777, 6);
     }
   });
-  it('puts the plane a quarter of the way across', () => {
-    expect(distanceToX(view, 1, 0)).toBe(160);
-    expect(planeColumn(view)).toBe(160);
+  it('puts the plane 18% of the way across', () => {
+    expect(distanceToX(view, 1, 0)).toBe(115);
+    expect(planeColumn(view)).toBe(115);
   });
   it('higher is up, and sea level is fixed', () => {
     expect(heightToY(view, 1, 100, 0)).toBeLessThan(heightToY(view, 1, 0, 0));
@@ -48,7 +48,7 @@ describe('side camera', () => {
       expect(w.samples).toBe(640);
       const step = w.length / (w.samples - 1);
       expect(step).toBeCloseTo(SIDE_ZOOM_LEVELS[z] as number, 9);
-      expect(w.startDistance).toBeCloseTo(-160 * step, 6);
+      expect(w.startDistance).toBeCloseTo(-115 * step, 6);
       expect(w.origin.x).toBeCloseTo(2560 + w.startDistance, 6);
     }
   });

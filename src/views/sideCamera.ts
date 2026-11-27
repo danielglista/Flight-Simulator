@@ -12,7 +12,7 @@ export const CLOSE_SIDE_ZOOM = SIDE_ZOOM_LEVELS.length - 1;
 /** Sea level sits this many pixels above the bottom edge (room for the readout). */
 export const SEA_ROW_FROM_BOTTOM = 48;
 /** The plane is this fraction of the width from the left. */
-export const PLANE_X_FRACTION = 0.25;
+export const PLANE_X_FRACTION = 0.18;
 
 export function clampSideZoom(z: number): number {
   return Math.min(SIDE_ZOOM_LEVELS.length - 1, Math.max(0, Math.round(z)));

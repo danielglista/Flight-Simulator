@@ -18,7 +18,7 @@ import { indicatedSpeed } from '../src/sim/units';
 import { CLOSE_ZOOM, ZOOM_LEVELS, metersPerPixel, zoomForMpp } from '../src/views/camera';
 import { CLOSE_SIDE_ZOOM, clampSideZoom, sideMetersPerPixel, sideZoomForMpp, SIDE_ZOOM_LEVELS, verticalMetersPerPixel } from '../src/views/sideCamera';
 import { NO_CALLOUTS, runwayRemaining, stepCallouts, stepSpeeds, takeoffMode, calloutSentence, gearPrompt, type CalloutInput } from '../src/views/takeoffStrip';
-import { easeMpp, gatePhase, recall, remember, stepPhaseZoom } from '../src/views/zoomGate';
+import { approachBand, easeMpp, gatePhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, stepPhaseZoom } from '../src/views/zoomGate';
 import { craft, fly, realWorld, runwayState } from './helpers';
 import { initialState as air } from '../src/sim/state';
 
@@ -495,5 +495,29 @@ describe('invariants with a ground start', () => {
   });
   it('the unused fixture helper stays honest', () => {
     expect(craft({ gearDown: true }).gearDown).toBe(true);
+  });
+});
+
+describe('side view zoom bands', () => {
+  it('starts at 5x near the ground, 4x low and 3x high', () => {
+    expect([SIDE_BAND_ZOOMS.near, SIDE_BAND_ZOOMS.mid, SIDE_BAND_ZOOMS.high].map((z) => SIDE_ZOOM_LEVELS[z])).toEqual([0.5, 1.25, 2.5]);
+  });
+  it('picks a band from height above ground', () => {
+    expect(sideBand('high', true, 9000)).toBe('near');
+    expect(sideBand('high', false, 1199)).toBe('near');
+    expect(sideBand('near', false, 2000)).toBe('mid');
+    expect(sideBand('mid', false, 4000)).toBe('high');
+    expect(sideBand('high', false, 2999)).toBe('mid');
+  });
+  it('keeps its band between the two thresholds', () => {
+    expect(sideBand('near', false, 1300)).toBe('near');
+    expect(sideBand('mid', false, 1300)).toBe('mid');
+    expect(sideBand('mid', false, 3300)).toBe('mid');
+    expect(sideBand('high', false, 3300)).toBe('high');
+    expect(sideBand('near', false, 3300)).toBe('mid');
+  });
+  it('stays wide on an approach until the ground gate closes in', () => {
+    expect(approachBand('air')).toBe('high');
+    expect(approachBand('ground')).toBe('near');
   });
 });

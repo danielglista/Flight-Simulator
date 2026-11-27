@@ -1,4 +1,13 @@
-import { GROUND_ZOOM_ENTER_AGL, GROUND_ZOOM_EXIT_AGL, ZOOM_EASE_S } from '../config/display';
+import {
+  GROUND_ZOOM_ENTER_AGL,
+  GROUND_ZOOM_EXIT_AGL,
+  SIDE_MID_ENTER_FT,
+  SIDE_MID_EXIT_FT,
+  SIDE_NEAR_ENTER_FT,
+  SIDE_NEAR_EXIT_FT,
+  ZOOM_EASE_S,
+} from '../config/display';
+import { CLOSE_SIDE_ZOOM, DEFAULT_SIDE_ZOOM } from './sideCamera';
 
 /** Which remembered zoom the views show: the close one near the ground, the player's own one in the air. */
 export type ZoomPhase = 'ground' | 'air';
@@ -12,6 +21,31 @@ export function gatePhase(prev: ZoomPhase, onGround: boolean, aglM: number): Zoo
   if (aglM > GROUND_ZOOM_EXIT_AGL) return 'air';
   return prev;
 }
+
+/** The side view's own bands by height: near the ground, low, and high. */
+export type SideBand = 'near' | 'mid' | 'high';
+
+/** The side zoom each band starts with (an index into SIDE_ZOOM_LEVELS). The wheel changes the current band's only. */
+export const SIDE_BAND_ZOOMS: Readonly<Record<SideBand, number>> = {
+  near: CLOSE_SIDE_ZOOM,
+  mid: CLOSE_SIDE_ZOOM - 1,
+  high: DEFAULT_SIDE_ZOOM,
+};
+
+/** Pure gate with hysteresis. `aglFt` is height above ground in displayed feet. */
+export function sideBand(prev: SideBand, onGround: boolean, aglFt: number): SideBand {
+  if (onGround || aglFt < SIDE_NEAR_ENTER_FT) return 'near';
+  if (prev === 'near' && aglFt <= SIDE_NEAR_EXIT_FT) return 'near';
+  if (aglFt < SIDE_MID_ENTER_FT) return 'mid';
+  if (aglFt > SIDE_MID_EXIT_FT) return 'high';
+  return prev === 'high' ? 'high' : 'mid';
+}
+
+/**
+ * On an approach the side view keeps the wide zoom until just above the ground, so the runway and glide path stay in
+ * sight; `phase` is the ground / air gate's.
+ */
+export const approachBand = (phase: ZoomPhase): SideBand => (phase === 'ground' ? 'near' : 'high');
 
 /** One remembered zoom level (an index into the view's levels) for each phase. */
 export interface PhaseZoom {
