@@ -112,8 +112,9 @@ describe('placement', () => {
     expect(cityToCity).toBeGreaterThan(7.9);
     expect(cityToCity).toBeLessThan(8.1);
     const trip = distanceKm(pl.airports[0]!.world, pl.airports[1]!.world);
-    expect(trip).toBeGreaterThan(7.6);
-    expect(trip).toBeLessThan(8.1);
+    // PHL sits farther from its city since E7.5, toward DC.
+    expect(trip).toBeGreaterThan(6.9);
+    expect(trip).toBeLessThan(7.3);
   });
   it('sizes the outline by the airport scale', () => {
     const pl = at(25);

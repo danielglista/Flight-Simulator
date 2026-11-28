@@ -125,6 +125,8 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
   const roadLayer = createRoadLayer(grid.roads ?? []);
   const cityLayer = createCityLayer(grid.buildings ?? []);
   const landmarkLayer = createLandmarkLayer(grid.landmarks ?? [], (x, y) => heightAt(grid, scale, x, y));
+  // Airport buildings stand on the pavement, so they are drawn after the airports (E7.9).
+  const structureLayer = createLandmarkLayer(grid.airports.flatMap((a) => (a.structures ? [a.structures] : [])), (x, y) => heightAt(grid, scale, x, y));
   const sprites = createPlaneSprites();
   /** Current plane size step; kept between frames for the hysteresis. */
   let planeTier = 0;
@@ -483,6 +485,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
         ctx.globalAlpha = 1;
       }
       airportLayer.draw(ctx, { ...frame, rotation }, clampZoom(camera.zoom), area);
+      structureLayer.draw(ctx, frame, area, sun);
       if (DEPTH_FX.clouds) drawClouds(ctx, view, frame, area, side.craft.z, sun);
       ctx.restore();
       const plane = planePixel(view, camera, side.craft);

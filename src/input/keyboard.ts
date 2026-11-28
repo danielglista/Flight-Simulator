@@ -50,11 +50,16 @@ export interface KeyActions {
   readonly KeyZ: (fine: boolean) => void;
   readonly Comma: (fine: boolean) => void;
   readonly Period: (fine: boolean) => void;
+  /** Zoom: top view out and in, side view out and in. */
+  readonly Digit1: (fine: boolean) => void;
+  readonly Digit2: (fine: boolean) => void;
+  readonly Digit3: (fine: boolean) => void;
+  readonly Digit4: (fine: boolean) => void;
 }
 
 export type ActionCode = keyof KeyActions;
 
-const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true, BracketLeft: true, BracketRight: true, Minus: true, Equal: true, KeyZ: true, Comma: true, Period: true };
+const ACTION_CODES: Readonly<Record<ActionCode, true>> = { KeyP: true, KeyC: true, Enter: true, Backquote: true, BracketLeft: true, BracketRight: true, Minus: true, Equal: true, KeyZ: true, Comma: true, Period: true, Digit1: true, Digit2: true, Digit3: true, Digit4: true };
 
 /** Actions that repeat while the key is held. */
 const REPEATING: ReadonlySet<string> = new Set(['BracketLeft', 'BracketRight', 'Minus', 'Equal', 'Comma', 'Period']);
@@ -79,7 +84,7 @@ export function actionFor(e: ActionEvent): ActionCode | null {
   return e.code as ActionCode;
 }
 
-/** Window key listeners. P, C and Enter run their action once per press; the bracket, minus and equal keys repeat. */
+/** Window key listeners. P, C, Enter and the zoom digits run their action once per press; the bracket, minus and equal keys repeat. */
 export function attachKeyboard(actions: KeyActions): Keyboard {
   const keys = createKeyState();
   const down = (e: KeyboardEvent): void => {

@@ -23,6 +23,9 @@ export const TERRAIN_COLORS: Readonly<Record<number, Rgb>> = {
   [Terrain.park]: [96, 168, 80],
 };
 
+/** Taxiway center lines, lead-in lines and hold-short bars (E7.8). */
+export const TAXI_MARK_COLOR = '#f2c200';
+
 /** Water color runs from shallow to deep with depth (real meters). */
 export const WATER_SHALLOW: Rgb = [48, 176, 170]; // teal, so shallow water is not the sky blue
 export const WATER_DEEP: Rgb = [20, 48, 104];
@@ -198,6 +201,27 @@ export const LANDMARK_COLORS: Readonly<Record<string, Rgb>> = {
   'bridge-cable': [166, 204, 224],
   'bridge-road': [112, 114, 118],
   'bridge-stone': [166, 152, 130],
+  // Airport buildings and what is parked around them (E7.9).
+  'terminal-wall': [176, 188, 200],
+  'terminal-roof': [214, 212, 204],
+  'hangar-wall': [160, 164, 178],
+  'hangar-roof': [182, 176, 198],
+  'hangar-ridge': [122, 116, 142],
+  'garage-wall': [150, 146, 138],
+  'garage-roof': [170, 168, 160],
+  'tower-wall': [214, 208, 196],
+  'tower-glass': [70, 92, 112],
+  'tower-roof': [214, 92, 74],
+  'ups-wall': [116, 88, 60],
+  'ups-roof': [142, 108, 72],
+  'ups-gold': [224, 166, 40],
+  'ups-brown': [96, 66, 42],
+  freighter: [238, 232, 214],
+  'car-white': [232, 232, 228],
+  'car-dark': [52, 56, 66],
+  'car-red': [178, 66, 56],
+  'car-blue': [66, 104, 168],
+  'car-silver': [174, 178, 186],
   'liberty-glass': [62, 82, 116],
   'liberty-two-glass': [84, 124, 164],
   'liberty-trim': [214, 222, 230],

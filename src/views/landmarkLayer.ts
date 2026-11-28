@@ -37,8 +37,8 @@ function circle(x: number, y: number, radius: number, steps = 20): P[] {
   });
 }
 
-/** A prism's corners as points. */
-export function outline(s: LandmarkSolid): P[] {
+/** A prism's or polygon's corners as points. */
+export function outline(s: { readonly points?: readonly number[] }): P[] {
   const p = s.points ?? [];
   return Array.from({ length: p.length / 2 }, (_, i): P => [p[i * 2] as number, p[i * 2 + 1] as number]);
 }
@@ -119,9 +119,16 @@ function paintRound(ctx: CanvasRenderingContext2D, s: LandmarkSolid, mpp: number
 }
 
 /** Paved ground and paths, in the order given. */
-function paintDecor(ctx: CanvasRenderingContext2D, l: MapLandmark): void {
+function paintDecor(ctx: CanvasRenderingContext2D, l: MapLandmark, mpp: number): void {
   for (const d of l.decor) {
+    if (d.detail && mpp > BUILDING_DETAIL_MAX_MPP) continue;
     ctx.beginPath();
+    if (d.kind === 'polygon') {
+      ctx.fillStyle = rgb(landmarkColor(d.material));
+      trace(ctx, outline(d));
+      ctx.fill();
+      continue;
+    }
     if (d.kind === 'rect') {
       ctx.fillStyle = rgb(landmarkColor(d.material));
       trace(ctx, solidCorners(d, d.width, d.depth));
@@ -268,7 +275,7 @@ export function createLandmarkLayer(landmarks: readonly MapLandmark[], groundOf:
       toWorld(ctx, f);
       for (const { l, hill, standing, hillShadows, standingShadows, box } of preparedFor(sun)) {
         if (!boxesMeet(box, seen)) continue;
-        if (f.mpp <= BUILDING_MAX_MPP) paintDecor(ctx, l);
+        if (f.mpp <= BUILDING_MAX_MPP) paintDecor(ctx, l, f.mpp);
         // Shadows as one shape, so they do not darken where they overlap. The long shadow shows at every zoom.
         const shade = (shadows: readonly (readonly P[])[]): void => {
           ctx.fillStyle = BUILDING_SHADOW_COLOR;

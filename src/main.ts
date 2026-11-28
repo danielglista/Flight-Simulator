@@ -8,6 +8,7 @@ import { APPROACH_ZOOM, ALT_BUG_FINE_FT, ALT_BUG_MAX_FT, ALT_BUG_STEP_FT, SPD_BU
 import { attachPause } from './app/pause';
 import { createRunwayMenu, type RunwayMenu } from './app/runwayMenu';
 import { createApLamps, type ApLamps, type ApModeName } from './app/apLamps';
+import { createZoomButtons, type ZoomButtons } from './app/zoomButtons';
 import { runwayEnd } from './views/runwaySelect';
 import { hsiGuide, hsiSentence, type HsiGuide } from './views/hsiData';
 import { fetchWithProgress } from './app/loadMap';
@@ -25,9 +26,9 @@ import { createObstacles } from './sim/world/obstacles';
 import { withAirports } from './sim/world/placeAirports';
 import { buildTestAirport } from './sim/world/testAirport';
 import { buildTestMap } from './sim/world/testMap';
-import { CLOSE_ZOOM, DEFAULT_ZOOM, metersPerPixel, zoomForMpp, type Point } from './views/camera';
+import { CLOSE_ZOOM, DEFAULT_ZOOM, ZOOM_LEVELS, metersPerPixel, zoomForMpp, type Point } from './views/camera';
 import { cameraFor, initialFollow, panned, recentered, zoomed } from './views/followCamera';
-import { clampSideZoom, sideMetersPerPixel, sideZoomForMpp } from './views/sideCamera';
+import { SIDE_ZOOM_LEVELS, clampSideZoom, sideMetersPerPixel, sideZoomForMpp } from './views/sideCamera';
 import { approachBand, easeMpp, liningUp, topPhase, recall, remember, SIDE_BAND_ZOOMS, sideBand, type PhaseZoom, type SideBand, type ZoomPhase } from './views/zoomGate';
 import { NO_CALLOUTS, calloutSentence, gearPrompt, remainingOnAny, stepCallouts, stepSpeeds, takeoffMode, type CalloutState, type TakeoffHud } from './views/takeoffStrip';
 import type { VSpeeds } from './sim/flight/vspeeds';
@@ -101,7 +102,7 @@ const sideView = createSideView(grid, scales);
 
 // Top-view camera: locked to the plane, or free look. Never part of the simulation.
 // The top view remembers one zoom for the ground, one for lining up on the picked runway and one for the air; the side view one for each height band.
-// The wheel edits the current one only; the gates (views/zoomGate.ts) pick it from height above ground, and the shown
+// The wheel, the - / + buttons and keys 1 to 4 edit the current one only; the gates (views/zoomGate.ts) pick it from height above ground, and the shown
 // zoom eases toward it.
 let topMem: PhaseZoom = { ground: CLOSE_ZOOM, approach: APPROACH_ZOOM, air: DEFAULT_ZOOM };
 let linedUp = false;
@@ -196,6 +197,8 @@ let requestTop: () => void = () => {};
 // Runway selection (D5C). Made after the panels, whose first draws run before it.
 let runwayMenu: RunwayMenu | null = null;
 let apLamps: ApLamps | null = null;
+let topZoomButtons: ZoomButtons | null = null;
+let sideZoomButtons: ZoomButtons | null = null;
 
 /**
  * Once per drawn frame (idempotent within one): the zoom phase and easing, and the takeoff HUD. Paused, the zoom snaps
@@ -231,6 +234,9 @@ function syncFrame(): void {
   shownSideMpp = loop.paused ? sideTarget : easeMpp(shownSideMpp, sideTarget, dt);
   shownTopZoom = shownTopMpp === topTarget ? follow.free.zoom : zoomForMpp(shownTopMpp);
   shownSideZoom = shownSideMpp === sideTarget ? sideZoom : sideZoomForMpp(shownSideMpp);
+  // The phase or band may have changed the zoom under the buttons.
+  topZoomButtons?.sync();
+  sideZoomButtons?.sync();
 
   const mode = takeoffMode(craft, agl, crashed) && !guide;
   const remaining = remainingOnAny(runways, craft);
@@ -244,6 +250,19 @@ function syncFrame(): void {
 }
 /** The top-view camera as drawn: the follow camera at the eased zoom. */
 const shownCamera = () => ({ ...cameraFor(follow, currentCraft()), zoom: shownTopZoom });
+
+/** One zoom level for a view (the - / + buttons and keys 1 to 4): the same as a wheel notch at the view's center. */
+function zoomTop(steps: -1 | 1): void {
+  const { width, height } = panels.top.size;
+  follow = zoomed(follow, currentCraft(), panels.top.size, { x: width / 2, y: height / 2 }, steps, bounds);
+  topZoomButtons?.sync();
+  if (loop.paused) panels.top.requestDraw();
+}
+function zoomSide(steps: -1 | 1): void {
+  sideZoom = clampSideZoom(sideZoom + steps);
+  sideZoomButtons?.sync();
+  redrawBoth();
+}
 
 // The loop owns the only copy of the simulation state; views read snapshots.
 const keyboard = attachKeyboard({
@@ -266,6 +285,10 @@ const keyboard = attachKeyboard({
   },
   Comma: (fine) => moveSpeedBug(-1, fine),
   Period: (fine) => moveSpeedBug(1, fine),
+  Digit1: () => zoomTop(-1),
+  Digit2: () => zoomTop(1),
+  Digit3: () => zoomSide(-1),
+  Digit4: () => zoomSide(1),
   Backquote: () => {
     debug?.toggle();
     if (debug?.visible) debug.refresh();
@@ -446,6 +469,22 @@ apLamps = createApLamps({
   autopilot: () => loop.state.autopilot,
   onToggle: toggleApMode,
 });
+topZoomButtons = createZoomButtons({
+  canvas: panels.top.canvas,
+  view: 'Top view',
+  keys: { out: '1', in: '2' },
+  levels: ZOOM_LEVELS.length,
+  zoom: () => follow.free.zoom,
+  onZoom: zoomTop,
+});
+sideZoomButtons = createZoomButtons({
+  canvas: panels.side.canvas,
+  view: 'Side view',
+  keys: { out: '3', in: '4' },
+  levels: SIDE_ZOOM_LEVELS.length,
+  zoom: () => sideZoom,
+  onZoom: zoomSide,
+});
 const debug = createDebugPanel({ loop, scales: scales, timing, heightAt: world.heightAt, groundKind: world.groundKind, starts: STARTS, onDisplayChange: () => panels.instruments.requestDraw() });
 
 // While running, the loop draws every frame. Draw on demand only when paused.
@@ -465,6 +504,7 @@ attachMapPointer({
   },
   onZoom: (at, steps) => {
     follow = zoomed(follow, currentCraft(), panels.top.size, at, steps, bounds);
+    topZoomButtons?.sync();
     if (loop.paused) panels.top.requestDraw();
   },
   setCursor: (c) => {
@@ -483,6 +523,7 @@ attachSidePointer({
   },
   onZoom: (steps) => {
     sideZoom = clampSideZoom(sideZoom + steps);
+    sideZoomButtons?.sync();
     redrawBoth();
   },
   setCursor: (c) => {

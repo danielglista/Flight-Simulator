@@ -9,13 +9,14 @@ import { trimAt } from '../src/sim/flight/trim';
 import { vSpeeds } from '../src/sim/flight/vspeeds';
 import { initialState, type SimState } from '../src/sim/state';
 import { advance, applyCommands, type SimWorld } from '../src/sim/step';
-import { runwayFrame } from '../src/sim/world/airport';
+import { buildAirport, OFF_AIRPORT, runwayFrame, type Runway } from '../src/sim/world/airport';
 import { airportAt, groundAt, heightAt, runwayAt, surfaceAt, waterLevelAt, worldHeight, worldWidth } from '../src/sim/world/grid';
 import { groundKindAt } from '../src/sim/world/groundKind';
 import { parseMap } from '../src/sim/world/mapFile';
 import { createObstacles } from '../src/sim/world/obstacles';
 import { midAtlanticDef, midAtlanticGrid } from '../src/sim/world/midAtlantic';
 import { pickStart, startList } from '../src/sim/world/startList';
+import { finalStart, runwayStart } from '../src/sim/world/starts';
 import { Terrain } from '../src/sim/world/terrain';
 
 const bytes = Uint8Array.from(atob(mapUrl.slice(mapUrl.indexOf(',') + 1)), (c) => c.charCodeAt(0));
@@ -74,29 +75,34 @@ describe('the built Mid-Atlantic map', () => {
     expect(surfaceAt(grid, 4723, 7200)).toBe(Terrain.downtown);
     expect(surfaceAt(grid, 11194, 11778)).toBe(Terrain.downtown);
     const districts: number[] = [Terrain.downtown, Terrain.residential, Terrain.suburb, Terrain.industrial, Terrain.park];
-    for (const a of grid.airports) {
-      const rw = a.runways[0]!;
+    for (const rw of grid.airports.flatMap((a) => a.runways)) {
       for (let t = 0; t <= 1; t += 0.05) expect(districts).not.toContain(surfaceAt(grid, rw.a.x + (rw.b.x - rw.a.x) * t, rw.a.y + (rw.b.y - rw.a.y) * t));
     }
   });
   it('has DCA and PHL at their real runway names, lengths at 1:2', () => {
+    expect(phl.runways.map((r) => r.names)).toEqual([['09R', '27L'], ['09L', '27R']]);
+    expect(phl.runways[1]!.length).toBeCloseTo(2896 / 2, 3);
     expect(grid.airports.map((a) => a.ident)).toEqual(['DCA', 'PHL']);
     expect(dca.runways[0]!.names).toEqual(['01', '19']);
     expect(phl.runways[0]!.names).toEqual(['09R', '27L']);
     expect(dca.runways[0]!.length).toBeCloseTo(2185 / 2, 3);
-    expect(phl.runways[0]!.length).toBeCloseTo(1600, 3);
+    expect(phl.runways[0]!.length).toBeCloseTo(3658 / 2, 3);
     expect(scale).toEqual({ altitude: 5, geoDistance: 25 });
   });
   it('is flat, dry, paved runway from end to end, with grass past each end', () => {
-    for (const a of grid.airports) {
-      const rw = a.runways[0]!;
+    for (const [a, rw] of grid.airports.flatMap((a) => a.runways.map((rw) => [a, rw] as const))) {
+      // World m of grass past each end: PHL's ground (E7.5) stops about 25 past its runways.
+      const past = a.ident === 'PHL' ? 20 : 40;
       const ux = (rw.b.x - rw.a.x) / rw.length;
       const uy = (rw.b.y - rw.a.y) / rw.length;
-      for (let s = -40; s <= rw.length + 40; s += 7) {
+      for (let s = -past; s <= rw.length + past; s += 7) {
         const x = rw.a.x + ux * s;
         const y = rw.a.y + uy * s;
         expect(world.heightAt(x, y)).toBeCloseTo(a.fieldElevationM / scale.altitude, 9);
-        expect(groundKindAt(grid, x, y)).toBe(s >= 0 && s <= rw.length ? 'paved' : 'grass');
+        // A taxiway into a runway end reaches half its width (9 world m) past it.
+        if (s >= 0 && s <= rw.length) expect(groundKindAt(grid, x, y)).toBe('paved');
+        else if (s < -10 || s > rw.length + 10) expect(groundKindAt(grid, x, y)).toBe('grass');
+        else expect(groundKindAt(grid, x, y)).not.toBe('rough');
       }
       expect(runwayAt(grid, (rw.a.x + rw.b.x) / 2, (rw.a.y + rw.b.y) / 2)?.airport.ident).toBe(a.ident);
     }
@@ -136,7 +142,7 @@ describe('the built Mid-Atlantic map', () => {
     }
   });
   it('refuses an airport it has no layout for', () => {
-    expect(() => midAtlanticDef({ ...map.airports[0]!, id: 'XYZ' })).toThrow(/XYZ/);
+    expect(() => midAtlanticDef({ ...map.airports[0]!, id: 'XYZ' }, 3)).toThrow(/XYZ/);
   });
   it('offers a runway and a final start on each airport, and picks by name', () => {
     expect(starts.map((s) => s.label)).toEqual(['DCA runway', 'DCA final', 'PHL runway', 'PHL final', 'Air']);
@@ -165,9 +171,8 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 type Phase = 'roll' | 'climb' | 'cruise' | 'final' | 'rollout';
 
 /** A scripted pilot, keys only (as in circuit.test.ts): off DCA, direct to a fix on PHL's final, and down. */
-function createPilot() {
+function createPilot(to = phl.runways[0]!, first: Phase = 'roll') {
   const from = dca.runways[0]!;
-  const to = phl.runways[0]!;
   const frameOf = (rw: typeof from) => {
     const ux = (rw.b.x - rw.a.x) / rw.length;
     const uy = (rw.b.y - rw.a.y) / rw.length;
@@ -182,7 +187,7 @@ function createPilot() {
   const FIX_M = 2800;
   const fix = arr.at(-FIX_M, 0);
   const CRUISE_Z = field + 150;
-  let phase: Phase = 'roll';
+  let phase: Phase = first;
   let gearRaised = false;
 
   function step(s: SimState): Command[] {
@@ -282,4 +287,170 @@ describe('DCA to PHL', () => {
     expect(Math.abs(end.across)).toBeLessThan(pilot.runway.width / 2);
     console.log(`DCA to PHL: ${(steps / 60).toFixed(0)} s brakes-off to stop, touchdown sink ${s.touchdown!.sink.toFixed(1)} m/s, ${runwayFrame(pilot.runway, s.touchdown!.x, s.touchdown!.y).along.toFixed(0)} m past the threshold`);
   }, 60000);
+});
+
+/** The same runway used the other way. */
+const reversed = (rw: Runway): Runway => ({ ...rw, a: rw.b, b: rw.a, names: [rw.names[1], rw.names[0]], heading: (rw.heading + Math.PI) % (2 * Math.PI) });
+
+describe('both PHL runways, both ways (E7.7)', () => {
+  const ends = phl.runways.flatMap((rw) => [rw, reversed(rw)]).map((rw) => [rw.names[0], rw] as const);
+
+  it.each(ends)('takes off from %s before the far end', (_, rw) => {
+    let s = initialState(runwayStart(rw, world.heightAt));
+    for (let i = 0; i < 60 * 60 && !s.crash && s.craft.onGround; i++) {
+      const rotate = s.craft.speed >= vSpeeds(s.tuning).vr && s.craft.pitch < 9 * DEG;
+      s = applyCommands(s, [{ kind: 'throttle', value: 1 }, { kind: 'pitch', value: rotate ? 1 : 0 }], world);
+      s = advance(s, world);
+    }
+    expect(s.crash).toBeNull();
+    expect(s.craft.onGround).toBe(false);
+    expect(runwayFrame(rw, s.craft.x, s.craft.y).along).toBeLessThan(rw.length);
+  });
+
+  it.each(ends)('lands from the final for %s and stops on it', (_, rw) => {
+    const pilot = createPilot(rw, 'final');
+    // Flaps up: the scripted pilot trims for a clean wing.
+    let s = initialState({ ...finalStart(rw, world.heightAt, scale.altitude, DEFAULT_TUNING), flapLever: 0 });
+    for (let i = 0; i < 60 * 120 && !s.crash && !landed(s); i++) {
+      s = applyCommands(s, pilot.step(s), world);
+      s = advance(s, world);
+    }
+    expect(s.crash).toBeNull();
+    const f = runwayFrame(rw, s.craft.x, s.craft.y);
+    expect(landed(s), `${pilot.phase} along ${f.along} across ${f.across} z ${s.craft.z} speed ${s.craft.speed} ground ${s.craft.onGround} td ${JSON.stringify(s.touchdown)}`).toBe(true);
+    expect(runwayAt(grid, s.craft.x, s.craft.y)?.runway.names.slice().sort()).toEqual(rw.names.slice().sort());
+  });
+});
+
+describe('taxiways, aprons and gates (E7.8)', () => {
+  const paved = (x: number, y: number): boolean => groundKindAt(grid, x, y) === 'paved';
+
+  it('has 17 gates at DCA and 22 at PHL, each named once', () => {
+    for (const [a, count] of [[dca, 17], [phl, 22]] as const) {
+      expect(a.gates).toHaveLength(count);
+      expect(new Set(a.gates!.map((g) => g.name)).size).toBe(count);
+    }
+  });
+
+  it('keeps every taxiway, lead-in and stand on pavement', () => {
+    for (const a of grid.airports) {
+      for (const line of [...a.taxiways!, ...a.gates!.map((g) => g.leadIn)]) {
+        for (let i = 1; i < line.length; i++) {
+          const p = line[i - 1]!;
+          const q = line[i]!;
+          for (let k = 0; k <= 1; k += 0.05) {
+            const x = p.x + (q.x - p.x) * k;
+            const y = p.y + (q.y - p.y) * k;
+            expect(paved(x, y), `${a.ident} ${x.toFixed(0)},${y.toFixed(0)}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('paves nothing off the airport ground the map made', () => {
+    for (const a of map.airports) {
+      const def = midAtlanticDef(a, map.buildingHeightScale);
+      const built = buildAirport(def);
+      const bare = buildAirport({ ...def, taxiways: [], paving: [] });
+      const off = built.surface.filter((code, i) => code !== bare.surface[i] && bare.surface[i] === OFF_AIRPORT);
+      expect(off.length, a.id).toBe(0);
+    }
+  });
+
+  it('connects every gate to every runway end along pavement, round the buildings', () => {
+    const clear = (x: number, y: number): boolean => paved(x, y) && Number.isNaN(world.obstacleAt!(x, y));
+    for (const a of grid.airports) {
+      const step = a.cellSize;
+      const key = (c: number, r: number): string => `${c},${r}`;
+      const cell = (p: { x: number; y: number }) => [Math.floor((p.x - a.minX) / step), Math.floor((p.y - a.minY) / step)] as const;
+      const seen = new Set<string>([key(...cell(a.runways[0]!.a))]);
+      const queue = [cell(a.runways[0]!.a)];
+      for (let i = 0; i < queue.length; i++) {
+        const [c, r] = queue[i]!;
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const next = [c + dc, r + dr] as const;
+          if (seen.has(key(...next)) || !clear(a.minX + (next[0] + 0.5) * step, a.minY + (next[1] + 0.5) * step)) continue;
+          seen.add(key(...next));
+          queue.push(next);
+        }
+      }
+      for (const g of a.gates!) expect(seen.has(key(...cell(g.stand))), `${a.ident} gate ${g.name}`).toBe(true);
+      for (const rw of a.runways) for (const end of [rw.a, rw.b]) expect(seen.has(key(...cell(end))), `${a.ident} ${rw.names.join('/')}`).toBe(true);
+    }
+  });
+
+  it('has a hold-short bar on every way onto a runway, 35 world m from its center line', () => {
+    expect(dca.holdShort).toHaveLength(7);
+    for (const a of grid.airports) {
+      expect(a.holdShort!.length).toBeGreaterThan(0);
+      for (const [p, q] of a.holdShort!) {
+        const x = (p.x + q.x) / 2;
+        const y = (p.y + q.y) / 2;
+        const nearest = Math.min(...a.runways.map((rw) => Math.abs(runwayFrame(rw, x, y).across)));
+        expect(nearest).toBeCloseTo(35, 3);
+      }
+    }
+  });
+});
+
+describe('airport buildings (E7.9)', () => {
+  const solids = grid.airports.flatMap((a) => a.structures!.solids.map((s) => [a, s] as const));
+  const corners = (s: (typeof solids)[number][1]): (readonly [number, number])[] =>
+    s.points ? s.points.flatMap((v, i) => (i % 2 === 0 ? [[v, s.points![i + 1]!] as const] : [])) : [[s.x - s.width / 2, s.y], [s.x + s.width / 2, s.y], [s.x, s.y - s.width / 2], [s.x, s.y + s.width / 2]];
+
+  it('stands every building on its airport ground, off the runways', () => {
+    for (const [a, s] of solids) {
+      for (const [x, y] of corners(s)) {
+        expect(airportAt(grid, x, y)?.ident, `${a.ident} ${s.material} ${x.toFixed(0)},${y.toFixed(0)}`).toBe(a.ident);
+        expect(runwayAt(grid, x, y)).toBeNull();
+      }
+    }
+  });
+
+  it('has the heights of §11.6, scaled like city buildings', () => {
+    for (const a of grid.airports) {
+      const tallest = Math.max(...a.structures!.solids.map((s) => s.top));
+      expect(tallest).toBeCloseTo(45 / 3, 6);
+    }
+  });
+
+  it('keeps clear of taxiways, lead-ins and stands', () => {
+    const hit = world.obstacleAt!;
+    for (const a of grid.airports) {
+      const check = (line: readonly { x: number; y: number }[], room: number): void => {
+        for (let i = 1; i < line.length; i++) {
+          const p = line[i - 1]!;
+          const q = line[i]!;
+          for (let k = 0; k <= 1; k += 0.02) {
+            const x = p.x + (q.x - p.x) * k;
+            const y = p.y + (q.y - p.y) * k;
+            for (let turn = 0; turn < 8; turn++) {
+              const angle = (turn * Math.PI) / 4;
+              expect(hit(x + Math.cos(angle) * room, y + Math.sin(angle) * room), `${a.ident} ${x.toFixed(0)},${y.toFixed(0)}`).toBeNaN();
+            }
+          }
+        }
+      };
+      for (const line of a.taxiways!) check(line, 9);
+      for (const g of a.gates!) check(g.leadIn, 5);
+    }
+  });
+
+  it('crashes a plane that taxis into a terminal', () => {
+    const gate = dca.gates!.find((g) => g.name === 'B1')!;
+    // From the stand, straight on into the pier.
+    let s = initialState({ ...runwayStart(dca.runways[0]!, world.heightAt), x: gate.stand.x, y: gate.stand.y, heading: gate.heading });
+    for (let i = 0; i < 60 * 30 && !s.crash; i++) {
+      s = applyCommands(s, [{ kind: 'throttle', value: s.craft.lever < 0.5 ? 1 : 0 }], world);
+      s = advance(s, world);
+    }
+    expect(s.crash?.cause).toBe('building');
+    expect(Math.hypot(s.craft.x - gate.stand.x, s.craft.y - gate.stand.y)).toBeLessThan(12);
+  });
+
+  it('parks cars and freighters on the ground, not solid', () => {
+    expect(dca.structures!.decor.filter((d) => d.detail).length).toBeGreaterThan(200);
+    expect(phl.structures!.decor.filter((d) => d.material === 'freighter')).toHaveLength(4);
+  });
 });

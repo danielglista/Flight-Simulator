@@ -1,4 +1,4 @@
-import { TERRAIN_COLORS, type Rgb } from '../config/palette';
+import { TAXI_MARK_COLOR, TERRAIN_COLORS, type Rgb } from '../config/palette';
 import { airportContains, fineSurfaceAt, OFF_AIRPORT, type Airport, type Runway } from '../sim/world/airport';
 import { Terrain } from '../sim/world/terrain';
 import { ZOOM_LEVELS } from './camera';
@@ -161,6 +161,40 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
     }
   }
 
+  const toScreen = (f: MapFrame, p: { x: number; y: number }): [number, number] => [frameX(f, p.x), frameY(f, p.y)];
+
+  /** Yellow paint on the taxiways: center lines from 2.5 m per pixel, lead-ins and hold-short bars closer in. */
+  function drawTaxiMarks(ctx: CanvasRenderingContext2D, f: MapFrame, a: Airport, zoom: number): void {
+    if (zoom < 4) return;
+    const line = (points: readonly { x: number; y: number }[]): void => {
+      points.forEach((p, i) => (i === 0 ? ctx.moveTo(...toScreen(f, p)) : ctx.lineTo(...toScreen(f, p))));
+    };
+    ctx.strokeStyle = TAXI_MARK_COLOR;
+    ctx.lineCap = 'butt';
+    ctx.lineWidth = Math.max(1, 0.6 / f.mpp);
+    ctx.beginPath();
+    for (const t of a.taxiways ?? []) line(t);
+    if (zoom >= 5) for (const g of a.gates ?? []) line(g.leadIn);
+    ctx.stroke();
+    if (zoom < 5) return;
+    ctx.lineWidth = Math.max(2, 1.5 / f.mpp);
+    ctx.beginPath();
+    for (const bar of a.holdShort ?? []) line(bar);
+    ctx.stroke();
+  }
+
+  /** Gate numbers at the stands, upright on screen, at the closest zoom only. */
+  function drawGateNumbers(ctx: CanvasRenderingContext2D, f: MapFrame, a: Airport, zoom: number): void {
+    if (zoom < 6) return;
+    for (const g of a.gates ?? []) {
+      ctx.save();
+      ctx.translate(...toScreen(f, g.stand));
+      ctx.rotate(f.rotation ?? 0);
+      drawText(ctx, g.name, 0, 4, 'center');
+      ctx.restore();
+    }
+  }
+
   return {
     warm() {
       for (const a of airports) for (let z = 2; z < ZOOM_LEVELS.length; z++) patch(a, ZOOM_LEVELS[z] as number);
@@ -182,9 +216,10 @@ export function createAirportLayer(airports: readonly Airport[]): AirportLayer {
           else ctx.drawImage(p, Math.round(x0), Math.round(y0), Math.round(p.width * k), Math.round(p.height * k));
         }
         for (const rw of a.runways) drawRunway(ctx, f, rw, zoom);
-        // Ident label beside the middle of the first runway.
-        const rw = a.runways[0];
-        if (rw) {
+        drawTaxiMarks(ctx, f, a, zoom);
+        drawGateNumbers(ctx, f, a, zoom);
+        // Ident and runway names beside the middle of each runway.
+        for (const rw of a.runways) {
           const mx = frameX(f, (rw.a.x + rw.b.x) / 2);
           const my = frameY(f, (rw.a.y + rw.b.y) / 2);
           // Keep the label upright however the map is turned.

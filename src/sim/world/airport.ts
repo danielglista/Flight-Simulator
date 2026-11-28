@@ -1,3 +1,4 @@
+import type { LandmarkDecor, LandmarkSolid, MapLandmark } from './mapFile';
 import { contains, type Polygon } from './polygon';
 import { Terrain } from './terrain';
 
@@ -17,6 +18,18 @@ export interface Runway {
   readonly length: number;
   /** a -> b, radians clockwise from north, 0..2pi. */
   readonly heading: number;
+}
+
+/** A numbered parking stand, WORLD meters. */
+export interface Gate {
+  /** `B4` */
+  readonly name: string;
+  /** Where the plane stops: the end of the lead-in line. */
+  readonly stand: Vec2;
+  /** Facing at the stand, radians clockwise from north, 0..2pi. */
+  readonly heading: number;
+  /** Lead-in line from the taxi lane to the stand. */
+  readonly leadIn: readonly Vec2[];
 }
 
 export interface Airport {
@@ -39,6 +52,13 @@ export interface Airport {
   readonly surface: Uint8Array;
   readonly runways: readonly Runway[];
   readonly variationDeg?: number;
+  /** Taxiway centerlines, for the markings. Their pavement is in `surface`. */
+  readonly taxiways?: readonly (readonly Vec2[])[];
+  /** Hold-short bars across the ways onto a runway, end to end. */
+  readonly holdShort?: readonly (readonly [Vec2, Vec2])[];
+  readonly gates?: readonly Gate[];
+  /** Buildings and what is painted around them (E7.9), world m: solid, and drawn as a landmark is. */
+  readonly structures?: MapLandmark;
   /**
    * The airport covers only its ground cells; elsewhere in the boundary (`OFF_AIRPORT`) the map shows through, so a
    * river may pass inside it. There is no blend band: the map under the ground must already be flat and dry.
@@ -60,7 +80,22 @@ export type PavingDef =
       readonly minY: number;
       readonly maxX: number;
       readonly maxY: number;
-    };
+    }
+  | { readonly kind: 'polygon'; readonly code: number; readonly points: Polygon };
+
+/** A building piece: straight walls on a convex plan, or a round drum. Local real m; heights real m above the field. */
+export type StructureDef = {
+  readonly bottom: number;
+  readonly top: number;
+  readonly material: string;
+  /** Roof color, where it differs from the walls (not for a drum). */
+  readonly cap?: string;
+  /** Spacing of the windows or columns up the walls. */
+  readonly columns?: number;
+} & ({ readonly points: readonly Vec2[] } | { readonly center: Vec2; readonly diameter: number });
+
+/** Flat paint on the ground, local real m. */
+export type GroundPaintDef = { readonly material: string; readonly points: readonly Vec2[]; readonly detail?: boolean };
 
 export interface AirportDef {
   readonly ident: string;
@@ -91,6 +126,14 @@ export interface AirportDef {
     readonly names: readonly [string, string];
   }[];
   readonly paving: readonly PavingDef[];
+  /** Center lines paved `width` real m wide, under `paving`. */
+  readonly taxiways?: readonly { readonly points: readonly Vec2[]; readonly width: number }[];
+  readonly holdShort?: readonly (readonly [Vec2, Vec2])[];
+  readonly gates?: readonly { readonly name: string; readonly leadIn: readonly Vec2[] }[];
+  readonly structures?: readonly StructureDef[];
+  readonly groundPaint?: readonly GroundPaintDef[];
+  /** Real meters of building height per world meter. Needed with `structures`. */
+  readonly buildingHeightScale?: number;
 }
 
 /** Position along a runway (0 at a) and across it (right of the a -> b direction is positive). */
@@ -195,13 +238,19 @@ export function buildAirport(def: AirportDef): Airport {
     }
   }
 
-  for (const p of def.paving) {
+  const lanes: PavingDef[] = (def.taxiways ?? []).flatMap((t) =>
+    t.points.slice(1).map((b, i): PavingDef => ({ kind: 'strip', code: Terrain.taxiway, a: t.points[i] as Vec2, b, width: t.width })),
+  );
+  for (const p of [...lanes, ...def.paving]) {
     let test: (x: number, y: number) => boolean;
     if (p.kind === 'strip') {
       const a = toWorld(p.a);
       const b = toWorld(p.b);
       const w = p.width / k;
       test = (x, y) => stripContains(a, b, w, x, y);
+    } else if (p.kind === 'polygon') {
+      const points = p.points.map(toWorld);
+      test = (x, y) => contains(points, x, y);
     } else {
       const lo = toWorld({ x: p.minX, y: p.minY });
       const hi = toWorld({ x: p.maxX, y: p.maxY });
@@ -229,6 +278,37 @@ export function buildAirport(def: AirportDef): Airport {
     };
   });
 
+  const gates: Gate[] = (def.gates ?? []).map((g) => {
+    const leadIn = g.leadIn.map(toWorld);
+    const stand = leadIn[leadIn.length - 1] as Vec2;
+    const from = leadIn[leadIn.length - 2] as Vec2;
+    const h = Math.atan2(stand.x - from.x, stand.y - from.y);
+    return { name: g.name, stand, heading: h < 0 ? h + Math.PI * 2 : h, leadIn };
+  });
+
+  const hk = def.buildingHeightScale ?? 1;
+  const flat = (points: readonly Vec2[]): number[] => points.flatMap((p) => { const w = toWorld(p); return [w.x, w.y]; });
+  const solids = (def.structures ?? []).map((s): LandmarkSolid => {
+    const shared = { bottom: s.bottom / hk, top: s.top / hk, material: s.material, ...(s.columns ? { columns: s.columns / k } : {}) };
+    if ('center' in s) {
+      const d = s.diameter / k;
+      return { ...toWorld(s.center), width: d, depth: d, topWidth: d, topDepth: d, shape: 'drum', ...shared };
+    }
+    // A prism's corners run counterclockwise.
+    const area = s.points.reduce((sum, p, i) => { const q = s.points[(i + 1) % s.points.length] as Vec2; return sum + p.x * q.y - q.x * p.y; }, 0);
+    const points = flat(area < 0 ? [...s.points].reverse() : s.points);
+    const xs = points.filter((_, i) => i % 2 === 0);
+    const ys = points.filter((_, i) => i % 2 === 1);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const depth = Math.max(...ys) - Math.min(...ys);
+    return { x: Math.min(...xs) + width / 2, y: Math.min(...ys) + depth / 2, width, depth, topWidth: width, topDepth: depth, shape: 'prism', points, ...(s.cap ? { cap: s.cap } : {}), ...shared };
+  });
+  const decor = (def.groundPaint ?? []).map((p): LandmarkDecor => ({ kind: 'polygon', material: p.material, points: flat(p.points), ...(p.detail ? { detail: true } : {}) }));
+  // Heights are measured from the ground at this point, so it must be on the airport.
+  const first = runways[0];
+  const structures: MapLandmark | undefined =
+    first && (solids.length > 0 || decor.length > 0) ? { id: def.ident, x: (first.a.x + first.b.x) / 2, y: (first.a.y + first.b.y) / 2, solids, decor } : undefined;
+
   return {
     ident: def.ident,
     name: def.name,
@@ -243,6 +323,10 @@ export function buildAirport(def: AirportDef): Airport {
     rows,
     surface,
     runways,
+    ...(def.taxiways ? { taxiways: def.taxiways.map((t) => t.points.map(toWorld)) } : {}),
+    ...(def.holdShort ? { holdShort: def.holdShort.map(([a, b]) => [toWorld(a), toWorld(b)] as const) } : {}),
+    ...(def.gates ? { gates } : {}),
+    ...(structures ? { structures } : {}),
     ...(def.variationDeg === undefined ? {} : { variationDeg: def.variationDeg }),
     ...(def.ground ? { masked: true } : {}),
   };

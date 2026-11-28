@@ -186,6 +186,8 @@ Height blends at the boundary so the overlay meets the surrounding terrain. Look
 
 **As built in A4:** the fine grid holds surface codes only; there is no per-cell elevation layer yet. Each airport has a single field elevation (flat), blended to the base ground over a band inside its axis-aligned boundary. A per-cell layer can be added behind `groundAt` when an airport needs one. Airports are authored in local real meters and converted with the `airport` scale.
 
+**As built in E7:** a map airport covers only its ground, one or more polygons in `data/map/places.json`; elsewhere inside its boundary the map shows through, with no blend band (the map build levels and dries the ground and blends the land into it). The convex hull of the ground, computed by the map build, bends the land to the airport's scale and is kept clear of city cores, districts and highways. Taxiway center lines, hold-short bars and gates are positions on the airport (E7.8); there is no taxi graph. Airport buildings are one landmark per airport (E7.9), solid and drawn in both views.
+
 ### 7.3 Other features
 Rivers, coasts, cities and wide roads are painted into the grid. City names, waypoints, landmarks and thin roads are separate point or line objects, because they need labels or are thinner than a cell. Landmark buildings have a height so they appear in the side view.
 
@@ -370,6 +372,8 @@ Each step is small, ends with something to see or try, and leaves the game runna
 | E4 | Scale tuning by flying | The trip feels right; scales are fixed for now |
 | E5 | Highways, districts, buildings, obstacle collision | DC and Philly look like cities in both views, and a building can be hit |
 | E6 | Landmarks, small towns, one small airport | DC and Philly are told apart at a glance |
+| E7 | Polygon airports, then their layouts and a second PHL runway ([E7_PLAN.md](E7_PLAN.md)) | Airports sit well in the land and can be taxied from runway to gate |
+| E8 | Sun and shadows ([E8_PLAN.md](E8_PLAN.md)) | Shadows and lit faces follow a sun that crosses the sky |
 
 ### F. Talk
 | # | Step | Done when |
@@ -435,4 +439,4 @@ H1 is independent and can be pulled forward at any time after A4.
 Game-level questions are in [GAME_DESIGN.md](GAME_DESIGN.md), section 9.
 ## 16. Immediate next step
 
-Phases A, B and C are built (C4 to C6: [C4_C5_C6_PLAN.md](C4_C5_C6_PLAN.md)). D1 to D4 (the cockpit panel, stability and the autopilot) are built ([D_PLAN.md](D_PLAN.md)); the V/S scale (`world` or `altimeter`) is still to be decided by flying, and the D1 to D4 by-eye checks are owed. Next: E, re-cut as E1 to E6 in [E_PLAN.md](E_PLAN.md) (§14 is updated in E1). Manual flights for C1 to C6 are still owed.
+Phases A, B and C are built (C4 to C6: [C4_C5_C6_PLAN.md](C4_C5_C6_PLAN.md)). D1 to D4 (the cockpit panel, stability and the autopilot) are built ([D_PLAN.md](D_PLAN.md)); the V/S scale (`world` or `altimeter`) is still to be decided by flying, and the D1 to D4 by-eye checks are owed. E1 to E3 ([E_PLAN.md](E_PLAN.md)), E5 ([E5_PLAN.md](E5_PLAN.md), [E5B_PLAN.md](E5B_PLAN.md)), the landmarks of E6 ([E6_PLAN.md](E6_PLAN.md)), E7.0 to E7.9 ([E7_PLAN.md](E7_PLAN.md)) and E8 ([E8_PLAN.md](E8_PLAN.md)) are built. Next: the by-hand checks of E7; airports stay at 1:2, and the rest of E4 is still open. Manual flights for C1 to C6 and E3 on are still owed.

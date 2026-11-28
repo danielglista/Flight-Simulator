@@ -70,12 +70,14 @@ export interface LandmarkSolid {
   readonly columns?: number;
 }
 
-/** Flat ground decoration around a landmark: drawn from above only. World m. */
-export type LandmarkDecor =
+/** Flat ground decoration around a landmark: drawn from above only. World m. `detail` pieces show only close in. */
+export type LandmarkDecor = { readonly detail?: boolean } & (
+  | { readonly kind: 'polygon'; readonly material: string; readonly points: readonly number[] }
   | { readonly kind: 'rect'; readonly material: string; readonly x: number; readonly y: number; readonly width: number; readonly depth: number; readonly turn?: number }
   | { readonly kind: 'disc'; readonly material: string; readonly x: number; readonly y: number; readonly radius: number }
   | { readonly kind: 'ring'; readonly material: string; readonly x: number; readonly y: number; readonly radius: number; readonly width: number }
-  | { readonly kind: 'line'; readonly material: string; readonly width: number; readonly points: readonly number[] };
+  | { readonly kind: 'line'; readonly material: string; readonly width: number; readonly points: readonly number[] }
+);
 
 /** A thin line in the air, such as a cable or a brace: drawn, not solid. World m; z above the landmark's ground. */
 export interface LandmarkWire {
@@ -99,6 +101,8 @@ export interface GameMap {
   readonly grid: WorldGrid;
   readonly altitudeScale: number;
   readonly geoDistance: number;
+  /** Real meters of building height per world meter. */
+  readonly buildingHeightScale: number;
   readonly airports: readonly MapAirport[];
 }
 
@@ -111,7 +115,7 @@ interface LayerMeta {
 
 interface Meta {
   readonly geoDistance: number;
-  readonly scales: { readonly altitude: number };
+  readonly scales: { readonly altitude: number; readonly buildingHeight: number };
   readonly base: LayerMeta;
   readonly patches: readonly (LayerMeta & { readonly id: string })[];
   readonly airports: readonly MapAirport[];
@@ -160,5 +164,5 @@ export function parseMap(buffer: ArrayBuffer): GameMap {
     grid: layer(p),
   }));
   const buildings = (meta.buildings ?? []).map(([x, y, width, depth, angle, height, style]) => ({ x, y, width, depth, angle, height, style }));
-  return { grid: { ...base, patches, roads: meta.roads ?? [], buildings, landmarks: meta.landmarks ?? [] }, altitudeScale: meta.scales.altitude, geoDistance: meta.geoDistance, airports: meta.airports };
+  return { grid: { ...base, patches, roads: meta.roads ?? [], buildings, landmarks: meta.landmarks ?? [] }, altitudeScale: meta.scales.altitude, geoDistance: meta.geoDistance, buildingHeightScale: meta.scales.buildingHeight, airports: meta.airports };
 }

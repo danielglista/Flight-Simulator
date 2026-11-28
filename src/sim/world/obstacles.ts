@@ -82,6 +82,7 @@ export function landmarkCircle(l: MapLandmark): { readonly x: number; readonly y
   for (const w of l.wires ?? []) add(boxOf(w.points, 3));
   for (const d of l.decor) {
     if (d.kind === 'line') add(boxOf(d.points), d.width);
+    else if (d.kind === 'polygon') add(boxOf(d.points));
     else if (d.kind === 'rect') add(boxOf(solidCorners(d, d.width, d.depth).flat()));
     else add(boxOf([d.x, d.y]), d.radius + (d.kind === 'ring' ? d.width : 0));
   }
@@ -123,6 +124,11 @@ export function solidTopAt(s: LandmarkSolid, x: number, y: number): number {
   return s.bottom + (s.top - s.bottom) * Math.min(rise(u, s.width, s.topWidth), rise(v, s.depth, s.topDepth));
 }
 
+/** The map's landmarks and what stands on its airports (E7.9), which is drawn and hit the same way. */
+export function landmarksAndStructures(grid: WorldGrid): readonly MapLandmark[] {
+  return [...(grid.landmarks ?? []), ...(grid.airports ?? []).flatMap((a) => (a.structures ? [a.structures] : []))];
+}
+
 /**
  * The grid's buildings and landmarks as things to hit (E5.6, E6). Separate from `heightAt`, so ground handling, height above ground
  * and landing are unchanged. A roof is the ground under the building's middle plus its height, as it is drawn.
@@ -152,7 +158,7 @@ export function createObstacles(grid: WorldGrid, scale: ScaleConfig): ObstacleFn
   }
   // A landmark is looked into only inside its box, and each of its solids only inside its own: this is asked hundreds
   // of times a frame.
-  const landmarks = (grid.landmarks ?? []).map((l) => {
+  const landmarks = landmarksAndStructures(grid).map((l) => {
     const solids = l.solids.map((s) => ({ s, box: solidBox(s) }));
     const box = boxOf(solids.flatMap(({ box: b }) => [b.minX, b.minY, b.maxX, b.maxY]));
     return { ground: heightAt(grid, scale, l.x, l.y), box, solids };

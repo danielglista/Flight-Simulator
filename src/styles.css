@@ -283,6 +283,37 @@ canvas {
   border-color: var(--accent);
 }
 
+/* Manual zoom: - and + over a corner of the top and side views. */
+.zoom-buttons {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.zoom-buttons button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font: 18px/1 ui-monospace, Consolas, monospace;
+  color: var(--text);
+  background: rgba(11, 14, 20, 0.85);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.zoom-buttons button:hover,
+.zoom-buttons button:focus-visible {
+  border-color: var(--accent);
+}
+
+.zoom-buttons button[aria-disabled='true'] {
+  color: var(--dim);
+  border-color: var(--border);
+  cursor: default;
+}
+
 /* Autopilot modes (D4): a clear button over each of the HDG, ALT and SPD lamps. */
 .ap-lamp {
   position: absolute;

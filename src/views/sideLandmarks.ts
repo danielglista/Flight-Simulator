@@ -5,7 +5,7 @@ import { ROUND_SHADING, type Sun } from '../config/sun';
 import type { Craft } from '../sim/state';
 import { heightAt, type WorldGrid } from '../sim/world/grid';
 import type { LandmarkSolid, MapLandmark } from '../sim/world/mapFile';
-import { landmarkCircle, solidCorners, solidTopAt } from '../sim/world/obstacles';
+import { landmarkCircle, landmarksAndStructures, solidCorners, solidTopAt } from '../sim/world/obstacles';
 import { landmarkColor, postPoints } from './landmarkLayer';
 import { heightToY, sliceWindow, verticalMetersPerPixel, type SliceWindow } from './sideCamera';
 import { lineSpan } from './sideBuildings';
@@ -139,7 +139,7 @@ const mix = (a: Rgb, b: Rgb, t: number): Rgb => [a[0] + (b[0] - a[0]) * t, a[1] 
 const rgb = (c: Rgb, k = 1): string => `rgb(${Math.min(255, Math.round(c[0] * k))},${Math.min(255, Math.round(c[1] * k))},${Math.min(255, Math.round(c[2] * k))})`;
 
 export function createSideLandmarks(grid: WorldGrid, scale: ScaleConfig): SideLandmarks {
-  const landmarks = (grid.landmarks ?? []).map((l) => ({ ...l, ground: heightAt(grid, scale, l.x, l.y), circle: landmarkCircle(l), solids: [...l.solids].sort((a, b) => a.top - b.top) }));
+  const landmarks = landmarksAndStructures(grid).map((l) => ({ ...l, ground: heightAt(grid, scale, l.x, l.y), circle: landmarkCircle(l), solids: [...l.solids].sort((a, b) => a.top - b.top) }));
   const metersPerColumn = (w: SliceWindow): number => w.length / Math.max(1, w.samples - 1);
 
   /** The landmarks that can show between `lo` and `hi` to the left of the window's line. */
