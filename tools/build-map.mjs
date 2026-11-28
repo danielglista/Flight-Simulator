@@ -13,18 +13,20 @@ const outDir = join(root, 'tools', 'out');
 const readJson = (p) => JSON.parse(readFileSync(join(root, p), 'utf8'));
 const load = async (p) => (await runnerImport(join(root, p))).module;
 
-const { validateScales, validatePlaces, validateWater, validateDistricts, validateRoads, validateLandmarks } = await load('tools/map/validate.ts');
+const { validateScales, validatePlaces, validateWater, validateDistricts, validateRoads, validateLandmarks, validateTowns, validateKit } = await load('tools/map/validate.ts');
 const { placeAll, groundLocalKm } = await load('tools/map/place.ts');
 const { buildWithPatches } = await load('tools/map/patches.ts');
 const { runGuardrails } = await load('tools/map/guard.ts');
 const { readDbfField, readPolylines } = await load('tools/map/shapefile.ts');
 const { buildRoads, roadClass, roadLength } = await load('tools/map/roads.ts');
 const { cellAt } = await load('tools/map/skeleton.ts');
+const { Terrain } = await load('src/sim/world/terrain.ts');
 const { growConvex } = await load('src/sim/world/polygon.ts');
 const { generateBuildings, createRoadDistance, packBuildings, inRing } = await load('tools/map/buildings.ts');
 const { project } = await load('tools/map/project.ts');
 const { buildLandmarks, landmarkClear } = await load('tools/map/landmarks.ts');
 const { districtCode } = await load('tools/map/districts.ts');
+const { townArea, townRing, townCenter, placeKit, kitLandmarks, kitClear } = await load('tools/map/towns.ts');
 const { groundAt } = await load('src/sim/world/grid.ts');
 const { ROAD_WIDTH_M } = await load('src/config/map.ts');
 const { renderTerrain, renderCrop, renderLayered } = await load('tools/map/shade.ts');
@@ -38,6 +40,8 @@ const checks = readJson('data/map/checks.json').checks;
 const water = validateWater(readJson('data/map/water.json'));
 const { districts, types: districtTypes } = validateDistricts(readJson('data/map/districts.json'), places.cities.map((c) => c.id));
 const landmarksFile = validateLandmarks(readJson('data/map/landmarks.json'), places.cities.map((c) => c.id));
+const towns = validateTowns(readJson('data/map/towns.json'));
+const kit = validateKit(readJson('data/map/kit.json'));
 const scales = { ...sf.scales, geoDistance: geo };
 const grid = { ...sf.grid, baseCellM: Number(process.argv[3] ?? sf.grid.baseCellM), patchCellM: Number(process.argv[4] ?? sf.grid.patchCellM) };
 const tag = `1-${geo}`;
@@ -107,7 +111,7 @@ for (const st of placement.field.stamps) {
   const asked = places.airports.find((a) => a.id === st.id)?.stampFadeKm;
   console.log(`stamp ${st.id}: land bends to meet it over ${st.fadeKm.toFixed(2)} km world${asked !== undefined && st.fadeKm > asked + 1e-9 ? ` (lengthened from ${asked} so it does not fold)` : ''}`);
 }
-const built = buildWithPatches({ placement, box: sf.box, land, lakes, rivers, elevationAt, water, districts }, grid);
+const built = buildWithPatches({ placement, box: sf.box, land, lakes, rivers, elevationAt, water, districts, towns }, grid);
 const sk = built.base;
 const results = runGuardrails(sk, placement, scales.altitude, checks);
 // Airports are checked again on their fine patch, where the ground is exact.
@@ -193,8 +197,32 @@ const landmarks = buildLandmarks(landmarksFile, (lat, lon) => {
   return { x: (w.x - sk.originKm.x) * 1000, y: (w.y - sk.originKm.y) * 1000 };
 }, scales.buildingHeight);
 const city = generateBuildings({ blocked: landmarkClear(landmarksFile, landmarks), districts, styles: districtTypes, ringWorld, code: codeAt, ground: groundWorld, roadDistance: createRoadDistance(roads, halfRoad), heightScale: scales.buildingHeight, seed: 20260101 });
-const buildings = city.buildings;
+// Town houses (E6B) are generated on their own, so editing a town never reshuffles a city.
+const townDistricts = towns.map(townArea);
+const townRings = new Map(towns.map((t, i) => [townDistricts[i].id, townRing(t, placement.field).map((p) => [(p.x - sk.originKm.x) * 1000, (p.y - sk.originKm.y) * 1000])]));
+// Kit pieces first (E6B.2), then houses round them.
+const townRoadDistance = createRoadDistance(roads, halfRoad);
+const toLocal = (p) => ({ x: (p.x - sk.originKm.x) * 1000, y: (p.y - sk.originKm.y) * 1000 });
+const kitPlaced = towns.flatMap((t, i) => placeKit(t, kit, landmarksFile.footprintScale, {
+  center: toLocal(townCenter(t, placement.field)),
+  ring: townRings.get(townDistricts[i].id),
+  open: (x, y) => codeAt(x, y) === districtCode(townDistricts[i]),
+  // Water cells are painted as seabed.
+  dry: (x, y) => codeAt(x, y) > Terrain.seabed,
+  roadDistance: townRoadDistance,
+}));
+const townPieces = kitLandmarks(kitPlaced, kit, landmarksFile.footprintScale, scales.buildingHeight);
+console.log(`town pieces: ${townPieces.length}`);
+const village = generateBuildings({ blocked: kitClear(kitPlaced, kit, landmarksFile.footprintScale), districts: townDistricts, styles: districtTypes, ringWorld: (d) => townRings.get(d.id), code: codeAt, ground: groundWorld, roadDistance: townRoadDistance, heightScale: scales.buildingHeight, seed: 20260101 });
+const buildings = [...city.buildings, ...village.buildings];
 console.log(`buildings: ${buildings.length}`);
+const townHouses = towns.map((t, i) => {
+  const c = townCenter(t, placement.field);
+  const houses = village.buildings.filter((b) => inRing(b.x, b.y, townRings.get(townDistricts[i].id))).length;
+  console.log(`  town ${t.id}: ${houses} houses at ${Math.round((c.x - sk.originKm.x) * 1000)},${Math.round((c.y - sk.originKm.y) * 1000)}`);
+  return { name: `town ${t.id} built`, level: houses > 0 ? 'ok' : 'fail', message: `${houses} houses` };
+});
+results.push(...townHouses);
 // Count and roof cover per housing density. A district's ground is what still has its color and no later district claims, sampled.
 {
   const rings = districts.map(ringWorld);
@@ -265,7 +293,7 @@ for (const [name, skel] of [['base', sk], ['patch', dcaPatch.skeleton]]) {
 // elevation (int16 LE), terrain (u8), water (u8).
 const layers = (k) => [Buffer.from(k.grid.elevation.buffer, k.grid.elevation.byteOffset, k.grid.elevation.byteLength), Buffer.from(k.grid.terrain), Buffer.from(k.grid.water)];
 const describe = (k) => ({ cols: k.grid.cols, rows: k.grid.rows, cellM: k.grid.cellSize, originKm: k.originKm });
-const meta = Buffer.from(JSON.stringify({ geoDistance: geo, scales, box: sf.box, grid, airports, roads, buildings: packBuildings(buildings), landmarks, base: describe(sk), patches: built.patches.map((p) => ({ id: p.id, kind: p.kind, ...describe(p.skeleton) })) }));
+const meta = Buffer.from(JSON.stringify({ geoDistance: geo, scales, box: sf.box, grid, airports, roads, buildings: packBuildings(buildings), landmarks: [...landmarks, ...townPieces], base: describe(sk), patches: built.patches.map((p) => ({ id: p.id, kind: p.kind, ...describe(p.skeleton) })) }));
 const head2 = Buffer.alloc(10);
 head2.write('FSMAP2', 0, 'ascii');
 head2.writeUInt32LE(meta.length, 6);

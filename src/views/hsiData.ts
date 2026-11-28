@@ -33,11 +33,12 @@ export function hsiGuide(craft: Pick<Craft, 'x' | 'y' | 'z'>, end: RunwayEnd, ai
   // Positive: the plane is right of the center line, looking the way it lands.
   const offset = dx * end.dir.y - dy * end.dir.x;
   const side = Math.atan2(offset, Math.max(1, Math.abs(end.length - along))) / DEG;
-  const toAim = APPROACH_AIM_M - along;
+  const aimM = end.aimM ?? APPROACH_AIM_M;
+  const toAim = aimM - along;
   const inCone = toAim > 0 && toAim <= HSI_GS_RANGE_M && Math.abs(Math.atan2(offset, toAim)) / DEG <= HSI_GS_CONE_DEG;
   let glide: number | null = null;
   if (inCone) {
-    const aimZ = aimZFor(end.threshold.x + end.dir.x * APPROACH_AIM_M, end.threshold.y + end.dir.y * APPROACH_AIM_M);
+    const aimZ = aimZFor(end.threshold.x + end.dir.x * aimM, end.threshold.y + end.dir.y * aimM);
     glide = clamp1((APPROACH_PATH_DEG - Math.atan2(craft.z - aimZ, toAim) / DEG) / HSI_GS_FULL_DEG);
   }
   return {

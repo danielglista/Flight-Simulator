@@ -1,0 +1,6 @@
+{
+  "towns": [
+    {"id": "salisbury", "name": "Salisbury", "lat": 38.366, "lon": -75.601, "offsetM": {"x": 0, "y": 0}, "size": "town", "type": "farm", "streetDeg": 12, "density": 2, "signature": {"piece": "water-tower", "enlarge": 2.5}},
+    {"id": "frederick", "name": "Frederick", "lat": 39.414, "lon": -77.41, "offsetM": {"x": 120, "y": -360}, "size": "largeTown", "type": "hill", "streetDeg": -20, "density": 3, "signature": {"piece": "church", "enlarge": 2.5}}
+  ]
+}

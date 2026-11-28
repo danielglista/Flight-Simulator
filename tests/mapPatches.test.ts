@@ -32,7 +32,7 @@ describe('patch windows', () => {
   });
   it('plans one patch per airport and city', () => {
     const specs = planPatches(placement, sf.grid);
-    expect(specs.map((s) => `${s.kind}:${s.id}`)).toEqual(['airport:DCA', 'airport:PHL', 'city:dc', 'city:phl-city']);
+    expect(specs.map((s) => `${s.kind}:${s.id}`)).toEqual(['airport:DCA', 'airport:PHL', 'airport:SBY', 'city:dc', 'city:phl-city']);
   });
 });
 
@@ -43,7 +43,7 @@ describe('buildWithPatches', { timeout: 60000 }, () => {
   it('builds a coarse base and finer patches that line up with it', () => {
     const { base, patches } = buildWithPatches(input, sf.grid);
     expect(base.grid.cellSize).toBe(20);
-    expect(patches).toHaveLength(4);
+    expect(patches).toHaveLength(5);
     for (const p of patches) {
       expect(p.skeleton.grid.cellSize).toBe(10);
       const baseCells = (p.skeleton.originKm.x - base.originKm.x) / base.cellKm;

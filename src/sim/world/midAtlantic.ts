@@ -21,7 +21,7 @@ interface Layout {
   readonly middle: Vec2;
   /** True, degrees clockwise from north. */
   readonly headingDeg: number;
-  /** All parallel, along the heading. The first is the one starts and the route line use. */
+  /** All parallel, along the heading. The first is the one starts and the route readout use. */
   readonly runways: readonly RunwayLayout[];
   /** Taxiway and apron lane center lines. */
   readonly taxiways: readonly (readonly ST[])[];
@@ -29,6 +29,8 @@ interface Layout {
   readonly aprons: readonly (readonly ST[])[];
   /** Gate names and their lead-in lines, from the lane to where the plane stops. */
   readonly gates: readonly (readonly [string, readonly ST[]])[];
+  /** Real m, where it is narrower than TAXI_WIDTH. */
+  readonly taxiWidth?: number;
 }
 
 /** One runway in the airport's runway frame. */
@@ -39,13 +41,14 @@ interface RunwayLayout {
   readonly t: number;
   readonly width: number;
   readonly names: readonly [string, string];
+  /** Where approaches aim, real m past either threshold; absent for the usual figure. */
+  readonly aim?: number;
 }
 
 /** Real meters (§11.2). */
 const TAXI_WIDTH = 36;
-/** Hold-short bar: this far from the runway's center line, and this long. Real meters. */
-const HOLD_SHORT_M = 70;
-const HOLD_BAR_M = 36;
+/** Hold-short bar: this far from the runway's center line, real meters. It is as long as the taxiway is wide. */
+const HOLD_SHORT_M = 45;
 
 /** An apron lane square to the taxiway at `t = to`, splitting 45 degrees both ways into it. */
 const splay = (from: ST, bend: ST, to: number): ST[][] => {
@@ -65,51 +68,51 @@ export const MID_ATLANTIC_LAYOUTS: Readonly<Record<string, Layout>> = {
     headingDeg: 2,
     runways: [{ s0: -1092.5, s1: 1092.5, t: 0, width: 46, names: ['01', '19'] }],
     taxiways: [
-      // Parallel, and into both runway ends.
-      [[-1092, 0], [-1092, -80], [-992, -180], [992, -180], [1092, -80], [1092, 0]],
+      // Parallel, and into both runway ends: at 19 from 22 m short of it, so no pavement passes the end.
+      [[-1092, 0], [-1092, -50], [-1052, -90], [1030, -90], [1070, -50], [1070, 0]],
       // Angled exits.
-      [[-640, 0], [-460, -180]],
-      [[-280, 0], [-460, -180]],
-      [[250, 0], [430, -180]],
-      [[610, 0], [430, -180]],
-      [[760, 0], [940, -180]],
+      [[-640, 0], [-550, -90]],
+      [[-280, 0], [-370, -90]],
+      [[250, 0], [340, -90]],
+      [[610, 0], [520, -90]],
+      [[760, 0], [850, -90]],
       // Terminal 2's three lanes, from the terminal out.
-      ...splay([192, -427], [223, -230], -180),
-      ...splay([439, -466], [476, -230], -180),
-      ...splay([685, -505], [729, -230], -180),
+      ...splay([192, -337], [223, -140], -90),
+      ...splay([439, -376], [476, -140], -90),
+      ...splay([685, -415], [729, -140], -90),
       // Hangars and Terminal 1.
-      ...splay([-300, -280], [-300, -230], -180),
-      ...splay([-90, -348], [-90, -230], -180),
+      ...splay([-300, -190], [-300, -140], -90),
+      ...splay([-90, -258], [-90, -140], -90),
       // Round Terminal 1's concourse.
       [
-        [-59, -354], [-76, -349], [-93, -348], [-111, -350], [-127, -356], [-143, -365], [-156, -376], [-167, -390],
-        [-175, -406], [-180, -422], [-182, -440], [-180, -458], [-175, -474], [-167, -490], [-156, -504], [-143, -515],
-        [-127, -524], [-111, -530], [-93, -532], [-76, -531], [-59, -526],
+        [-59, -264], [-76, -259], [-93, -258], [-111, -260], [-127, -266], [-143, -275], [-156, -286], [-167, -300],
+        [-175, -316], [-180, -332], [-182, -350], [-180, -368], [-175, -384], [-167, -400], [-156, -414], [-143, -425],
+        [-127, -434], [-111, -440], [-93, -442], [-76, -441], [-59, -436],
       ],
     ],
     aprons: [
-      [[153, -448], [716, -537], [761, -255], [183, -255]],
-      [[-215, -545], [10, -545], [10, -262], [-215, -262]],
-      [[-375, -300], [-222, -300], [-222, -255], [-375, -255]],
+      [[153, -358], [716, -447], [761, -165], [183, -165]],
+      [[-215, -455], [10, -455], [10, -172], [-215, -172]],
+      [[-375, -210], [-222, -210], [-222, -165], [-375, -165]],
     ],
     gates: [
-      ['A1', [[-90, -348], [-90, -384]]],
-      ['A2', [[-155, -375], [-130, -400]]],
-      ['A3', [[-182, -440], [-146, -440]]],
-      ['A4', [[-155, -505], [-130, -480]]],
-      ['A5', [[-90, -532], [-90, -496]]],
-      ['B1', [[200, -372], [221, -401], [282, -411]]],
-      ['B2', [[210, -310], [231, -339], [292, -348]]],
-      ['B3', [[220, -248], [241, -276], [302, -286]]],
-      ['B4', [[447, -411], [419, -432], [348, -421]]],
-      ['B5', [[457, -349], [428, -370], [357, -359]]],
-      ['B6', [[467, -287], [438, -308], [367, -296]]],
-      ['C1', [[447, -411], [468, -440], [539, -451]]],
-      ['C2', [[457, -349], [478, -378], [549, -389]]],
-      ['C3', [[467, -287], [488, -316], [559, -327]]],
-      ['C4', [[694, -450], [666, -471], [604, -462]]],
-      ['C5', [[704, -388], [675, -409], [614, -399]]],
-      ['C6', [[714, -326], [685, -347], [624, -337]]],
+      ['A1', [[-90, -258], [-90, -294]]],
+      ['A2', [[-155, -285], [-130, -310]]],
+      ['A3', [[-182, -350], [-146, -350]]],
+      ['A4', [[-155, -415], [-130, -390]]],
+      ['A5', [[-90, -442], [-90, -406]]],
+      ['B1', [[200, -282], [221, -311], [282, -321]]],
+      ['B2', [[210, -220], [231, -249], [292, -258]]],
+      ['B3', [[220, -158], [241, -186], [302, -196]]],
+      ['B4', [[447, -321], [419, -342], [348, -331]]],
+      ['B5', [[457, -259], [428, -280], [357, -269]]],
+      ['B6', [[467, -197], [438, -218], [367, -206]]],
+      ['C1', [[447, -321], [468, -350], [539, -361]]],
+      ['C2', [[457, -259], [478, -288], [549, -299]]],
+      ['C3', [[467, -197], [488, -226], [559, -237]]],
+      ['C4', [[694, -360], [666, -381], [604, -372]]],
+      ['C5', [[704, -298], [675, -319], [614, -309]]],
+      ['C6', [[714, -236], [685, -257], [624, -247]]],
     ],
   },
   PHL: {
@@ -118,53 +121,72 @@ export const MID_ATLANTIC_LAYOUTS: Readonly<Record<string, Layout>> = {
     middle: { x: 0, y: -250 },
     headingDeg: 80,
     runways: [
-      { s0: -1829, s1: 1829, t: 0, width: 60, names: ['09R', '27L'] },
-      { s0: -899, s1: 1997, t: -430, width: 46, names: ['09L', '27R'] },
+      { s0: -1436, s1: 1460, t: 0, width: 60, names: ['09R', '27L'] },
+      { s0: -826, s1: 1460, t: -220, width: 46, names: ['09L', '27R'] },
     ],
     taxiways: [
       // Between the runways and along the terminal, each into both ends of its runway.
-      [[-1829, 0], [-1829, -115], [-1729, -215], [1729, -215], [1829, -115], [1829, 0]],
-      [[-899, -430], [-899, -530], [-799, -610], [1897, -610], [1997, -530], [1997, -430]],
+      [[-1436, 0], [-1436, -60], [-1386, -110], [1410, -110], [1460, -60], [1460, 0]],
+      [[-826, -220], [-826, -270], [-786, -310], [1420, -310], [1460, -270], [1460, -220]],
       // Exits from 9R/27L, then from 9L/27R.
-      [[-1100, 0], [-885, -215]],
-      [[-300, 0], [-515, -215]],
-      [[600, 0], [815, -215]],
-      [[1400, 0], [1185, -215]],
-      [[-150, -430], [30, -610]],
-      [[700, -430], [520, -610]],
-      [[1500, -430], [1320, -610]],
+      [[-760, 0], [-650, -110]],
+      [[-250, 0], [-360, -110]],
+      [[450, 0], [560, -110]],
+      [[950, 0], [840, -110]],
+      [[-318, -220], [-228, -310]],
+      [[532, -220], [442, -310]],
+      [[1000, -220], [910, -310]],
       // Crossings between the runways.
-      [[-100, -215], [115, -430], [295, -610]],
-      [[1500, -215], [1285, -430], [1105, -610]],
-      // Cargo link.
-      [[-1215, -420], [-1215, -215]],
+      [[-100, -110], [10, -220], [100, -310]],
+      [[1340, -110], [1230, -220], [1140, -310]],
+      // Hangar link.
+      [[-465, -370], [-465, -310]],
       // UPS.
-      [[-350, 0], [-280, 70], [-280, 130]],
-      [[420, 0], [350, 70], [350, 130]],
-      [[-560, 130], [540, 130]],
+      [[-350, 0], [-300, 50], [-300, 75]],
+      [[420, 0], [370, 50], [370, 75]],
+      [[-560, 75], [540, 75]],
       // Apron lanes between the piers.
-      ...[170, 430, 690, 950, 1210].flatMap((s) => splay([s, -950], [s, -650], -610)),
+      ...[170, 430, 690, 950, 1210].flatMap((s) => splay([s, -650], [s, -350], -310)),
     ],
     aprons: [
-      [[130, -990], [1250, -990], [1250, -680], [130, -680]],
-      [[-1440, -520], [-990, -520], [-990, -300], [-1440, -300]],
-      [[-620, 90], [580, 90], [580, 250], [-620, 250]],
+      [[130, -690], [1250, -690], [1250, -380], [130, -380]],
+      [[-695, -480], [-235, -480], [-235, -340], [-695, -340]],
+      [[-620, 35], [580, 35], [580, 195], [-620, 195]],
     ],
     gates: [
       // Pier A is angled.
-      ['A1', [[236, -940], [280, -930]]],
-      ['A2', [[222, -876], [266, -866]]],
-      ['A3', [[207, -813], [251, -803]]],
-      ['A4', [[392, -904], [348, -914]]],
-      ['A5', [[378, -841], [334, -851]]],
-      ['A6', [[363, -777], [319, -787]]],
-      ...row('B', 1, 480, 525, [-920, -855, -790]),
-      ...row('B', 4, 640, 595, [-920, -855, -790]),
-      ...row('C', 1, 740, 785, [-920, -855, -790]),
-      ...row('C', 4, 900, 855, [-920, -855, -790]),
-      ...row('D', 1, 1000, 1045, [-920, -855]),
-      ...row('D', 3, 1160, 1115, [-920, -855]),
+      ['A1', [[236, -640], [280, -630]]],
+      ['A2', [[222, -576], [266, -566]]],
+      ['A3', [[207, -513], [251, -503]]],
+      ['A4', [[392, -604], [348, -614]]],
+      ['A5', [[378, -541], [334, -551]]],
+      ['A6', [[363, -477], [319, -487]]],
+      ...row('B', 1, 480, 525, [-620, -555, -490]),
+      ...row('B', 4, 640, 595, [-620, -555, -490]),
+      ...row('C', 1, 740, 785, [-620, -555, -490]),
+      ...row('C', 4, 900, 855, [-620, -555, -490]),
+      ...row('D', 1, 1000, 1045, [-620, -555]),
+      ...row('D', 3, 1160, 1115, [-620, -555]),
     ],
+  },
+  // The small airport (E6B): one runway, a parallel taxiway on the side away from the town, one apron, no gates.
+  SBY: {
+    name: 'Salisbury Regional',
+    variationDeg: 11,
+    middle: { x: 0, y: 0 },
+    headingDeg: 39,
+    // Short, so approaches aim closer in than usual: the usual point leaves too little to stop in.
+    runways: [{ s0: -762, s1: 762, t: 0, width: 30, names: ['05', '23'], aim: 120 }],
+    taxiways: [
+      [[-762, 0], [-762, 50], [-722, 90], [722, 90], [762, 50], [762, 0]],
+      // Exits.
+      [[-350, 0], [-260, 90]],
+      [[0, 0], [0, 90]],
+      [[350, 0], [260, 90]],
+    ],
+    aprons: [[[-220, 95], [220, 95], [220, 195], [-220, 195]]],
+    gates: [],
+    taxiWidth: 18,
   },
 };
 
@@ -181,7 +203,7 @@ function holdShortBars(l: Layout): [ST, ST][] {
         if (!rw || across < HOLD_SHORT_M) continue;
         const k = HOLD_SHORT_M / across;
         const c: ST = [on[0] + (off[0] - on[0]) * k, on[1] + (off[1] - on[1]) * k];
-        const h = HOLD_BAR_M / 2 / Math.hypot(off[0] - on[0], off[1] - on[1]);
+        const h = (l.taxiWidth ?? TAXI_WIDTH) / 2 / Math.hypot(off[0] - on[0], off[1] - on[1]);
         const n: ST = [-(off[1] - on[1]) * h, (off[0] - on[0]) * h];
         out.push([[c[0] + n[0], c[1] + n[1]], [c[0] - n[0], c[1] - n[1]]]);
       }
@@ -232,8 +254,8 @@ export function midAtlanticDef(placed: MapAirport, buildingHeightScale: number):
     blend: 0,
     fieldElevationM: placed.elevationM,
     cellSize: cell,
-    runways: l.runways.map((r) => ({ a: at(r.s0, r.t), b: at(r.s1, r.t), width: r.width * RUNWAY_WIDTH_MULT, names: r.names })),
-    taxiways: l.taxiways.map((line) => ({ points: line.map(atST), width: TAXI_WIDTH })),
+    runways: l.runways.map((r) => ({ a: at(r.s0, r.t), b: at(r.s1, r.t), width: r.width * RUNWAY_WIDTH_MULT, names: r.names, ...(r.aim === undefined ? {} : { aimM: r.aim }) })),
+    taxiways: l.taxiways.map((line) => ({ points: line.map(atST), width: l.taxiWidth ?? TAXI_WIDTH })),
     paving: [...l.aprons, ...(built?.pavement ?? [])].map((a) => ({ kind: 'polygon', code: Terrain.airport, points: a.map(atST) })),
     structures: (built?.solids ?? []).map((s) => ('plan' in s ? { ...s, points: s.plan.map(atST) } : { ...s, center: atST(s.round) })),
     groundPaint: (built?.paint ?? []).map((p) => ({ ...p, points: p.plan.map(atST) })),

@@ -47,9 +47,9 @@ export interface PlacedAirport {
   readonly scale: number;
   /** The ground polygons, world km. */
   readonly ground: readonly Polygon[];
-  /** World distance from the city center, before and after the push. */
   /** World km the stamp center moves so its anchor (not its center) stays put; zero without an anchor. */
   readonly anchorShiftKm: PointKm;
+  /** World distance from the city center, before and after the push; all three 0 without a city. */
   readonly distanceBeforeKm: number;
   readonly distanceAfterKm: number;
   readonly pushedKm: number;
@@ -169,37 +169,41 @@ export function placeAll(
   const placed: PlacedAirport[] = [];
   for (const a of places.airports) {
     const city = cities.find((c) => c.city.id === a.cityId);
-    if (!city) throw new PlaceError(`airport ${a.id}: unknown city "${a.cityId}"`);
+    if (!city && a.cityId !== undefined) throw new PlaceError(`airport ${a.id}: unknown city "${a.cityId}"`);
     const scale = a.size === 'major' ? scales.airportMajor : scales.airportSmall;
     const real = project(a.lat, a.lon);
     const warped = warp.toWorld(real.x, real.y);
     const local = outlineLocalKm(a);
 
-    // Real bearing from the city center; warping is radial so the world bearing is the same.
-    const dx = real.x - city.real.x;
-    const dy = real.y - city.real.y;
-    const rReal = Math.hypot(dx, dy);
-    if (rReal === 0) throw new PlaceError(`airport ${a.id} sits exactly on the center of ${city.city.name}`);
-    const ux = dx / rReal;
-    const uy = dy / rReal;
-
-    const distanceBefore = Math.hypot(warped.x - city.world.x, warped.y - city.world.y);
     // With an anchor, the stamp center sits so the anchor lands where the warp would put it.
     const an = a.stampAnchorKm ?? { x: 0, y: 0 };
     const wa = warp.toWorld(real.x + an.x, real.y + an.y);
     const shift = { x: wa.x - warped.x - an.x / scale, y: wa.y - warped.y - an.y / scale };
-    const centerAt = (d: number): PointKm => ({ x: city.world.x + ux * d + shift.x, y: city.world.y + uy * d + shift.y });
     const place = (ring: Polygon, c: PointKm): Polygon => ring.map((v) => ({ x: c.x + v.x / scale, y: c.y + v.y / scale }));
 
-    let d = a.pushOverrideKm ?? distanceBefore;
-    if (a.pushOverrideKm === undefined) {
-      const core = boxPolygon(city.core);
-      while (convexOverlap(place(local, centerAt(d)), core, AIRPORT_GAP_KM)) {
-        d += PUSH_STEP_KM;
-        if (d > PUSH_LIMIT_KM) throw new PlaceError(`airport ${a.id} could not be pushed clear of ${city.city.name}`);
+    // Without a city it stays where the warp puts it.
+    let world: PointKm = { x: warped.x + shift.x, y: warped.y + shift.y };
+    let distanceBefore = 0;
+    let distanceAfter = 0;
+    if (city) {
+      // Real bearing from the city center; warping is radial so the world bearing is the same.
+      const dx = real.x - city.real.x;
+      const dy = real.y - city.real.y;
+      const rReal = Math.hypot(dx, dy);
+      if (rReal === 0) throw new PlaceError(`airport ${a.id} sits exactly on the center of ${city.city.name}`);
+      const centerAt = (d: number): PointKm => ({ x: city.world.x + (dx / rReal) * d + shift.x, y: city.world.y + (dy / rReal) * d + shift.y });
+      distanceBefore = Math.hypot(warped.x - city.world.x, warped.y - city.world.y);
+      let d = a.pushOverrideKm ?? distanceBefore;
+      if (a.pushOverrideKm === undefined) {
+        const core = boxPolygon(city.core);
+        while (convexOverlap(place(local, centerAt(d)), core, AIRPORT_GAP_KM)) {
+          d += PUSH_STEP_KM;
+          if (d > PUSH_LIMIT_KM) throw new PlaceError(`airport ${a.id} could not be pushed clear of ${city.city.name}`);
+        }
       }
+      world = centerAt(d);
+      distanceAfter = d;
     }
-    const world = centerAt(d);
     const corridor = corridorFor(world, a.runwayHeadingDeg);
     placed.push({
       airport: a,
@@ -211,8 +215,8 @@ export function placeAll(
       ground: groundLocalKm(a).map((ring) => place(ring, world)),
       anchorShiftKm: shift,
       distanceBeforeKm: distanceBefore,
-      distanceAfterKm: d,
-      pushedKm: d - distanceBefore,
+      distanceAfterKm: distanceAfter,
+      pushedKm: distanceAfter - distanceBefore,
       corridor,
       corridorInBox: corridor.every((p) => inside(wbox, p)),
     });

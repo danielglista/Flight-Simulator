@@ -1,6 +1,7 @@
 import { DEFAULT_GRID, DENSITIES, DISTRICT_TYPES, type BuildingStyle, type Density, type District, type DistrictsFile, type DistrictType, type GridSettings, type HousingLevel, type RoadsFile } from './types';
 import type { Airport, AuthoredRiver, City, LonLatPoint, MapBox, MapScales, PlacesFile, ScalesFile, WaterFile, WaterRegion } from './types';
 import type { LandmarkDecorSpec, LandmarkSolidSpec, LandmarkSpec, LandmarksFile } from './types';
+import { TOWN_SIZES, TOWN_TYPES, type KitFile, type KitPiece, type KitSpot, type Town, type TownSize, type TownType } from './types';
 import type { WarpShape } from './warp';
 import { contains, selfCrossing } from '../../src/sim/world/polygon';
 import { outlineLocalKm } from './place';
@@ -122,14 +123,15 @@ export function validatePlaces(data: unknown): PlacesFile {
     const id = str(o, 'id', p);
     if (aids.has(id)) throw new MapDataError(`${p}.id: duplicate id "${id}"`);
     aids.add(id);
-    const cityId = str(o, 'cityId', p);
-    if (!ids.has(cityId)) throw new MapDataError(`${p}.cityId: unknown city "${cityId}" (airport ${id})`);
+    const cityId = o['cityId'] === undefined ? undefined : str(o, 'cityId', p);
+    if (cityId !== undefined && !ids.has(cityId)) throw new MapDataError(`${p}.cityId: unknown city "${cityId}" (airport ${id})`);
+    if (cityId === undefined && o['pushOverrideKm'] !== undefined) throw new MapDataError(`${p}.pushOverrideKm: there is no city to push from (airport ${id})`);
     const sz = o['size'];
     if (sz !== 'major' && sz !== 'small') throw new MapDataError(`${p}.size: expected "major" or "small" (airport ${id})`);
     const base = {
       id,
       name: str(o, 'name', p),
-      cityId,
+      ...(cityId === undefined ? {} : { cityId }),
       lat: num(o, 'lat', p, { min: -90, max: 90 }),
       lon: num(o, 'lon', p, { min: -180, max: 180 }),
       size: sz,
@@ -301,6 +303,88 @@ export function validateDistricts(data: unknown, cityIds: readonly string[]): Di
     return { ...district, style: buildingSettings(obj(o['style'], path), path, allowed) };
   });
   return { types, districts };
+}
+
+/** The kit's pieces are checked as landmarks are. */
+export function validateKit(data: unknown): KitFile {
+  const root = obj(data, 'kit');
+  const enlarge = num(root, 'enlarge', 'kit', { positive: true });
+  const raw = root['pieces'];
+  if (!Array.isArray(raw)) throw new MapDataError('kit.pieces: expected a list');
+  const { landmarks } = validateLandmarks({ footprintScale: 1, landmarks: raw.map((p: unknown, i: number) => ({ ...obj(p, `kit.pieces[${i}]`), cityId: 'kit', lat: 0, lon: 0 })) }, ['kit']);
+  /** A non-empty list drawn from `all`. */
+  const some = <T extends string>(v: unknown, all: readonly T[], path: string): T[] => {
+    if (!Array.isArray(v) || v.length === 0 || !v.every((x) => all.includes(x as T))) throw new MapDataError(`${path}: expected a list from ${all.join(', ')}`);
+    return v as T[];
+  };
+  const pieces: KitPiece[] = landmarks.map(({ id, clearRadiusM, solids, decor, wires }, i) => {
+    const p = `kit.pieces[${i}] (${id})`;
+    const o = obj(raw[i], p);
+    const limit = num(o, 'limit', p, { min: 1 });
+    if (!Number.isInteger(limit)) throw new MapDataError(`${p}.limit: expected a whole number`);
+    const rules = { types: some(o['types'], TOWN_TYPES, `${p}.types`), sizes: some(o['sizes'], TOWN_SIZES, `${p}.sizes`), limit };
+    return { id, clearRadiusM, solids, decor, ...(wires ? { wires } : {}), ...rules };
+  });
+  const spot = (q: unknown, p: string, type: TownType, size: TownSize): KitSpot => {
+    const o = obj(q, p);
+    const id = str(o, 'piece', p);
+    const piece = pieces.find((k) => k.id === id);
+    if (!piece) throw new MapDataError(`${p}.piece: unknown piece "${id}"`);
+    if (!piece.types.includes(type)) throw new MapDataError(`${p}: a ${type} town may not have "${id}"`);
+    if (!piece.sizes.includes(size)) throw new MapDataError(`${p}: a town of size ${size} may not have "${id}"`);
+    return { piece: id, x: num(o, 'x', p), y: num(o, 'y', p), turn: num(o, 'turn', p, { min: -180, max: 180 }) };
+  };
+  const layouts: { [T in TownType]?: { [S in TownSize]?: KitSpot[] } } = {};
+  for (const [type, bySize] of Object.entries(obj(root['layouts'], 'kit.layouts'))) {
+    if (!TOWN_TYPES.includes(type as TownType)) throw new MapDataError(`kit.layouts.${type}: unknown town type`);
+    const out: { [S in TownSize]?: KitSpot[] } = {};
+    for (const [size, list] of Object.entries(obj(bySize, `kit.layouts.${type}`))) {
+      const path = `kit.layouts.${type}.${size}`;
+      if (!TOWN_SIZES.includes(size as TownSize)) throw new MapDataError(`${path}: unknown town size`);
+      if (!Array.isArray(list)) throw new MapDataError(`${path}: expected a list`);
+      const spots = list.map((q: unknown, i: number) => spot(q, `${path}[${i}]`, type as TownType, size as TownSize));
+      for (const piece of pieces) {
+        const count = spots.filter((s) => s.piece === piece.id).length;
+        if (count > piece.limit) throw new MapDataError(`${path}: ${count} of "${piece.id}", at most ${piece.limit} allowed`);
+      }
+      out[size as TownSize] = spots;
+    }
+    layouts[type as TownType] = out;
+  }
+  return { enlarge, pieces, layouts };
+}
+
+export function validateTowns(data: unknown): Town[] {
+  const list = obj(data, 'towns')['towns'];
+  if (!Array.isArray(list)) throw new MapDataError('towns.towns: expected a list');
+  const ids = new Set<string>();
+  return list.map((raw: unknown, i: number): Town => {
+    const p = `towns.towns[${i}]`;
+    const o = obj(raw, p);
+    const id = str(o, 'id', p);
+    if (ids.has(id)) throw new MapDataError(`${p}.id: duplicate id "${id}"`);
+    ids.add(id);
+    const type = str(o, 'type', p) as TownType;
+    if (!TOWN_TYPES.includes(type)) throw new MapDataError(`${p}.type: expected one of ${TOWN_TYPES.join(', ')} (town ${id})`);
+    const size = str(o, 'size', p) as TownSize;
+    if (!TOWN_SIZES.includes(size)) throw new MapDataError(`${p}.size: expected one of ${TOWN_SIZES.join(', ')} (town ${id})`);
+    const density = o['density'] as Density;
+    if (!DENSITIES.includes(density)) throw new MapDataError(`${p}.density: expected a whole number from 1 to ${DENSITIES.length} (town ${id})`);
+    const offset = obj(o['offsetM'], `${p}.offsetM`);
+    const signature = obj(o['signature'], `${p}.signature`);
+    return {
+      id,
+      name: str(o, 'name', p),
+      lat: num(o, 'lat', p, { min: -90, max: 90 }),
+      lon: num(o, 'lon', p, { min: -180, max: 180 }),
+      offsetM: { x: num(offset, 'x', `${p}.offsetM`), y: num(offset, 'y', `${p}.offsetM`) },
+      size,
+      type,
+      streetDeg: num(o, 'streetDeg', p, { min: -180, max: 360 }),
+      density,
+      signature: { piece: str(signature, 'piece', `${p}.signature`), enlarge: num(signature, 'enlarge', `${p}.signature`, { positive: true }) },
+    };
+  });
 }
 
 export function validateRoads(data: unknown): RoadsFile {

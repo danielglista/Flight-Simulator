@@ -53,7 +53,8 @@ export interface City {
 export interface Airport {
   readonly id: string;
   readonly name: string;
-  readonly cityId: string;
+  /** The large city it serves. Without one it belongs to none, and is not pushed away from any. */
+  readonly cityId?: string;
   readonly lat: number;
   readonly lon: number;
   readonly size: 'major' | 'small';
@@ -135,6 +136,34 @@ export interface District {
 
 export const DENSITIES = [1, 2, 3, 4, 5] as const;
 export type Density = (typeof DENSITIES)[number];
+
+/** What painting and filling an area needs: a city district, or a town. */
+export type BuiltArea = Omit<District, 'cityId'>;
+
+export const TOWN_TYPES = ['farm', 'hill'] as const;
+export type TownType = (typeof TOWN_TYPES)[number];
+/** How big a town is; each size's radius is TOWN_RADIUS_M in config/map.ts. */
+export const TOWN_SIZES = ['town', 'largeTown', 'smallCity'] as const;
+export type TownSize = (typeof TOWN_SIZES)[number];
+
+/** A small town outside the cities (data/map/towns.json). */
+export interface Town {
+  readonly id: string;
+  readonly name: string;
+  /** The real town. Only this point goes through the map warp. */
+  readonly lat: number;
+  readonly lon: number;
+  /** Hand move from there, world m east and north, to better ground. */
+  readonly offsetM: { readonly x: number; readonly y: number };
+  readonly size: TownSize;
+  readonly type: TownType;
+  /** Street grid heading, degrees clockwise from north. */
+  readonly streetDeg: number;
+  /** Housing density level of its houses. */
+  readonly density: Density;
+  /** The one oversized kit piece that tells the town apart, and how many times it is enlarged (E6B.2). */
+  readonly signature: { readonly piece: string; readonly enlarge: number };
+}
 
 /** What every built-up district says. */
 interface CommonStyle {
@@ -248,4 +277,28 @@ export interface LandmarksFile {
   /** Real meters per world meter of a landmark's plan. */
   readonly footprintScale: number;
   readonly landmarks: readonly LandmarkSpec[];
+}
+
+/** A town building of the kit (data/map/kit.json): solids in real m about its middle, in the landmark format. */
+export type KitPiece = Pick<LandmarkSpec, 'id' | 'clearRadiusM' | 'solids' | 'decor' | 'wires'> & {
+  /** Which types and sizes of town may have it, and how many one town may. */
+  readonly types: readonly TownType[];
+  readonly sizes: readonly TownSize[];
+  readonly limit: number;
+};
+
+/** Where a piece goes in a town: world m from its center before the street grid's turn, and its own turn on top. */
+export interface KitSpot {
+  readonly piece: string;
+  readonly x: number;
+  readonly y: number;
+  readonly turn: number;
+}
+
+export interface KitFile {
+  /** How many times an ordinary piece is enlarged; a town's signature has its own figure. */
+  readonly enlarge: number;
+  readonly pieces: readonly KitPiece[];
+  /** What each type and size of town in use gets, placed in this order. */
+  readonly layouts: Readonly<Partial<Record<TownType, Readonly<Partial<Record<TownSize, readonly KitSpot[]>>>>>>;
 }

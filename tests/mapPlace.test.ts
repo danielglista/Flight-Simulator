@@ -17,7 +17,7 @@ describe('data files', () => {
   it('validate', () => {
     expect(sf.scales.geoDistance).toBe(25);
     expect(places.cities).toHaveLength(2);
-    expect(places.airports.map((a) => a.id)).toEqual(['DCA', 'PHL']);
+    expect(places.airports.map((a) => a.id)).toEqual(['DCA', 'PHL', 'SBY']);
   });
   it('give named errors for bad data', () => {
     expect(() => validateScales({})).toThrow(MapDataError);
@@ -34,7 +34,8 @@ describe('data files', () => {
     const [full] = placesJson.airports;
     const { stampAnchorKm: _, ...dca } = full!;
     const of = (ground: unknown) => () => validatePlaces({ cities: placesJson.cities, airports: [{ ...dca, ground }] });
-    const [a, b, c, d] = dca.ground[0]!;
+    // A square of its own: the airport's ground may have any shape.
+    const [a, b, c, d] = [[-77.04, 38.85], [-77.03, 38.85], [-77.03, 38.86], [-77.04, 38.86]];
     expect(of(undefined)).toThrow(/ground.*DCA/);
     expect(of([])).toThrow(/non-empty.*DCA/);
     expect(of([[a, b]])).toThrow(/at least 3 points.*DCA/);
@@ -68,7 +69,7 @@ describe('airport ground (E7.2)', () => {
   it('is placed about the airport center at its own scale', () => {
     const pl = placeAll(sf.scales, sf.box, sf.warp, places);
     for (const a of pl.airports) {
-      const scale = sf.scales.airportMajor;
+      const scale = a.airport.size === 'major' ? sf.scales.airportMajor : sf.scales.airportSmall;
       groundLocalKm(a.airport).forEach((ring, k) => {
         ring.forEach((q, i) => {
           expect(a.ground[k]![i]!.x).toBeCloseTo(a.world.x + q.x / scale, 9);
@@ -77,11 +78,11 @@ describe('airport ground (E7.2)', () => {
       });
     }
   });
-  it('converts DCA\'s runway strip to a 2.4 km by 100 m outline', () => {
-    const [strip] = groundLocalKm(places.airports[0]!);
-    const side = (i: number) => Math.hypot(strip![(i + 1) % 4]!.x - strip![i]!.x, strip![(i + 1) % 4]!.y - strip![i]!.y);
-    expect(side(0)).toBeCloseTo(0.1, 3);
-    expect(side(1)).toBeCloseTo(2.4, 3);
+  it('converts DCA\'s ground to real km, about 2.3 km long and 0.7 km across', () => {
+    const [ring] = groundLocalKm(places.airports[0]!);
+    const box = boundsOf(ring!);
+    expect(box.h).toBeCloseTo(2.32, 1);
+    expect(box.w).toBeCloseTo(0.68, 1);
   });
 });
 
@@ -95,7 +96,7 @@ describe('placement', () => {
   }
   it('pushes along the real bearing from the city', () => {
     const pl = at(25);
-    for (const a of pl.airports) {
+    for (const a of pl.airports.filter((q) => q.airport.cityId !== undefined)) {
       const city = pl.cities.find((c) => c.city.id === a.airport.cityId)!;
       const rx = a.real.x - city.real.x;
       const ry = a.real.y - city.real.y;
@@ -105,6 +106,15 @@ describe('placement', () => {
       expect(wy / Math.hypot(wx, wy)).toBeCloseTo(ry / Math.hypot(rx, ry), 9);
       expect(a.pushedKm).toBeGreaterThanOrEqual(0);
     }
+  });
+  it('does not push an airport that has no city (E6B.3)', () => {
+    const sby = at(25).airports[2]!;
+    expect(sby.airport.cityId).toBeUndefined();
+    expect(sby.world).toEqual(sby.warped);
+    expect(sby.pushedKm).toBe(0);
+    expect(sby.corridorInBox).toBe(true);
+    const [, , small] = placesJson.airports;
+    expect(() => validatePlaces({ cities: placesJson.cities, airports: [{ ...small, pushOverrideKm: 3 }] })).toThrow(/no city.*SBY/);
   });
   it('gives the planned trip length at 1:25', () => {
     const pl = at(25);

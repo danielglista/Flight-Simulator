@@ -13,7 +13,7 @@ export interface ApproachGuide {
   readonly length: number;
   /** Heading of the runway in this direction, radians. */
   readonly runwayHeading: number;
-  /** The aim point on the ground: APPROACH_AIM_M past the threshold. */
+  /** The aim point on the ground: APPROACH_AIM_M past the threshold, unless the runway states its own. */
   readonly aim: { readonly x: number; readonly y: number };
   /** Meters past the threshold along the runway (negative before it). */
   readonly along: number;
@@ -56,8 +56,9 @@ export function approachGuide(
   if (along < -APPROACH_RANGE_M || along > rw.length || Math.abs(offset) > APPROACH_WIDTH_M) return null;
   // Past the threshold only a plane that is not climbing is still on the approach (a takeoff climb-out is not).
   if (along > 0 && craft.pathAngle > 0) return null;
-  const aim = { x: threshold.x + dir.x * APPROACH_AIM_M, y: threshold.y + dir.y * APPROACH_AIM_M };
-  const aimDist = APPROACH_AIM_M - along;
+  const aimM = rw.aimM ?? APPROACH_AIM_M;
+  const aim = { x: threshold.x + dir.x * aimM, y: threshold.y + dir.y * aimM };
+  const aimDist = aimM - along;
   const ideal = aimZFor(aim.x, aim.y) + Math.max(0, aimDist) * Math.tan(APPROACH_PATH_DEG * DEG);
   const runwayHeading = Math.atan2(dir.x, dir.y);
   return {

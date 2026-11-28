@@ -1,6 +1,6 @@
 import type { MapBuilding, MapRoad } from '../../src/sim/world/mapFile';
 import { districtCode, districtStyleIndex } from './districts';
-import type { District, DistrictsFile, HousingLevel } from './types';
+import type { BuiltArea, DistrictsFile, HousingLevel } from './types';
 
 type P = readonly [number, number];
 type Shape = Pick<MapBuilding, 'x' | 'y' | 'width' | 'depth' | 'angle'>;
@@ -114,7 +114,7 @@ export function inRing(x: number, y: number, ring: readonly P[]): boolean {
 type Layout = HousingLevel;
 
 /** The layout of a district, or null when it has no buildings. */
-function layoutOf(d: District, types: DistrictsFile['types']): Layout | null {
+function layoutOf(d: BuiltArea, types: DistrictsFile['types']): Layout | null {
   if (d.type === 'park') return null;
   if (d.type === 'housing') {
     const level = types.housing?.[(d.density ?? 1) - 1];
@@ -133,11 +133,11 @@ function layoutOf(d: District, types: DistrictsFile['types']): Layout | null {
 }
 
 export interface BuildingInput {
-  readonly districts: readonly District[];
+  readonly districts: readonly BuiltArea[];
   /** Defaults per district type; a type without an entry has no buildings. */
   readonly styles: DistrictsFile['types'];
   /** A district's outline in game-frame world meters. */
-  readonly ringWorld: (district: District) => P[];
+  readonly ringWorld: (district: BuiltArea) => P[];
   /** Terrain code at a point, as painted (water and airports never carry a district code). */
   readonly code: (x: number, y: number) => number;
   /** Ground height, world m. */
@@ -176,7 +176,7 @@ export function generateBuildings(input: BuildingInput): BuildingResult {
 
   // Later districts paint over earlier ones, so they are filled first.
   for (let n = input.districts.length - 1; n >= 0; n--) {
-    const d = input.districts[n] as District;
+    const d = input.districts[n] as BuiltArea;
     const layout = layoutOf(d, input.styles);
     if (!layout) continue;
     const { ring } = rings[n] as (typeof rings)[number];

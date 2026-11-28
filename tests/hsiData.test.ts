@@ -44,6 +44,12 @@ describe('selected approach numbers', () => {
     expect(at(0)).toBe(1);
   });
 
+  it('aims where the runway says, when it does', () => {
+    const end = { ident: 'SBY', name: '05', threshold: { x: 0, y: 0 }, dir: { x: 0, y: 1 }, length: 762, aimM: 60 };
+    const g = hsiGuide({ x: 0, y: -1000, z: Math.tan(APPROACH_PATH_DEG * DEG) * 1060 }, end, () => 0);
+    expect(g.glide).toBeCloseTo(0, 6);
+    expect(hsiGuide({ x: 0, y: 61, z: 10 }, end, () => 0).glide).toBeNull();
+  });
   it('hides the glide path far out, past the aim point and well off to the side', () => {
     expect(hsiGuide(onPath(HSI_GS_RANGE_M), north, flat).glide).toBeNull();
     expect(hsiGuide({ x: 0, y: APPROACH_AIM_M + 1, z: 10 }, north, flat).glide).toBeNull();

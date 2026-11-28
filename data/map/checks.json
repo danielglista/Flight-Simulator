@@ -123,6 +123,18 @@
       "lat": 39.6185,
       "lon": -75.3964,
       "expect": "water"
+    },
+    {
+      "id": "salisbury-town",
+      "lat": 38.366,
+      "lon": -75.601,
+      "expect": "land"
+    },
+    {
+      "id": "frederick-town",
+      "lat": 39.286,
+      "lon": -77.337,
+      "expect": "land"
     }
   ]
 }

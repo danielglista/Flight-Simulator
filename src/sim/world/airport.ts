@@ -18,6 +18,8 @@ export interface Runway {
   readonly length: number;
   /** a -> b, radians clockwise from north, 0..2pi. */
   readonly heading: number;
+  /** How far past a threshold approaches aim, world m, on a short runway. Absent: the usual figure. */
+  readonly aimM?: number;
 }
 
 /** A numbered parking stand, WORLD meters. */
@@ -124,6 +126,8 @@ export interface AirportDef {
     readonly b: Vec2;
     readonly width: number;
     readonly names: readonly [string, string];
+    /** How far past a threshold approaches aim, local real m, where it is not the usual figure. */
+    readonly aimM?: number;
   }[];
   readonly paving: readonly PavingDef[];
   /** Center lines paved `width` real m wide, under `paving`. */
@@ -273,6 +277,7 @@ export function buildAirport(def: AirportDef): Airport {
       b,
       width: r.width / k,
       names: r.names,
+      ...(r.aimM === undefined ? {} : { aimM: r.aimM / k }),
       length: Math.hypot(b.x - a.x, b.y - a.y),
       heading: h < 0 ? h + Math.PI * 2 : h,
     };

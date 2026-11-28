@@ -23,6 +23,8 @@ export interface RunwayEnd {
   /** Unit vector down the runway from the threshold. */
   readonly dir: Vec2;
   readonly length: number;
+  /** Where its approach aims, world m past the threshold, where the runway states one. */
+  readonly aimM?: number;
 }
 
 export function runwayEnd(airports: readonly Airport[], sel: RunwaySelection | null): RunwayEnd | null {
@@ -36,6 +38,7 @@ export function runwayEnd(airports: readonly Airport[], sel: RunwaySelection | n
     threshold: sel.end === 0 ? rw.a : rw.b,
     dir: { x: (sign * (rw.b.x - rw.a.x)) / rw.length, y: (sign * (rw.b.y - rw.a.y)) / rw.length },
     length: rw.length,
+    ...(rw.aimM === undefined ? {} : { aimM: rw.aimM }),
   };
 }
 

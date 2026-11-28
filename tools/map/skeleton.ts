@@ -1,13 +1,14 @@
 import { createGrid, type WorldGrid } from '../../src/sim/world/grid';
 import { Terrain } from '../../src/sim/world/terrain';
 import { fillRings, strokePolyline, type CellPoint } from './fill';
-import { paintDistricts } from './districts';
+import { districtCode, paintDistricts } from './districts';
+import { townArea, townRing } from './towns';
 import { applyReliefRules } from './mountains';
 import type { Placement } from './place';
 import { project, unproject, type PointKm } from './project';
 import type { MapField } from './stamp';
 import { contains, nearestOnOutline } from '../../src/sim/world/polygon';
-import type { AuthoredRiver, District, MapBox, WaterFile } from './types';
+import type { AuthoredRiver, District, MapBox, Town, WaterFile } from './types';
 
 export type LonLat = readonly [number, number];
 
@@ -90,8 +91,10 @@ export interface SkeletonInput {
   readonly elevationAt: (lat: number, lon: number) => number;
   /** Hand-drawn water that replaces Natural Earth inside its regions (data/map/water.json). */
   readonly water?: WaterFile;
-  /** City districts (data/map/districts.json), painted over dry land outside airport boundaries. */
+  /** City districts (data/map/districts.json), painted over dry land off the airport ground. */
   readonly districts?: readonly District[];
+  /** Small towns (data/map/towns.json), painted the same way after the districts. */
+  readonly towns?: readonly Town[];
 }
 
 export interface Skeleton {
@@ -406,16 +409,19 @@ export function buildSkeleton(input: SkeletonInput, cfg: TerrainConfig = DEFAULT
   // On the airport ground the terrain is plain grass; E3 lays the real surfaces over it.
   for (const f of flattened) for (const i of f.cells) terrain[i] = Terrain.grass;
 
-  // 7. City districts over dry land; airport property (the whole outline, and any leveled ground) stays as it is.
-  if (input.districts?.length) {
-    const keep = new Set<number>();
-    for (const f of flattened) for (const i of f.cells) keep.add(i);
-    const onAirport = (i: number): boolean => {
-      const x = left + ((i % cols) + 0.5) * cellKm;
-      const y = bottom + (Math.floor(i / cols) + 0.5) * cellKm;
-      return placement.airports.some((a) => contains(a.outline, x, y));
-    };
-    paintDistricts(input.districts, toCells, cols, rows, (i) => land[i] === 1 && water[i] === 0 && !keep.has(i) && !onAirport(i), terrain);
+  // 7. City districts over dry land. Only the leveled airport ground stays clear, so the city runs up to the airport's
+  // edge instead of leaving bare wedges inside its convex outline (E7.10). Towns follow (E6B), the same way.
+  const keep = new Set<number>();
+  for (const f of flattened) for (const i of f.cells) keep.add(i);
+  const open = (i: number): boolean => land[i] === 1 && water[i] === 0 && !keep.has(i);
+  if (input.districts?.length) paintDistricts(input.districts, toCells, cols, rows, open, terrain);
+  for (const town of input.towns ?? []) {
+    // The outline is already in world km, so it skips the map field.
+    const ring = townRing(town, field).map((p): CellPoint => [(p.x - left) / cellKm, (p.y - bottom) / cellKm]);
+    const code = districtCode(townArea(town));
+    fillRings([[...ring, ring[0] as CellPoint]], cols, rows, (i) => {
+      if (open(i)) terrain[i] = code;
+    });
   }
 
   return { grid, cellKm, land, originKm: { x: left, y: bottom }, flattened };

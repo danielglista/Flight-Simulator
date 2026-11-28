@@ -1,6 +1,6 @@
 # E7 Implementation Plan: Polygon Airports
 
-**Status:** E7.0 trial run, E7.1 to E7.4 built (§10); E7.4B airport layouts accepted (§11); E7.5 built and accepted (§10), E7.6 (docs) done, E7.7 (PHL runways) built, **not flown by hand**; E7.8 (taxiways, aprons, gates) and E7.9 (buildings) built, **not taxied by hand**. The land bends to the hull of the ground; `boundaryKm` is gone.
+**Status:** E7.0 trial run, E7.1 to E7.4 built (§10); E7.4B airport layouts accepted (§11); E7.5 built and accepted (§10), E7.6 (docs) done, E7.7 (PHL runways) built, **not flown by hand**; E7.8 (taxiways, aprons, gates) and E7.9 (buildings) built, **not taxied by hand**. The land bends to the hull of the ground; `boundaryKm` is gone. E7.10 (condensed layouts, §12) built and accepted from mockups, **not flown or taxied by hand**; it replaces positions in §11.
 **Milestone:** the airports can be shaped by editing points, and sit in the land around them without a large rectangle pushing it out of the way.
 **Starting state:** E6 landmarks, magnetic headings and approach aids committed. E4 (scale tuning) is not done.
 
@@ -424,3 +424,45 @@ Trial build of PHL (nothing in the project changed):
 
 - E7.4B: the layouts are accepted. **Done.**
 - E7.7 to E7.9: both airports match §11.3 and §11.4, both PHL runways can be used, and you can taxi from a runway to a gate.
+
+## 12. E7.10: condensed layouts
+
+**Built, not yet flown or taxied by hand.** Accepted from mockups (`tools/out/e7-10/airport-mockups.html`, not committed, so this section is the record). Positions are real m in the runway frame of §11. Where they differ from §11, these apply.
+
+### 12.1 Asked for
+- About half as much space between runways and taxiways.
+- DCA: cut off the ground past runway 19, so the runway ends almost at the water.
+- PHL: a smaller footprint without removing or shrinking runways or buildings, and no empty triangles around it.
+
+### 12.2 Both airports
+- Hold-short bars 45 m from a runway center line (was 70).
+- Districts, and so city buildings, are kept off the leveled airport ground only, no longer off the whole outline (`tools/map/skeleton.ts`). The triangles were the outline minus the ground. Buildings may now stand close to runways and taxiways; not limited. Highways still go around the outline.
+
+### 12.3 DCA
+- Parallel taxiway t -90 (was -180). Everything west of it moved 90 m toward the runway, same sizes.
+- Ground is one polygon and ends 4 m past the 19 threshold, cut diagonally along the river. West edge t -560 (was -650).
+- The taxiway joins the 19 end at s 1070, 22 m short of it, so no pavement passes the ground.
+- The angled exits keep their runway ends and no longer meet in pairs on the taxiway.
+
+### 12.4 PHL
+| Item | Now | Was |
+|---|---|---|
+| 9R/27L | s -1436 to 1460: 2,896 m, 9,500 ft | s -1829 to 1829: 3,658 m, 12,000 ft |
+| 9L/27R | t -220, s -826 to 1460: 2,286 m, 7,500 ft | t -430, s -899 to 1997: 2,896 m, 9,500 ft |
+| Exits from 9R/27L, from s | -760, -250, 450, 950 | -1100, -300, 600, 1400 |
+| Taxiway between the runways | t -110 | -215 |
+| Terminal taxiway | t -310 | -610 |
+| Terminal, piers, gates, garages | moved 300 m toward the runways | |
+| Hangars | s -700 to -250, t -575 to -480, north of the terminal taxiway | far west |
+| Control tower | s 1320, t -480 | s 1460, t -762 |
+| UPS taxiway | t 75; the UPS area moved 55 m toward 9R/27L | t 130 |
+
+### 12.5 Results
+- Ground area, real km², without the shoulder: DCA 1.23 to 0.95; PHL 3.66 to 2.54 as first built, about 2.25 with the shorter runways.
+- Map rebuilt: no guardrail failures, 17,412 buildings, 236 highway pieces (57 over water).
+- Tests changed: grass past DCA 19 (now ends at the water, with a new test), hold-short distance 35 to 22.5 world m, and two `mapPlace` tests that assumed DCA's first ground piece was its runway strip. Typecheck passes. With the shorter runways, 895 of 896 tests passed in the full run; the slow 5 m patch test timed out there and passed when run alone.
+- Seen in the browser: both fields from above, console clean. The side view was seen only from the runway starts. Not flown or taxied by hand.
+
+### 12.6 PHL runway lengths (decided)
+- Shortened from the real 12,000 and 9,500 ft, which were more than the plane needs: at default mass it lifts off in about 500 world m and brakes to a stop in 460 to 670 from 65 to 80 m/s. Now 1,448 and 1,143 world m. DCA is unchanged (1,092).
+- Not checked: heavier masses from the debug panel's slider.

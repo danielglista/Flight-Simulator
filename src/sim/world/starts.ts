@@ -17,7 +17,7 @@ export function runwayStart(runway: Runway, heightAt: (x: number, y: number) => 
 
 /**
  * On final for the first threshold: FINAL_DIST_M before it on the center line, descending FINAL_PATH_DEG toward a point
- * FINAL_AIM_M past it, trimmed, gear down, full flaps, wings level. Trim comes from `trimAt`, not literals.
+ * its aim point past it (FINAL_AIM_M unless the runway states one), trimmed, gear down, full flaps, wings level. Trim comes from `trimAt`, not literals.
  */
 export function finalStart(
   runway: Runway,
@@ -30,9 +30,10 @@ export function finalStart(
   const x = runway.a.x - ux * FINAL_DIST_M;
   const y = runway.a.y - uy * FINAL_DIST_M;
   const path = -FINAL_PATH_DEG * (Math.PI / 180);
-  const aimX = runway.a.x + ux * FINAL_AIM_M;
-  const aimY = runway.a.y + uy * FINAL_AIM_M;
-  const z = heightAt(aimX, aimY) + (FINAL_DIST_M + FINAL_AIM_M) * Math.tan(-path);
+  const aim = runway.aimM ?? FINAL_AIM_M;
+  const aimX = runway.a.x + ux * aim;
+  const aimY = runway.a.y + uy * aim;
+  const z = heightAt(aimX, aimY) + (FINAL_DIST_M + aim) * Math.tan(-path);
   const trim = trimAt(FINAL_SPEED, path, z, altitudeScale, tuning, gearDragCounts({ gear: 1 }, tuning), 1);
   return { x, y, z, heading: runway.heading, speed: FINAL_SPEED, pathAngle: path, pitch: trim.pitch, lever: trim.lever, spool: trim.lever, onGround: false, gearDown: true, flapLever: 2 };
 }

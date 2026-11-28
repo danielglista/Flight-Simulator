@@ -2,7 +2,7 @@ import { centerlineEnds, centerlineTicks, type ApproachGuide, type CenterlineEnd
 import { GUIDE_COLOR } from '../config/palette';
 import type { Size } from '../config/display';
 import { CENTERLINE_END_PX, CENTERLINE_TICK_PX, CLOUD_BASE_M, CLOUD_SEED, CLOUD_SHADOW_ALPHA, CLOUD_ALPHA_HIGH, CLOUD_SHADOW_SKEW, CLOUD_TILE_M, CLOUD_TILE_PX, DEPTH_FX, RING_LABEL_DEG, RING_MARGIN, RING_MAX_RADIUS, RING_TICK_DEG, TURN_LINE_MAX_S, TURN_LINE_MIN_SPEED, TURN_LINE_TICK_S } from '../config/display';
-import { BUG_COLOR, HAZE_COLOR, MARKER_COLOR, RING_COLOR, ROUTE_COLOR, SEA_COLOR, TURN_LINE_COLOR } from '../config/palette';
+import { BUG_COLOR, HAZE_COLOR, MARKER_COLOR, RING_COLOR, SEA_COLOR, TURN_LINE_COLOR } from '../config/palette';
 import type { ScaleConfig } from '../config/scales';
 import type { Sun } from '../config/sun';
 import {
@@ -321,24 +321,6 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
     ctx.stroke();
   }
 
-  /** The leg as a dashed line, a ring at the destination, and bearing, distance and time to go top left. */
-  function drawRoute(ctx: CanvasRenderingContext2D, view: Size, camera: Camera, route: Route, craft: Craft, variationDeg: number): void {
-    const a = worldToScreen(camera, view, route.from.x, route.from.y);
-    const b = worldToScreen(camera, view, route.to.x, route.to.y);
-    ctx.strokeStyle = ROUTE_COLOR;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([10, 6]);
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
-    ctx.stroke();
-    drawText(ctx, routeText(route.toIdent, routeInfo(craft, route, scale.geoDistance, variationDeg)), 5, 30);
-  }
-
   /**
    * Dashed line from the plane along the path it will fly at its current speed and turn rate,
    * with a tick every few seconds. Straight when level, curving into the turn when banked.
@@ -490,7 +472,7 @@ export function createTopView(grid: WorldGrid, scale: ScaleConfig): TopView {
       ctx.restore();
       const plane = planePixel(view, camera, side.craft);
       const showBug = topBugShown(following, side.crashed, side.craft.onGround);
-      if (route) drawRoute(ctx, view, camera, route, side.craft, variationDeg);
+      if (route) drawText(ctx, routeText(route.toIdent, routeInfo(side.craft, route, scale.geoDistance, variationDeg)), 5, 30);
       if (selected) drawCenterline(ctx, view, camera, selected);
       // The approach's own line too, unless it is the picked one already drawn.
       const drawn = guide && selected && guide.threshold.x === selected.threshold.x && guide.threshold.y === selected.threshold.y;

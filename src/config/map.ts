@@ -53,3 +53,9 @@ export const LANDMARK_OVERHEAD_ALPHA = 0.6;
 
 /** Practice aid: Mid-Atlantic runways are this many times their real width (1 = true width; 1.2 helps practice). */
 export const RUNWAY_WIDTH_MULT = 1;
+
+/**
+ * Town sizes (E6B.2E): center to the corners of the outline, world m. A few named classes, tuned by eye.
+ * No `smallCity` is built yet.
+ */
+export const TOWN_RADIUS_M = { town: 160, largeTown: 220, smallCity: 400 } as const;
